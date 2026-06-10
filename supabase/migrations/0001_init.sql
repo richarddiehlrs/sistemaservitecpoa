@@ -260,6 +260,27 @@ begin
 end$$;
 
 -- =====================================================================
+-- PRIVILÉGIOS (Data API / PostgREST)
+-- Garante que o papel "authenticated" acesse as tabelas (RLS continua
+-- restringindo o conteúdo). O papel "anon" não recebe acesso.
+-- =====================================================================
+grant usage on schema public to authenticated;
+
+grant select, insert, update, delete on
+  public.clientes,
+  public.equipamentos,
+  public.ordens_servico,
+  public.os_itens,
+  public.os_status_historico,
+  public.categorias_financeiras,
+  public.lancamentos_financeiros
+to authenticated;
+
+grant usage, select on all sequences in schema public to authenticated;
+
+grant select on public.vw_dre, public.vw_fluxo_caixa to authenticated;
+
+-- =====================================================================
 -- SEED - categorias financeiras padrão
 -- =====================================================================
 insert into public.categorias_financeiras (nome, tipo, grupo_dre) values
