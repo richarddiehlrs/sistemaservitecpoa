@@ -30,6 +30,27 @@ function str(v: FormDataEntryValue | null): string | null {
   return s === "" ? null : s;
 }
 
+async function resolverTecnico(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  formData: FormData,
+  profile: Awaited<ReturnType<typeof requirePermissao>>
+): Promise<{ tecnico_id: string; tecnico: string }> {
+  if (profile.papel === "tecnico") {
+    return { tecnico_id: profile.id, tecnico: nomeTecnico(profile) };
+  }
+  const tecnico_id = str(formData.get("tecnico_id"));
+  if (!tecnico_id) throw new Error("Selecione o técnico responsável.");
+  const { data: t } = await supabase
+    .from("profiles")
+    .select("id, nome, email, papel, ativo")
+    .eq("id", tecnico_id)
+    .single();
+  if (!t || t.papel !== "tecnico" || !t.ativo) {
+    throw new Error("Técnico inválido ou inativo. Cadastre em Usuários.");
+  }
+  return { tecnico_id: t.id, tecnico: nomeTecnico(t) };
+}
+
 function calcTotais(
   itens: ItemInput[],
   valorVisita: number,
@@ -171,8 +192,7 @@ export async function criarOrdem(formData: FormData) {
   const status = (str(formData.get("status")) as StatusOS) || "aberta";
   const turno = str(formData.get("turno"));
   const dataVisita = str(formData.get("data_previsao"));
-  const tecnico =
-    profile.papel === "tecnico" ? nomeTecnico(profile) : str(formData.get("tecnico"));
+  const { tecnico_id, tecnico } = await resolverTecnico(supabase, formData, profile);
 
   const { data: os, error } = await supabase
     .from("ordens_servico")
@@ -185,6 +205,7 @@ export async function criarOrdem(formData: FormData) {
       servico_executado: str(formData.get("servico_executado")),
       acompanha: str(formData.get("acompanha")),
       estado_aparelho: str(formData.get("estado_aparelho")),
+      tecnico_id,
       tecnico,
       prioridade: (str(formData.get("prioridade")) as never) || "normal",
       data_previsao: dataVisita,
@@ -252,8 +273,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   const desconto = num(formData.get("desconto"));
   const acrescimo = num(formData.get("acrescimo"));
   const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
-  const tecnico =
-    profile.papel === "tecnico" ? nomeTecnico(profile) : str(formData.get("tecnico"));
+  const { tecnico_id, tecnico } = await resolverTecnico(supabase, formData, profile);
 
   const { error } = await supabase
     .from("ordens_servico")
@@ -263,6 +283,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
       servico_executado: str(formData.get("servico_executado")),
       acompanha: str(formData.get("acompanha")),
       estado_aparelho: str(formData.get("estado_aparelho")),
+      tecnico_id,
       tecnico,
       prioridade: (str(formData.get("prioridade")) as never) || "normal",
       data_previsao: str(formData.get("data_previsao")),
@@ -411,6 +432,50 @@ export async function salvarAssinatura(id: string, dataUrl: string) {
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(`/ordens/${id}`);
+}
+
+export async function registrarClienteAusente(id: string, formData: FormData) {
+  const profile = await requirePermissao("ordens_editar");
+  const supabase = await createClient();
+
+  const assinatura = String(formData.get("assinatura_tecnico") || "").trim();
+  const observacao = str(formData.get("observacao"));
+  const fotoUrl = str(formData.get("foto_url"));
+  const fotoPath = str(formData.get("foto_path"));
+
+  if (!assinatura) throw new Error("Assinatura do técnico é obrigatória.");
+  if (!fotoUrl) throw new Error("Foto comprobatória é obrigatória.");
+
+  const agora = new Date().toISOString();
+
+  const { error } = await supabase
+    .from("ordens_servico")
+    .update({
+      status: "cliente_ausente",
+      assinatura_tecnico: assinatura,
+      observacao_cliente_ausente: observacao,
+      cliente_ausente_registrado_at: agora,
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("os_anexos").insert({
+    os_id: id,
+    url: fotoUrl,
+    path: fotoPath || "",
+    momento: "cliente_ausente",
+    descricao: observacao || "Cliente ausente — foto comprobatória",
+  });
+
+  await supabase.from("os_status_historico").insert({
+    os_id: id,
+    status: "cliente_ausente",
+    observacao: observacao || `Cliente ausente — registrado por ${nomeTecnico(profile)}`,
+  });
+
+  revalidatePath(`/ordens/${id}`);
+  revalidatePath("/ordens");
+  revalidatePath("/campo");
 }
 
 export async function excluirOrdem(id: string) {

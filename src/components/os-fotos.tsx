@@ -60,6 +60,7 @@ export function OsFotos({
         >
           <option value="antes">Antes</option>
           <option value="depois">Depois</option>
+          <option value="cliente_ausente">Cliente ausente</option>
           <option value="outro">Outro</option>
         </select>
         <label className="btn-secondary cursor-pointer text-sm">

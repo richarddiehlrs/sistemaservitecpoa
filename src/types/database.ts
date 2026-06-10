@@ -10,6 +10,7 @@ export type StatusOS =
   | "em_roteiro"
   | "em_execucao"
   | "aguardando_peca"
+  | "cliente_ausente"
   | "concluida"
   | "entregue"
   | "cancelada"
@@ -65,6 +66,7 @@ export type OrdemServico = {
   acompanha: string | null;
   estado_aparelho: string | null;
   tecnico: string | null;
+  tecnico_id: string | null;
   prioridade: "baixa" | "normal" | "alta" | "urgente";
   data_abertura: string;
   data_previsao: string | null;
@@ -85,6 +87,9 @@ export type OrdemServico = {
   aprovado: boolean;
   data_aprovacao: string | null;
   assinatura_cliente: string | null;
+  assinatura_tecnico: string | null;
+  cliente_ausente_registrado_at: string | null;
+  observacao_cliente_ausente: string | null;
   observacao_aprovacao: string | null;
   created_at: string;
   updated_at: string;
@@ -133,7 +138,7 @@ export type OsAnexo = {
   url: string;
   path: string | null;
   descricao: string | null;
-  momento: "antes" | "depois" | "outro";
+  momento: "antes" | "depois" | "cliente_ausente" | "outro";
   created_at: string;
 };
 

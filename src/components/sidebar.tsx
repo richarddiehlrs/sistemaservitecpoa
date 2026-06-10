@@ -25,13 +25,14 @@ type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  perm: Permissao;
+  perm?: Permissao;
+  perms?: Permissao[];
 };
 
 const GRUPOS: { titulo: string; itens: NavItem[] }[] = [
   {
     titulo: "Campo",
-    itens: [{ href: "/campo", label: "Painel de campo", icon: MapPin, perm: "despesas_campo" }],
+    itens: [{ href: "/campo", label: "Campo", icon: MapPin, perms: ["despesas_campo", "campo_central"] }],
   },
   {
     titulo: "Operação",
@@ -100,7 +101,9 @@ export function Sidebar({
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
         {GRUPOS.map((grupo) => {
-          const itens = grupo.itens.filter((i) => temPermissao(papel, i.perm));
+          const itens = grupo.itens.filter((i) =>
+            i.perms ? i.perms.some((p) => temPermissao(papel, p)) : i.perm ? temPermissao(papel, i.perm) : false
+          );
           if (itens.length === 0) return null;
           return (
             <div key={grupo.titulo}>

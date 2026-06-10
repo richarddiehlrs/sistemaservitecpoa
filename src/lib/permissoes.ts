@@ -15,6 +15,7 @@ export type Permissao =
   | "financeiro_fluxo"
   | "financeiro_recorrentes"
   | "despesas_campo"
+  | "campo_central"
   | "relatorios"
   | "dre"
   | "catalogo"
@@ -26,7 +27,7 @@ const MATRIZ: Record<Papel, Permissao[]> = {
     "dashboard", "agenda", "agenda_criar", "agenda_checkin",
     "ordens", "ordens_criar", "ordens_editar", "ordens_excluir",
     "clientes", "clientes_criar",
-    "financeiro", "financeiro_fluxo", "financeiro_recorrentes", "despesas_campo",
+    "financeiro", "financeiro_fluxo", "financeiro_recorrentes", "despesas_campo", "campo_central",
     "relatorios", "dre", "catalogo", "usuarios", "configuracoes",
   ],
   atendente: [
@@ -34,7 +35,7 @@ const MATRIZ: Record<Papel, Permissao[]> = {
     "ordens", "ordens_criar", "ordens_editar", "ordens_excluir",
     "clientes", "clientes_criar",
     "financeiro", "financeiro_fluxo", "financeiro_recorrentes",
-    "relatorios", "dre", "catalogo",
+    "relatorios", "dre", "catalogo", "campo_central",
   ],
   tecnico: [
     "agenda", "agenda_checkin",
@@ -62,7 +63,8 @@ export function podeAcessarRota(papel: Papel, pathname: string): boolean {
   if (pathname.startsWith("/financeiro/recorrentes")) return temPermissao(papel, "financeiro_recorrentes");
   if (pathname.startsWith("/financeiro/fluxo")) return temPermissao(papel, "financeiro_fluxo");
   if (pathname.startsWith("/financeiro")) return temPermissao(papel, "financeiro");
-  if (pathname.startsWith("/campo")) return temPermissao(papel, "despesas_campo");
+  if (pathname.startsWith("/campo"))
+    return temPermissao(papel, "despesas_campo") || temPermissao(papel, "campo_central");
   if (pathname.startsWith("/clientes")) return temPermissao(papel, "clientes");
   if (pathname.startsWith("/ordens")) return temPermissao(papel, "ordens");
   if (pathname.startsWith("/agenda")) return temPermissao(papel, "agenda");

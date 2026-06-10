@@ -8,6 +8,7 @@ import { OsStatusControl } from "@/components/os-status-control";
 import { OsShare } from "@/components/os-share";
 import { OsFotos } from "@/components/os-fotos";
 import { OsAssinatura } from "@/components/os-assinatura";
+import { OsClienteAusente } from "@/components/os-cliente-ausente";
 import { CopyLink } from "@/components/copy-link";
 import { ConfirmButton } from "@/components/confirm-button";
 import { LancamentoAcoes } from "@/components/lancamento-acoes";
@@ -24,7 +25,7 @@ import {
 } from "@/lib/format";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
-import { alterarStatusForm, excluirOrdem, lancarFinanceiro } from "../actions";
+import { alterarStatusForm, excluirOrdem, lancarFinanceiro, registrarClienteAusente } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,11 @@ export default async function OrdemDetalhePage({
 
   const statusAction = alterarStatusForm.bind(null, id);
   const financeiroAction = lancarFinanceiro.bind(null, id);
+  const clienteAusenteAction = registrarClienteAusente.bind(null, id);
+  const ehTecnico = profile.papel === "tecnico";
+  const podeRegistrarAusente =
+    ehTecnico &&
+    !["cliente_ausente", "cancelada", "entregue", "concluida"].includes(os.status);
 
   return (
     <div>
@@ -281,13 +287,42 @@ export default async function OrdemDetalhePage({
             <OsFotos osId={id} anexos={anexos || []} />
           </div>
 
-          {/* Assinatura */}
+          {/* Assinatura cliente */}
           <div className="card p-5">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
               <PenLine className="h-4 w-4" /> Assinatura do cliente
             </h3>
             <OsAssinatura osId={id} assinaturaAtual={os.assinatura_cliente} />
           </div>
+
+          {/* Cliente ausente — técnico */}
+          {podeRegistrarAusente && (
+            <div className="card border-amber-200 p-5">
+              <h3 className="mb-3 text-sm font-semibold text-amber-800">Cliente ausente</h3>
+              <OsClienteAusente osId={id} action={clienteAusenteAction} />
+            </div>
+          )}
+
+          {os.status === "cliente_ausente" && (
+            <div className="card border-rose-200 bg-rose-50/50 p-5">
+              <h3 className="mb-2 text-sm font-semibold text-rose-800">Registro — cliente ausente</h3>
+              {os.cliente_ausente_registrado_at && (
+                <p className="mb-2 text-xs text-slate-500">
+                  Registrado em {formatDateTime(os.cliente_ausente_registrado_at)}
+                </p>
+              )}
+              {os.observacao_cliente_ausente && (
+                <p className="mb-2 text-sm text-slate-600">{os.observacao_cliente_ausente}</p>
+              )}
+              {os.assinatura_tecnico && (
+                <div className="rounded-lg border bg-white p-2">
+                  <p className="mb-1 text-xs text-slate-500">Assinatura do técnico</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={os.assinatura_tecnico} alt="Assinatura técnico" className="h-16 object-contain" />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Financeiro */}
           <div className="card p-5">

@@ -3,6 +3,7 @@ import { OrdemForm } from "@/components/ordem-form";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
+import { mapTecnicos } from "@/lib/tecnicos";
 import { criarOrdem } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +18,11 @@ export default async function NovaOrdemPage({
   const supabase = await createClient();
   const ehTecnico = profile.papel === "tecnico";
 
-  const { data: catalogo } = await supabase
-    .from("servicos_catalogo")
-    .select("*")
-    .eq("ativo", true)
-    .order("descricao");
+  const [{ data: catalogo }, { data: perfisTecnicos }] = await Promise.all([
+    supabase.from("servicos_catalogo").select("*").eq("ativo", true).order("descricao"),
+    supabase.from("profiles").select("*").eq("papel", "tecnico").eq("ativo", true).order("nome"),
+  ]);
+  const tecnicos = mapTecnicos(perfisTecnicos || []);
 
   let clienteInicial = null;
   let equipamentos = undefined;
@@ -47,7 +48,7 @@ export default async function NovaOrdemPage({
     <div>
       <PageHeader
         title="Nova ordem de serviço"
-        subtitle={ehTecnico ? "Abertura em campo — você será o técnico responsável" : "Abertura sem técnico — o técnico assume no check-in da agenda"}
+        subtitle={ehTecnico ? "Abertura em campo — você será o técnico responsável" : "Selecione o técnico cadastrado para o atendimento"}
       />
       <OrdemForm
         action={criarOrdem}
@@ -55,8 +56,9 @@ export default async function NovaOrdemPage({
         equipamentos={equipamentos}
         catalogo={catalogo || []}
         tecnicoPadrao={ehTecnico ? nomeTecnico(profile) : undefined}
+        tecnicoIdPadrao={ehTecnico ? profile.id : undefined}
         tecnicoFixo={ehTecnico}
-        mostrarCampoTecnico={false}
+        tecnicos={tecnicos}
       />
     </div>
   );

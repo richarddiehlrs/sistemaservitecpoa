@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { buscarCep } from "@/lib/cep";
 import { formatCurrency, formatTelefone } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
+import type { TecnicoOpcao } from "@/lib/tecnicos";
 import type { Equipamento, OrdemServico, OsItem, ServicoCatalogo } from "@/types/database";
 
 type ClienteLite = { id: string; nome: string; telefone: string | null };
@@ -28,9 +29,9 @@ type Props = {
   catalogo?: ServicoCatalogo[];
   modoEdicao?: boolean;
   tecnicoPadrao?: string;
+  tecnicoIdPadrao?: string;
   tecnicoFixo?: boolean;
-  /** Atendente/admin: técnico só na edição; abertura fica sem atribuição. */
-  mostrarCampoTecnico?: boolean;
+  tecnicos?: TecnicoOpcao[];
 };
 
 const UFS = [
@@ -47,8 +48,9 @@ export function OrdemForm({
   catalogo = [],
   modoEdicao = false,
   tecnicoPadrao,
+  tecnicoIdPadrao,
   tecnicoFixo = false,
-  mostrarCampoTecnico = true,
+  tecnicos = [],
 }: Props) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -561,19 +563,32 @@ export function OrdemForm({
           </h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             {tecnicoFixo ? (
-              <input type="hidden" name="tecnico" value={tecnicoPadrao || ordem?.tecnico || ""} />
-            ) : mostrarCampoTecnico ? (
-              <div>
-                <label className="label">Técnico (opcional)</label>
-                <input
-                  name="tecnico"
-                  className="input"
-                  defaultValue={ordem?.tecnico || ""}
-                  placeholder="Atribuir depois — o técnico assume no check-in"
-                />
-              </div>
+              <>
+                <input type="hidden" name="tecnico_id" value={tecnicoIdPadrao || ordem?.tecnico_id || ""} />
+                <input type="hidden" name="tecnico" value={tecnicoPadrao || ordem?.tecnico || ""} />
+              </>
             ) : (
-              <input type="hidden" name="tecnico" value="" />
+              <div className="sm:col-span-2">
+                <label className="label">Técnico responsável *</label>
+                <select
+                  name="tecnico_id"
+                  className="input"
+                  required
+                  defaultValue={ordem?.tecnico_id || ""}
+                >
+                  <option value="">Selecione o técnico cadastrado...</option>
+                  {tecnicos.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nome}{t.email ? ` (${t.email})` : ""}
+                    </option>
+                  ))}
+                </select>
+                {tecnicos.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Nenhum técnico cadastrado. Crie em Usuários com papel Técnico.
+                  </p>
+                )}
+              </div>
             )}
             <div>
               <label className="label">Prioridade</label>
