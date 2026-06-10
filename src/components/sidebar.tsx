@@ -17,17 +17,39 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/agenda", label: "Agenda", icon: CalendarDays },
-  { href: "/ordens", label: "Ordens de Serviço", icon: Wrench },
-  { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/financeiro", label: "Financeiro", icon: DollarSign },
-  { href: "/relatorios", label: "Relatórios", icon: PieChart },
-  { href: "/dre", label: "DRE", icon: BarChart3 },
-  { href: "/catalogo", label: "Catálogo", icon: BookText },
-  { href: "/usuarios", label: "Usuários", icon: UserCog, adminOnly: true },
-  { href: "/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  adminOnly?: boolean;
+};
+
+const GRUPOS: { titulo: string; itens: NavItem[] }[] = [
+  {
+    titulo: "Operação",
+    itens: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/agenda", label: "Agenda", icon: CalendarDays },
+      { href: "/ordens", label: "Ordens de Serviço", icon: Wrench },
+      { href: "/clientes", label: "Clientes", icon: Users },
+    ],
+  },
+  {
+    titulo: "Financeiro",
+    itens: [
+      { href: "/financeiro", label: "Financeiro", icon: DollarSign },
+      { href: "/relatorios", label: "Relatórios", icon: PieChart },
+      { href: "/dre", label: "DRE", icon: BarChart3 },
+    ],
+  },
+  {
+    titulo: "Administração",
+    itens: [
+      { href: "/catalogo", label: "Catálogo", icon: BookText },
+      { href: "/usuarios", label: "Usuários", icon: UserCog, adminOnly: true },
+      { href: "/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
+    ],
+  },
 ];
 
 export function Sidebar({
@@ -38,57 +60,88 @@ export function Sidebar({
   role?: string;
 }) {
   const pathname = usePathname();
-  const nav = NAV.filter((item) => !item.adminOnly || role === "admin");
+  const iniciais = (userEmail || "U").slice(0, 2).toUpperCase();
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white">
-      <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold text-white">
+    <aside className="flex h-screen w-64 flex-col bg-gradient-to-b from-slate-900 to-slate-950 text-slate-300">
+      {/* Marca */}
+      <div className="flex items-center gap-3 px-5 py-5">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-lg font-bold text-white shadow-lg shadow-brand-900/40">
           S
         </div>
         <div>
-          <p className="text-sm font-bold leading-tight text-slate-900">
-            ServitecPoa
-          </p>
-          <p className="text-xs text-slate-500">ERP Assistência Técnica</p>
+          <p className="text-sm font-bold leading-tight text-white">ServitecPoa</p>
+          <p className="text-[11px] text-slate-400">ERP Assistência Técnica</p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {nav.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(item.href + "/");
-          const Icon = item.icon;
+      <div className="mx-5 mb-2 h-px bg-white/10" />
+
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
+        {GRUPOS.map((grupo) => {
+          const itens = grupo.itens.filter((i) => !i.adminOnly || role === "admin");
+          if (itens.length === 0) return null;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                active
-                  ? "bg-brand-50 text-brand-700"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              )}
-            >
-              <Icon className="h-5 w-5" />
-              {item.label}
-            </Link>
+            <div key={grupo.titulo}>
+              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                {grupo.titulo}
+              </p>
+              <div className="space-y-0.5">
+                {itens.map((item) => {
+                  const active =
+                    pathname === item.href || pathname.startsWith(item.href + "/");
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
+                        active
+                          ? "bg-white/10 text-white"
+                          : "text-slate-400 hover:bg-white/5 hover:text-white"
+                      )}
+                    >
+                      {active && (
+                        <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-brand-400" />
+                      )}
+                      <Icon
+                        className={cn(
+                          "h-[18px] w-[18px] shrink-0 transition-colors",
+                          active ? "text-brand-300" : "text-slate-500 group-hover:text-slate-300"
+                        )}
+                      />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </nav>
 
-      <div className="border-t border-slate-200 p-3">
-        <div className="mb-2 px-2">
-          <p className="truncate text-xs font-medium text-slate-700">
-            {userEmail || "Usuário"}
-          </p>
+      {/* Usuário */}
+      <div className="border-t border-white/10 p-3">
+        <div className="mb-2 flex items-center gap-3 rounded-lg px-2 py-2">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white ring-1 ring-white/15">
+            {iniciais}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium text-slate-200">
+              {userEmail || "Usuário"}
+            </p>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-300">
+              {role === "admin" ? "Administrador" : "Operador"}
+            </span>
+          </div>
         </div>
         <form action="/auth/signout" method="post">
           <button
             type="submit"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-[18px] w-[18px]" />
             Sair
           </button>
         </form>

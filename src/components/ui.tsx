@@ -5,19 +5,26 @@ import { STATUS_OS_COLOR, STATUS_OS_LABEL } from "@/lib/format";
 export function PageHeader({
   title,
   subtitle,
+  eyebrow,
   action,
 }: {
   title: string;
   subtitle?: string;
+  eyebrow?: string;
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-slate-200/70 pb-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+        {eyebrow && (
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-brand-600">
+            {eyebrow}
+          </p>
+        )}
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
-      {action}
+      {action && <div className="flex items-center gap-2">{action}</div>}
     </div>
   );
 }
@@ -35,20 +42,31 @@ export function StatCard({
   icon?: React.ReactNode;
   tone?: "default" | "green" | "red" | "amber" | "blue";
 }) {
-  const tones: Record<string, string> = {
+  const valueTone: Record<string, string> = {
     default: "text-slate-900",
     green: "text-green-600",
     red: "text-red-600",
     amber: "text-amber-600",
     blue: "text-brand-600",
   };
+  const chipTone: Record<string, string> = {
+    default: "bg-slate-100 text-slate-500",
+    green: "bg-green-50 text-green-600",
+    red: "bg-red-50 text-red-600",
+    amber: "bg-amber-50 text-amber-600",
+    blue: "bg-brand-50 text-brand-600",
+  };
   return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between">
+    <div className="card card-hover p-5">
+      <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-slate-500">{title}</p>
-        {icon && <span className="text-slate-400">{icon}</span>}
+        {icon && (
+          <span className={cn("flex h-9 w-9 items-center justify-center rounded-lg", chipTone[tone])}>
+            {icon}
+          </span>
+        )}
       </div>
-      <p className={cn("mt-2 text-2xl font-bold", tones[tone])}>{value}</p>
+      <p className={cn("mt-3 text-2xl font-bold tracking-tight", valueTone[tone])}>{value}</p>
       {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
     </div>
   );
