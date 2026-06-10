@@ -39,12 +39,31 @@ async function salvarPosicaoTecnico(
   });
 }
 
+async function resolverTecnicoAgenda(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  formData: FormData
+): Promise<{ tecnico_id: string; tecnico: string }> {
+  const tecnico_id = String(formData.get("tecnico_id") || "").trim();
+  if (!tecnico_id) throw new Error("Selecione o técnico responsável.");
+  const { data: t } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", tecnico_id)
+    .eq("papel", "tecnico")
+    .eq("ativo", true)
+    .single();
+  if (!t) throw new Error("Técnico inválido ou inativo.");
+  return { tecnico_id: t.id, tecnico: nomeTecnico(t) };
+}
+
 export async function criarAgendamento(formData: FormData) {
   await requirePermissao("agenda_criar");
   const supabase = await createClient();
 
   const turno = str(formData.get("turno"));
   const horas = horarioTurno(turno);
+  const { tecnico_id, tecnico } = await resolverTecnicoAgenda(supabase, formData);
+  const osId = str(formData.get("os_id"));
 
   const { error } = await supabase.from("agendamentos").insert({
     titulo: String(formData.get("titulo") || "").trim() || "Atendimento",
@@ -53,16 +72,26 @@ export async function criarAgendamento(formData: FormData) {
     data: str(formData.get("data")) || new Date().toISOString().slice(0, 10),
     hora_inicio: str(formData.get("hora_inicio")) || horas.inicio,
     hora_fim: str(formData.get("hora_fim")) || horas.fim,
-    tecnico: str(formData.get("tecnico")),
+    tecnico,
+    tecnico_id,
     endereco: str(formData.get("endereco")),
     cliente_id: str(formData.get("cliente_id")),
-    os_id: str(formData.get("os_id")),
+    os_id: osId,
     status: (str(formData.get("status")) as never) || "agendado",
     observacoes: str(formData.get("observacoes")),
   });
   if (error) throw new Error(error.message);
 
+  if (osId) {
+    await supabase
+      .from("ordens_servico")
+      .update({ tecnico_id, tecnico, data_previsao: str(formData.get("data")), turno: (turno as never) })
+      .eq("id", osId);
+  }
+
   revalidatePath("/agenda");
+  revalidatePath("/ordens");
+  if (osId) revalidatePath(`/ordens/${osId}`);
 }
 
 export async function alterarStatusAgendamento(id: string, status: string) {

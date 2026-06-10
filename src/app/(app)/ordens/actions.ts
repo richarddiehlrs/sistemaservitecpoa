@@ -443,16 +443,52 @@ export async function salvarAssinatura(id: string, dataUrl: string) {
   revalidatePath(`/ordens/${id}`);
 }
 
+export async function salvarAssinaturaTecnico(id: string, dataUrl: string) {
+  const profile = await requirePermissao("ordens_editar");
+  const supabase = await createClient();
+
+  if (profile.papel === "tecnico") {
+    const { data: os } = await supabase
+      .from("ordens_servico")
+      .select("tecnico_id, tecnico")
+      .eq("id", id)
+      .single();
+    if (!os) throw new Error("Ordem não encontrada.");
+    const nome = nomeTecnico(profile);
+    const atribuido =
+      os.tecnico_id === profile.id ||
+      (os.tecnico?.toLowerCase().includes(nome.toLowerCase()) ?? false);
+    if (!atribuido) throw new Error("Esta ordem não está atribuída a você.");
+  }
+
+  const { error } = await supabase
+    .from("ordens_servico")
+    .update({ assinatura_tecnico: dataUrl })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/ordens/${id}`);
+  revalidatePath("/imprimir/os/" + id);
+}
+
 export async function registrarClienteAusente(id: string, formData: FormData) {
   const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
-  const assinatura = String(formData.get("assinatura_tecnico") || "").trim();
   const observacao = str(formData.get("observacao"));
   const fotoUrl = str(formData.get("foto_url"));
   const fotoPath = str(formData.get("foto_path"));
 
-  if (!assinatura) throw new Error("Assinatura do técnico é obrigatória.");
+  const { data: osAtual } = await supabase
+    .from("ordens_servico")
+    .select("assinatura_tecnico, tecnico_id")
+    .eq("id", id)
+    .single();
+  if (!osAtual?.assinatura_tecnico) {
+    throw new Error("O técnico deve assinar a ordem de serviço antes de registrar cliente ausente.");
+  }
+  if (profile.papel === "tecnico" && osAtual.tecnico_id && osAtual.tecnico_id !== profile.id) {
+    throw new Error("Esta ordem não está atribuída a você.");
+  }
   if (!fotoUrl) throw new Error("Foto comprobatória é obrigatória.");
 
   const agora = new Date().toISOString();
@@ -461,7 +497,6 @@ export async function registrarClienteAusente(id: string, formData: FormData) {
     .from("ordens_servico")
     .update({
       status: "cliente_ausente",
-      assinatura_tecnico: assinatura,
       observacao_cliente_ausente: observacao,
       cliente_ausente_registrado_at: agora,
     })
@@ -485,6 +520,8 @@ export async function registrarClienteAusente(id: string, formData: FormData) {
   revalidatePath(`/ordens/${id}`);
   revalidatePath("/ordens");
   revalidatePath("/campo");
+  revalidatePath("/agenda");
+  revalidatePath("/imprimir/os/" + id);
 }
 
 export async function excluirOrdem(id: string) {

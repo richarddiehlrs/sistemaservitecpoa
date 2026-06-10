@@ -8,6 +8,7 @@ import { OsStatusControl } from "@/components/os-status-control";
 import { OsShare } from "@/components/os-share";
 import { OsFotos } from "@/components/os-fotos";
 import { OsAssinatura } from "@/components/os-assinatura";
+import { OsAssinaturaTecnico } from "@/components/os-assinatura-tecnico";
 import { OsClienteAusente } from "@/components/os-cliente-ausente";
 import { CopyLink } from "@/components/copy-link";
 import { ConfirmButton } from "@/components/confirm-button";
@@ -20,8 +21,11 @@ import {
   formatCurrency,
   formatDate,
   formatDateTime,
+  formatHora,
   formatNumeroOS,
   formatTelefone,
+  STATUS_AGENDAMENTO_LABEL,
+  TIPO_AGENDAMENTO_LABEL,
 } from "@/lib/format";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
@@ -48,8 +52,15 @@ export default async function OrdemDetalhePage({
 
   if (!os) notFound();
 
-  const [{ data: itens }, { data: historico }, { data: lancamentos }, { data: anexos }, { data: categorias }, config] =
-    await Promise.all([
+  const [
+    { data: itens },
+    { data: historico },
+    { data: lancamentos },
+    { data: anexos },
+    { data: categorias },
+    { data: agendamentos },
+    config,
+  ] = await Promise.all([
       supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),
       supabase
         .from("os_status_historico")
@@ -63,6 +74,11 @@ export default async function OrdemDetalhePage({
         .order("created_at", { ascending: false }),
       supabase.from("os_anexos").select("*").eq("os_id", id).order("created_at"),
       supabase.from("categorias_financeiras").select("*").order("nome"),
+      supabase
+        .from("agendamentos")
+        .select("*")
+        .eq("os_id", id)
+        .order("data", { ascending: false }),
       getConfig(),
     ]);
 
@@ -87,6 +103,8 @@ export default async function OrdemDetalhePage({
   const financeiroAction = lancarFinanceiro.bind(null, id);
   const clienteAusenteAction = registrarClienteAusente.bind(null, id);
   const ehTecnico = profile.papel === "tecnico";
+  const statusFinalizado = ["cancelada", "entregue", "concluida"].includes(os.status);
+  const podeAssinarTecnico = ehTecnico && !statusFinalizado;
   const podeRegistrarAusente =
     ehTecnico &&
     !["cliente_ausente", "cancelada", "entregue", "concluida"].includes(os.status);
@@ -287,6 +305,21 @@ export default async function OrdemDetalhePage({
             <OsFotos osId={id} anexos={anexos || []} />
           </div>
 
+          {/* Assinatura técnico — sempre */}
+          <div className="card p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <PenLine className="h-4 w-4" /> Assinatura do técnico
+            </h3>
+            <p className="mb-3 text-xs text-slate-500">
+              O técnico responsável deve assinar ao concluir o atendimento.
+            </p>
+            <OsAssinaturaTecnico
+              osId={id}
+              assinaturaAtual={os.assinatura_tecnico}
+              somenteLeitura={!podeAssinarTecnico}
+            />
+          </div>
+
           {/* Assinatura cliente */}
           <div className="card p-5">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -295,11 +328,49 @@ export default async function OrdemDetalhePage({
             <OsAssinatura osId={id} assinaturaAtual={os.assinatura_cliente} />
           </div>
 
+          {/* Agenda vinculada */}
+          <div className="card p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-700">Agenda vinculada</h3>
+              <Link href="/agenda" className="text-xs text-brand-600 hover:underline">
+                {profile.papel !== "tecnico" ? "Agendar visita" : "Ver agenda"}
+              </Link>
+            </div>
+            {(agendamentos || []).length === 0 ? (
+              <p className="text-sm text-slate-400">
+                {profile.papel !== "tecnico"
+                  ? "Nenhuma visita agendada. Use Agenda → Novo agendamento e vincule esta OS."
+                  : "Nenhuma visita agendada para esta ordem."}
+              </p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {(agendamentos || []).map((a) => (
+                  <li key={a.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                    <p className="font-medium text-slate-800">
+                      {formatDate(a.data)} — {TIPO_AGENDAMENTO_LABEL[a.tipo] || a.tipo}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {formatHora(a.hora_inicio)}{a.hora_fim ? `–${formatHora(a.hora_fim)}` : ""}
+                      {a.tecnico && ` • ${a.tecnico}`}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {STATUS_AGENDAMENTO_LABEL[a.status] || a.status}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           {/* Cliente ausente — técnico */}
           {podeRegistrarAusente && (
             <div className="card border-amber-200 p-5">
               <h3 className="mb-3 text-sm font-semibold text-amber-800">Cliente ausente</h3>
-              <OsClienteAusente osId={id} action={clienteAusenteAction} />
+              <OsClienteAusente
+                osId={id}
+                assinaturaTecnico={os.assinatura_tecnico}
+                action={clienteAusenteAction}
+              />
             </div>
           )}
 

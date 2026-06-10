@@ -1,18 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Loader2, Plus, Search, X, UserCheck } from "lucide-react";
+import { Loader2, Plus, Search, X, UserCheck, Wrench } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatTelefone } from "@/lib/format";
+import { TecnicoCargaTrabalho } from "@/components/tecnico-carga-trabalho";
+import type { TecnicoOpcao } from "@/lib/tecnicos";
 
 type ClienteLite = { id: string; nome: string; telefone: string | null; endereco?: string };
+
+type OsOpcao = {
+  id: string;
+  label: string;
+  cliente_id: string | null;
+  tecnico_id: string | null;
+  tecnico: string | null;
+  endereco?: string;
+};
 
 export function AgendaForm({
   action,
   dataPadrao,
+  tecnicos = [],
+  osOpcoes = [],
 }: {
   action: (formData: FormData) => Promise<void>;
   dataPadrao?: string;
+  tecnicos?: TecnicoOpcao[];
+  osOpcoes?: OsOpcao[];
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [aberto, setAberto] = useState(false);
@@ -22,6 +37,8 @@ export function AgendaForm({
   const [busca, setBusca] = useState("");
   const [resultados, setResultados] = useState<ClienteLite[]>([]);
   const [endereco, setEndereco] = useState("");
+  const [tecnicoId, setTecnicoId] = useState("");
+  const [osId, setOsId] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -39,7 +56,7 @@ export function AgendaForm({
         .order("nome")
         .limit(6);
       setResultados(
-        (data || []).map((c: any) => ({
+        (data || []).map((c: { id: string; nome: string; telefone: string | null; logradouro: string | null; numero: string | null; bairro: string | null; cidade: string | null }) => ({
           id: c.id,
           nome: c.nome,
           telefone: c.telefone,
@@ -57,13 +74,34 @@ export function AgendaForm({
     if (c.endereco) setEndereco(c.endereco);
   }
 
+  function selecionarOs(id: string) {
+    setOsId(id);
+    if (!id) return;
+    const os = osOpcoes.find((o) => o.id === id);
+    if (!os) return;
+    if (os.tecnico_id) setTecnicoId(os.tecnico_id);
+    if (os.endereco) setEndereco(os.endereco);
+    if (os.cliente_id) {
+      const nome = os.label.split(" — ").slice(1).join(" — ") || os.label;
+      setCliente({ id: os.cliente_id, nome, telefone: null, endereco: os.endereco });
+    }
+  }
+
+  function resetForm() {
+    setCliente(null);
+    setEndereco("");
+    setTecnicoId("");
+    setOsId("");
+    setBusca("");
+  }
+
   function handle(formData: FormData) {
     if (cliente) formData.set("cliente_id", cliente.id);
+    if (osId) formData.set("os_id", osId);
     startTransition(async () => {
       await action(formData);
       setAberto(false);
-      setCliente(null);
-      setEndereco("");
+      resetForm();
     });
   }
 
@@ -86,7 +124,27 @@ export function AgendaForm({
         </div>
 
         <form action={handle} className="space-y-4">
-          {/* Cliente (opcional) */}
+          {osOpcoes.length > 0 && (
+            <div>
+              <label className="label flex items-center gap-1">
+                <Wrench className="h-3.5 w-3.5" /> Vincular à ordem de serviço
+              </label>
+              <select
+                className="input"
+                value={osId}
+                onChange={(e) => selecionarOs(e.target.value)}
+              >
+                <option value="">Sem vínculo (agendamento avulso)</option>
+                {osOpcoes.map((o) => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-400">
+                Ao vincular uma OS, cliente, técnico e endereço são preenchidos automaticamente.
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="label">Cliente (opcional)</label>
             {cliente ? (
@@ -141,10 +199,25 @@ export function AgendaForm({
               </select>
             </div>
             <div>
-              <label className="label">Técnico (opcional)</label>
-              <input name="tecnico" className="input" placeholder="Deixe vazio — técnico assume no check-in" />
+              <label className="label">Técnico responsável *</label>
+              <select
+                name="tecnico_id"
+                className="input"
+                required
+                value={tecnicoId}
+                onChange={(e) => setTecnicoId(e.target.value)}
+              >
+                <option value="">Selecione o técnico...</option>
+                {tecnicos.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome}{t.email ? ` (${t.email})` : ""}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
+
+          <TecnicoCargaTrabalho tecnicoId={tecnicoId} />
 
           <div className="grid grid-cols-2 gap-3">
             <div>

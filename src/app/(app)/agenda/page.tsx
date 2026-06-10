@@ -1,9 +1,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Check, X, MapPin, Clock, Phone, Sun, Sunset } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, X, MapPin, Clock, Phone, Sun, Sunset, Wrench } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui";
 import { AgendaForm } from "@/components/agenda-form";
+import { mapTecnicos } from "@/lib/tecnicos";
+import { STATUS_OS_ABERTAS } from "@/lib/os-status";
+import { formatNumeroOS } from "@/lib/format";
 import { CheckinButtons } from "@/components/checkin-buttons";
 import {
   TIPO_AGENDAMENTO_LABEL,
@@ -54,9 +57,9 @@ const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domi
 export default async function AgendaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ inicio?: string }>;
+  searchParams: Promise<{ inicio?: string; tecnico?: string }>;
 }) {
-  const { inicio } = await searchParams;
+  const { inicio, tecnico: filtroTecnico } = await searchParams;
   const baseDate = inicio ? new Date(inicio + "T00:00:00") : new Date();
   const segunda = inicioSemana(baseDate);
   const domingo = addDias(segunda, 6);
@@ -76,12 +79,20 @@ export default async function AgendaPage({
     queryAgenda = queryAgenda.or(
       `tecnico_id.eq.${profile.id},tecnico.ilike.%${nome}%,tecnico.is.null`
     );
+  } else if (filtroTecnico) {
+    queryAgenda = queryAgenda.eq("tecnico_id", filtroTecnico);
   }
 
   const limiteGps = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   const verGps = profile.papel !== "tecnico";
+  const ehAdminOuAtendente = profile.papel === "admin" || profile.papel === "atendente";
 
-  const [{ data: agendamentos }, { data: posicoes }] = await Promise.all([
+  const [
+    { data: agendamentos },
+    { data: posicoes },
+    { data: perfisTecnicos },
+    { data: osAbertas },
+  ] = await Promise.all([
     queryAgenda,
     verGps
       ? supabase
@@ -90,7 +101,35 @@ export default async function AgendaPage({
           .gte("atualizado_at", limiteGps)
           .order("atualizado_at", { ascending: false })
       : Promise.resolve({ data: [] as never[] }),
+    ehAdminOuAtendente
+      ? supabase.from("profiles").select("*").eq("papel", "tecnico").eq("ativo", true).order("nome")
+      : Promise.resolve({ data: [] as never[] }),
+    ehAdminOuAtendente
+      ? supabase
+          .from("ordens_servico")
+          .select("id, numero, tecnico_id, tecnico, cliente_id, clientes(nome, logradouro, numero, bairro, cidade)")
+          .in("status", [...STATUS_OS_ABERTAS])
+          .order("data_abertura", { ascending: false })
+          .limit(50)
+      : Promise.resolve({ data: [] as never[] }),
   ]);
+
+  const tecnicos = mapTecnicos(perfisTecnicos || []);
+  const osOpcoes = (osAbertas || []).map((o) => {
+    // @ts-expect-error relação
+    const c = o.clientes;
+    const endereco = c
+      ? [c.logradouro, c.numero, c.bairro, c.cidade].filter(Boolean).join(", ")
+      : "";
+    return {
+      id: o.id,
+      label: `${formatNumeroOS(o.numero)} — ${c?.nome || "Sem cliente"}`,
+      cliente_id: o.cliente_id,
+      tecnico_id: o.tecnico_id,
+      tecnico: o.tecnico,
+      endereco,
+    };
+  });
 
   const podeCriar = temPermissao(profile.papel, "agenda_criar");
   const podeCheckin = temPermissao(profile.papel, "agenda_checkin");
@@ -106,8 +145,38 @@ export default async function AgendaPage({
       <PageHeader
         title="Agenda de atendimentos"
         subtitle={`Semana de ${periodoLabel} • Manhã ${TURNOS.manha.inicio}–${TURNOS.manha.fim} · Tarde ${TURNOS.tarde.inicio}–${TURNOS.tarde.fim}`}
-        action={podeCriar ? <AgendaForm action={criarAgendamento} dataPadrao={hojeStr} /> : undefined}
+        action={
+          podeCriar ? (
+            <AgendaForm
+              action={criarAgendamento}
+              dataPadrao={hojeStr}
+              tecnicos={tecnicos}
+              osOpcoes={osOpcoes}
+            />
+          ) : undefined
+        }
       />
+
+      {ehAdminOuAtendente && tecnicos.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-slate-500">Filtrar por técnico:</span>
+          <Link
+            href={`/agenda?inicio=${ymd(segunda)}`}
+            className={`badge ${!filtroTecnico ? "bg-brand-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
+          >
+            Todos
+          </Link>
+          {tecnicos.map((t) => (
+            <Link
+              key={t.id}
+              href={`/agenda?inicio=${ymd(segunda)}&tecnico=${t.id}`}
+              className={`badge ${filtroTecnico === t.id ? "bg-brand-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
+            >
+              {t.nome}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {verGps && <TecnicosMapa posicoes={(posicoes || []) as never[]} />}
 
@@ -215,7 +284,12 @@ function CardAgendamento({
       {a.tecnico ? (
         <p className="text-slate-400">Téc.: {a.tecnico}</p>
       ) : (
-        <p className="font-medium text-amber-600">Sem técnico — disponível</p>
+        <p className="font-medium text-amber-600">Sem técnico atribuído</p>
+      )}
+      {a.os_id && (
+        <Link href={`/ordens/${a.os_id}`} className="mt-1 flex items-center gap-0.5 font-medium text-brand-600 hover:underline">
+          <Wrench className="h-3 w-3" /> Ver ordem de serviço
+        </Link>
       )}
       {emAtendimento && <p className="mt-1 font-semibold text-brand-700">{STATUS_AGENDAMENTO_LABEL.em_atendimento}</p>}
       {realizado && <p className="mt-1 font-semibold text-green-700">✓ Realizado</p>}

@@ -1,24 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { Eraser, Check, Loader2, ImagePlus, UserX } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Check, Loader2, ImagePlus, UserX, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "./toast";
 
 export function OsClienteAusente({
   osId,
-  assinaturaAtual,
+  assinaturaTecnico,
   observacaoAtual,
   action,
 }: {
   osId: string;
-  assinaturaAtual?: string | null;
+  assinaturaTecnico?: string | null;
   observacaoAtual?: string | null;
   action: (formData: FormData) => Promise<void>;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const desenhando = useRef(false);
-  const [temTraco, setTemTraco] = useState(false);
   const [obs, setObs] = useState(observacaoAtual || "");
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [fotoPath, setFotoPath] = useState<string | null>(null);
@@ -26,50 +23,6 @@ export function OsClienteAusente({
   const [pending, start] = useTransition();
   const toast = useToast();
   const supabase = createClient();
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "#0f172a";
-  }, []);
-
-  function pos(e: React.PointerEvent<HTMLCanvasElement>) {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    return {
-      x: ((e.clientX - rect.left) / rect.width) * canvasRef.current!.width,
-      y: ((e.clientY - rect.top) / rect.height) * canvasRef.current!.height,
-    };
-  }
-
-  function startDraw(e: React.PointerEvent<HTMLCanvasElement>) {
-    desenhando.current = true;
-    setTemTraco(true);
-    const ctx = canvasRef.current!.getContext("2d")!;
-    const p = pos(e);
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
-    canvasRef.current!.setPointerCapture(e.pointerId);
-  }
-  function moveDraw(e: React.PointerEvent<HTMLCanvasElement>) {
-    if (!desenhando.current) return;
-    const ctx = canvasRef.current!.getContext("2d")!;
-    const p = pos(e);
-    ctx.lineTo(p.x, p.y);
-    ctx.stroke();
-  }
-  function endDraw() {
-    desenhando.current = false;
-  }
-
-  function limpar() {
-    const canvas = canvasRef.current!;
-    canvas.getContext("2d")!.clearRect(0, 0, canvas.width, canvas.height);
-    setTemTraco(false);
-  }
 
   async function handleFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -92,8 +45,8 @@ export function OsClienteAusente({
   }
 
   function registrar() {
-    if (!temTraco && !assinaturaAtual) {
-      toast.push("Assine no quadro abaixo.", "error");
+    if (!assinaturaTecnico) {
+      toast.push("Assine a ordem de serviço na seção acima antes de registrar cliente ausente.", "error");
       return;
     }
     if (!fotoUrl) {
@@ -101,10 +54,6 @@ export function OsClienteAusente({
       return;
     }
     const fd = new FormData();
-    fd.set(
-      "assinatura_tecnico",
-      temTraco ? canvasRef.current!.toDataURL("image/png") : assinaturaAtual || ""
-    );
     fd.set("observacao", obs);
     fd.set("foto_url", fotoUrl);
     fd.set("foto_path", fotoPath || "");
@@ -122,34 +71,21 @@ export function OsClienteAusente({
     <div className="space-y-4">
       <p className="flex items-center gap-2 text-sm text-amber-800">
         <UserX className="h-4 w-4" />
-        Registre assinatura do técnico e foto quando o cliente não estiver presente.
+        Registre foto e observação quando o cliente não estiver presente.
       </p>
 
-      {assinaturaAtual && !temTraco && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={assinaturaAtual} alt="Assinatura técnico" className="h-16 object-contain" />
-          <p className="text-xs text-green-700">Assinatura já registrada.</p>
+      {!assinaturaTecnico ? (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            O técnico deve <strong>assinar a ordem de serviço</strong> na seção &quot;Assinatura do técnico&quot; antes de registrar cliente ausente.
+          </span>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-2 text-xs text-green-700">
+          ✓ Assinatura do técnico já registrada nesta OS.
         </div>
       )}
-
-      <div>
-        <label className="label">Assinatura do técnico *</label>
-        <canvas
-          ref={canvasRef}
-          width={360}
-          height={120}
-          onPointerDown={startDraw}
-          onPointerMove={moveDraw}
-          onPointerUp={endDraw}
-          onPointerLeave={endDraw}
-          className="w-full touch-none rounded-lg border border-slate-300 bg-white"
-          style={{ aspectRatio: "360 / 120" }}
-        />
-        <button type="button" onClick={limpar} className="btn-secondary mt-2 text-sm">
-          <Eraser className="h-4 w-4" /> Limpar assinatura
-        </button>
-      </div>
 
       <div>
         <label className="label">Foto comprobatória *</label>
@@ -175,7 +111,12 @@ export function OsClienteAusente({
         />
       </div>
 
-      <button type="button" onClick={registrar} disabled={pending} className="btn-primary w-full">
+      <button
+        type="button"
+        onClick={registrar}
+        disabled={pending || !assinaturaTecnico}
+        className="btn-primary w-full"
+      >
         {pending && <Loader2 className="h-4 w-4 animate-spin" />}
         <Check className="h-4 w-4" />
         Registrar cliente ausente
