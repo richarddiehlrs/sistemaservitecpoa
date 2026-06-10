@@ -1,0 +1,599 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, Plus, Search, Trash2, UserCheck, X } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { buscarCep } from "@/lib/cep";
+import { formatCurrency, formatTelefone } from "@/lib/format";
+import type { Equipamento, OrdemServico, OsItem } from "@/types/database";
+
+type ClienteLite = { id: string; nome: string; telefone: string | null };
+
+type ItemState = {
+  tipo: "servico" | "peca";
+  descricao: string;
+  quantidade: number;
+  valor_unitario: number;
+};
+
+type Props = {
+  action: (formData: FormData) => Promise<void>;
+  ordem?: OrdemServico;
+  clienteInicial?: ClienteLite | null;
+  equipamentos?: Equipamento[];
+  itensIniciais?: OsItem[];
+  modoEdicao?: boolean;
+};
+
+const UFS = [
+  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB",
+  "PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
+];
+
+export function OrdemForm({
+  action,
+  ordem,
+  clienteInicial,
+  equipamentos = [],
+  itensIniciais = [],
+  modoEdicao = false,
+}: Props) {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const [pending, startTransition] = useTransition();
+
+  // ---- Cliente ----
+  const [modoCliente, setModoCliente] = useState<"existente" | "novo">(
+    clienteInicial || modoEdicao ? "existente" : "novo"
+  );
+  const [cliente, setCliente] = useState<ClienteLite | null>(clienteInicial ?? null);
+  const [busca, setBusca] = useState("");
+  const [resultados, setResultados] = useState<ClienteLite[]>([]);
+  const [buscando, setBuscando] = useState(false);
+
+  const [novoCli, setNovoCli] = useState({
+    nome: "", cpf_cnpj: "", telefone: "", email: "",
+    cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "",
+  });
+  const [buscandoCep, setBuscandoCep] = useState(false);
+
+  // ---- Equipamento ----
+  const [equipExistentes, setEquipExistentes] = useState<Equipamento[]>(equipamentos);
+  const [equipId, setEquipId] = useState<string>(ordem?.equipamento_id || "");
+  const [novoEquip, setNovoEquip] = useState({
+    tipo: "", marca: "", modelo: "", serie: "", voltagem: "", cor: "",
+  });
+
+  // ---- Itens ----
+  const [itens, setItens] = useState<ItemState[]>(
+    itensIniciais.length > 0
+      ? itensIniciais.map((i) => ({
+          tipo: i.tipo,
+          descricao: i.descricao,
+          quantidade: Number(i.quantidade),
+          valor_unitario: Number(i.valor_unitario),
+        }))
+      : [{ tipo: "servico", descricao: "", quantidade: 1, valor_unitario: 0 }]
+  );
+
+  // ---- Valores ----
+  const [valorVisita, setValorVisita] = useState(Number(ordem?.valor_visita ?? 0));
+  const [abaterVisita, setAbaterVisita] = useState(ordem?.abater_visita ?? true);
+  const [desconto, setDesconto] = useState(Number(ordem?.desconto ?? 0));
+  const [acrescimo, setAcrescimo] = useState(Number(ordem?.acrescimo ?? 0));
+
+  const valorItens = itens.reduce(
+    (s, i) => s + (Number(i.quantidade) || 0) * (Number(i.valor_unitario) || 0),
+    0
+  );
+  const totalGeral = Math.max(
+    0,
+    valorItens + acrescimo - desconto - (abaterVisita ? valorVisita : 0)
+  );
+
+  // Busca de clientes (debounce simples)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (modoCliente !== "existente" || cliente) return;
+    if (!busca.trim()) {
+      setResultados([]);
+      return;
+    }
+    setBuscando(true);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      const term = `%${busca.trim()}%`;
+      const { data } = await supabase
+        .from("clientes")
+        .select("id, nome, telefone")
+        .or(`nome.ilike.${term},telefone.ilike.${term},cpf_cnpj.ilike.${term}`)
+        .order("nome")
+        .limit(8);
+      setResultados(data || []);
+      setBuscando(false);
+    }, 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [busca, modoCliente, cliente, supabase]);
+
+  async function selecionarCliente(c: ClienteLite) {
+    setCliente(c);
+    setResultados([]);
+    setBusca("");
+    const { data } = await supabase
+      .from("equipamentos")
+      .select("*")
+      .eq("cliente_id", c.id)
+      .order("created_at", { ascending: false });
+    setEquipExistentes(data || []);
+  }
+
+  async function handleBuscarCep() {
+    setBuscandoCep(true);
+    const res = await buscarCep(novoCli.cep);
+    setBuscandoCep(false);
+    if (!res) return;
+    setNovoCli((c) => ({
+      ...c,
+      logradouro: res.logradouro || c.logradouro,
+      bairro: res.bairro || c.bairro,
+      cidade: res.cidade || c.cidade,
+      uf: res.uf || c.uf,
+    }));
+  }
+
+  function addItem() {
+    setItens((arr) => [
+      ...arr,
+      { tipo: "servico", descricao: "", quantidade: 1, valor_unitario: 0 },
+    ]);
+  }
+  function updItem(idx: number, patch: Partial<ItemState>) {
+    setItens((arr) => arr.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  }
+  function rmItem(idx: number) {
+    setItens((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  function handleSubmit(formData: FormData) {
+    if (modoCliente === "existente" && cliente) {
+      formData.set("cliente_id", cliente.id);
+    } else {
+      formData.set("cliente_id", "");
+      formData.set("novo_nome", novoCli.nome);
+      formData.set("novo_cpf_cnpj", novoCli.cpf_cnpj);
+      formData.set("novo_telefone", novoCli.telefone);
+      formData.set("novo_email", novoCli.email);
+      formData.set("novo_cep", novoCli.cep);
+      formData.set("novo_logradouro", novoCli.logradouro);
+      formData.set("novo_numero", novoCli.numero);
+      formData.set("novo_complemento", novoCli.complemento);
+      formData.set("novo_bairro", novoCli.bairro);
+      formData.set("novo_cidade", novoCli.cidade);
+      formData.set("novo_uf", novoCli.uf);
+    }
+
+    formData.set("equipamento_id", equipId);
+    if (!equipId) {
+      formData.set("equip_tipo", novoEquip.tipo);
+      formData.set("equip_marca", novoEquip.marca);
+      formData.set("equip_modelo", novoEquip.modelo);
+      formData.set("equip_serie", novoEquip.serie);
+      formData.set("equip_voltagem", novoEquip.voltagem);
+      formData.set("equip_cor", novoEquip.cor);
+    }
+
+    formData.set("itens_json", JSON.stringify(itens));
+    if (abaterVisita) formData.set("abater_visita", "on");
+    else formData.delete("abater_visita");
+
+    startTransition(async () => {
+      await action(formData);
+    });
+  }
+
+  return (
+    <form action={handleSubmit} className="space-y-6">
+      {/* ====================== CLIENTE ====================== */}
+      <div className="card p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Cliente
+          </h3>
+          {!modoEdicao && (
+            <div className="flex rounded-lg border border-slate-200 p-0.5 text-sm">
+              <button
+                type="button"
+                onClick={() => { setModoCliente("existente"); }}
+                className={`rounded-md px-3 py-1 ${modoCliente === "existente" ? "bg-brand-600 text-white" : "text-slate-600"}`}
+              >
+                Existente
+              </button>
+              <button
+                type="button"
+                onClick={() => { setModoCliente("novo"); setCliente(null); }}
+                className={`rounded-md px-3 py-1 ${modoCliente === "novo" ? "bg-brand-600 text-white" : "text-slate-600"}`}
+              >
+                Novo cliente
+              </button>
+            </div>
+          )}
+        </div>
+
+        {modoCliente === "existente" ? (
+          cliente ? (
+            <div className="flex items-center justify-between rounded-lg bg-brand-50 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <UserCheck className="h-5 w-5 text-brand-600" />
+                <div>
+                  <p className="font-medium text-slate-900">{cliente.nome}</p>
+                  {cliente.telefone && (
+                    <p className="text-xs text-slate-500">{formatTelefone(cliente.telefone)}</p>
+                  )}
+                </div>
+              </div>
+              {!modoEdicao && (
+                <button type="button" onClick={() => setCliente(null)} className="text-slate-400 hover:text-red-500">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="flex items-center gap-2 rounded-lg border border-slate-300 px-3">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar cliente por nome, telefone ou CPF..."
+                  className="w-full bg-transparent py-2 text-sm outline-none"
+                />
+                {buscando && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+              </div>
+              {resultados.length > 0 && (
+                <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {resultados.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() => selecionarCliente(c)}
+                        className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-slate-50"
+                      >
+                        <span className="font-medium">{c.nome}</span>
+                        <span className="text-xs text-slate-500">
+                          {c.telefone ? formatTelefone(c.telefone) : ""}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
+            <div className="sm:col-span-4">
+              <label className="label">Nome *</label>
+              <input className="input" value={novoCli.nome}
+                onChange={(e) => setNovoCli({ ...novoCli, nome: e.target.value })} required={modoCliente === "novo"} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">CPF/CNPJ</label>
+              <input className="input" value={novoCli.cpf_cnpj}
+                onChange={(e) => setNovoCli({ ...novoCli, cpf_cnpj: e.target.value })} />
+            </div>
+            <div className="sm:col-span-3">
+              <label className="label">Telefone / WhatsApp</label>
+              <input className="input" value={novoCli.telefone}
+                onChange={(e) => setNovoCli({ ...novoCli, telefone: e.target.value })} placeholder="(51) 99999-9999" />
+            </div>
+            <div className="sm:col-span-3">
+              <label className="label">E-mail</label>
+              <input className="input" value={novoCli.email}
+                onChange={(e) => setNovoCli({ ...novoCli, email: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">CEP</label>
+              <div className="flex gap-2">
+                <input className="input" value={novoCli.cep}
+                  onChange={(e) => setNovoCli({ ...novoCli, cep: e.target.value })}
+                  onBlur={() => novoCli.cep && handleBuscarCep()} placeholder="00000-000" />
+                <button type="button" onClick={handleBuscarCep} className="btn-secondary shrink-0" disabled={buscandoCep}>
+                  {buscandoCep ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="sm:col-span-3">
+              <label className="label">Logradouro</label>
+              <input className="input" value={novoCli.logradouro}
+                onChange={(e) => setNovoCli({ ...novoCli, logradouro: e.target.value })} />
+            </div>
+            <div className="sm:col-span-1">
+              <label className="label">Número</label>
+              <input className="input" value={novoCli.numero}
+                onChange={(e) => setNovoCli({ ...novoCli, numero: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Bairro</label>
+              <input className="input" value={novoCli.bairro}
+                onChange={(e) => setNovoCli({ ...novoCli, bairro: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Complemento</label>
+              <input className="input" value={novoCli.complemento}
+                onChange={(e) => setNovoCli({ ...novoCli, complemento: e.target.value })} />
+            </div>
+            <div className="sm:col-span-1">
+              <label className="label">Cidade</label>
+              <input className="input" value={novoCli.cidade}
+                onChange={(e) => setNovoCli({ ...novoCli, cidade: e.target.value })} />
+            </div>
+            <div className="sm:col-span-1">
+              <label className="label">UF</label>
+              <select className="input" value={novoCli.uf}
+                onChange={(e) => setNovoCli({ ...novoCli, uf: e.target.value })}>
+                <option value="">-</option>
+                {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+              </select>
+            </div>
+            <p className="sm:col-span-6 text-xs text-slate-400">
+              O cliente será gravado automaticamente ao salvar a OS.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ====================== EQUIPAMENTO ====================== */}
+      <div className="card p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Equipamento
+        </h3>
+        {equipExistentes.length > 0 && (
+          <div className="mb-4">
+            <label className="label">Selecionar equipamento já cadastrado</label>
+            <select className="input" value={equipId} onChange={(e) => setEquipId(e.target.value)}>
+              <option value="">+ Novo equipamento</option>
+              {equipExistentes.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.tipo} {e.marca ? `- ${e.marca}` : ""} {e.modelo ?? ""} {e.numero_serie ? `(${e.numero_serie})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {!equipId && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
+            <div className="sm:col-span-2">
+              <label className="label">Tipo *</label>
+              <input className="input" list="tipos-equip" value={novoEquip.tipo}
+                onChange={(e) => setNovoEquip({ ...novoEquip, tipo: e.target.value })}
+                placeholder="Ex: Geladeira" />
+              <datalist id="tipos-equip">
+                {["Geladeira","Freezer","Fogão","Cooktop","Forno","Micro-ondas","Máquina de Lavar",
+                  "Lava e Seca","Lava-louças","Secadora","Ar-condicionado","Adega","Lavadora de Alta Pressão",
+                  "Aspirador","Bebedouro","Purificador","Ventilador","Cafeteira"].map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Marca</label>
+              <input className="input" value={novoEquip.marca}
+                onChange={(e) => setNovoEquip({ ...novoEquip, marca: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Modelo</label>
+              <input className="input" value={novoEquip.modelo}
+                onChange={(e) => setNovoEquip({ ...novoEquip, modelo: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Nº de série</label>
+              <input className="input" value={novoEquip.serie}
+                onChange={(e) => setNovoEquip({ ...novoEquip, serie: e.target.value })} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Voltagem</label>
+              <select className="input" value={novoEquip.voltagem}
+                onChange={(e) => setNovoEquip({ ...novoEquip, voltagem: e.target.value })}>
+                <option value="">-</option>
+                <option>110V</option>
+                <option>220V</option>
+                <option>Bivolt</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Cor</label>
+              <input className="input" value={novoEquip.cor}
+                onChange={(e) => setNovoEquip({ ...novoEquip, cor: e.target.value })} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ====================== ATENDIMENTO ====================== */}
+      <div className="card p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Atendimento
+        </h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
+          <div className="sm:col-span-6">
+            <label className="label">Defeito relatado pelo cliente</label>
+            <textarea name="defeito_relatado" rows={2} className="input"
+              defaultValue={ordem?.defeito_relatado || ""} />
+          </div>
+          <div className="sm:col-span-3">
+            <label className="label">Acessórios / o que acompanha</label>
+            <input name="acompanha" className="input" defaultValue={ordem?.acompanha || ""} />
+          </div>
+          <div className="sm:col-span-3">
+            <label className="label">Estado / avarias do aparelho</label>
+            <input name="estado_aparelho" className="input" defaultValue={ordem?.estado_aparelho || ""} />
+          </div>
+          <div className="sm:col-span-6">
+            <label className="label">Diagnóstico / laudo técnico</label>
+            <textarea name="diagnostico" rows={2} className="input" defaultValue={ordem?.diagnostico || ""} />
+          </div>
+          <div className="sm:col-span-6">
+            <label className="label">Serviço executado</label>
+            <textarea name="servico_executado" rows={2} className="input" defaultValue={ordem?.servico_executado || ""} />
+          </div>
+        </div>
+      </div>
+
+      {/* ====================== ITENS ====================== */}
+      <div className="card p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Serviços e peças
+          </h3>
+          <button type="button" onClick={addItem} className="btn-secondary text-sm">
+            <Plus className="h-4 w-4" /> Adicionar item
+          </button>
+        </div>
+        <div className="space-y-2">
+          {itens.map((item, idx) => (
+            <div key={idx} className="grid grid-cols-12 gap-2">
+              <select className="input col-span-3 sm:col-span-2" value={item.tipo}
+                onChange={(e) => updItem(idx, { tipo: e.target.value as "servico" | "peca" })}>
+                <option value="servico">Serviço</option>
+                <option value="peca">Peça</option>
+              </select>
+              <input className="input col-span-9 sm:col-span-5" placeholder="Descrição"
+                value={item.descricao} onChange={(e) => updItem(idx, { descricao: e.target.value })} />
+              <input type="number" min="0" step="0.01" className="input col-span-3 sm:col-span-1" placeholder="Qtd"
+                value={item.quantidade} onChange={(e) => updItem(idx, { quantidade: Number(e.target.value) })} />
+              <input type="number" min="0" step="0.01" className="input col-span-4 sm:col-span-2" placeholder="Valor unit."
+                value={item.valor_unitario} onChange={(e) => updItem(idx, { valor_unitario: Number(e.target.value) })} />
+              <div className="col-span-4 sm:col-span-1 flex items-center text-sm font-medium text-slate-600">
+                {formatCurrency((Number(item.quantidade) || 0) * (Number(item.valor_unitario) || 0))}
+              </div>
+              <button type="button" onClick={() => rmItem(idx)}
+                className="col-span-1 flex items-center justify-center text-slate-400 hover:text-red-500">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ====================== VALORES / FECHAMENTO ====================== */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="card p-5 lg:col-span-2">
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Condições
+          </h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <div>
+              <label className="label">Técnico responsável</label>
+              <input name="tecnico" className="input" defaultValue={ordem?.tecnico || ""} />
+            </div>
+            <div>
+              <label className="label">Prioridade</label>
+              <select name="prioridade" className="input" defaultValue={ordem?.prioridade || "normal"}>
+                <option value="baixa">Baixa</option>
+                <option value="normal">Normal</option>
+                <option value="alta">Alta</option>
+                <option value="urgente">Urgente</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Previsão de entrega</label>
+              <input type="date" name="data_previsao" className="input"
+                defaultValue={ordem?.data_previsao || ""} />
+            </div>
+            <div>
+              <label className="label">Garantia (dias)</label>
+              <input type="number" name="garantia_dias" className="input"
+                defaultValue={ordem?.garantia_dias ?? 90} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Forma de pagamento</label>
+              <select name="forma_pagamento" className="input" defaultValue={ordem?.forma_pagamento || ""}>
+                <option value="">-</option>
+                <option>Dinheiro</option>
+                <option>PIX</option>
+                <option>Cartão de débito</option>
+                <option>Cartão de crédito</option>
+                <option>Boleto</option>
+                <option>Transferência</option>
+              </select>
+            </div>
+            {!modoEdicao && (
+              <div className="sm:col-span-2">
+                <label className="label">Status inicial</label>
+                <select name="status" className="input" defaultValue="aberta">
+                  <option value="aberta">Aberta</option>
+                  <option value="em_analise">Em análise</option>
+                  <option value="aguardando_aprovacao">Aguardando aprovação</option>
+                </select>
+              </div>
+            )}
+            <div className="sm:col-span-4">
+              <label className="label">Observações</label>
+              <textarea name="observacoes" rows={2} className="input" defaultValue={ordem?.observacoes || ""} />
+            </div>
+          </div>
+        </div>
+
+        {/* Resumo financeiro */}
+        <div className="card p-5">
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Resumo
+          </h3>
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Serviços + peças</span>
+              <span className="font-medium">{formatCurrency(valorItens)}</span>
+            </div>
+
+            <div>
+              <label className="label">Visita técnica (R$)</label>
+              <input type="number" name="valor_visita" min="0" step="0.01" className="input"
+                value={valorVisita} onChange={(e) => setValorVisita(Number(e.target.value))} />
+              <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" checked={abaterVisita}
+                  onChange={(e) => setAbaterVisita(e.target.checked)} />
+                Abater visita do total do serviço
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="label">Desconto</label>
+                <input type="number" name="desconto" min="0" step="0.01" className="input"
+                  value={desconto} onChange={(e) => setDesconto(Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="label">Acréscimo</label>
+                <input type="number" name="acrescimo" min="0" step="0.01" className="input"
+                  value={acrescimo} onChange={(e) => setAcrescimo(Number(e.target.value))} />
+              </div>
+            </div>
+
+            {abaterVisita && valorVisita > 0 && (
+              <div className="flex items-center justify-between text-xs text-amber-600">
+                <span>Visita abatida</span>
+                <span>- {formatCurrency(valorVisita)}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+              <span className="font-semibold text-slate-900">Total</span>
+              <span className="text-xl font-bold text-brand-700">{formatCurrency(totalGeral)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3">
+        <button type="button" onClick={() => router.back()} className="btn-secondary">
+          Cancelar
+        </button>
+        <button type="submit" className="btn-primary" disabled={pending}>
+          {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {modoEdicao ? "Salvar alterações" : "Abrir ordem de serviço"}
+        </button>
+      </div>
+    </form>
+  );
+}
