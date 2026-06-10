@@ -1,8 +1,9 @@
-import { TrendingUp, TrendingDown, Wallet, Receipt, Wrench, Trophy } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Receipt, Wrench, Trophy, PiggyBank, Percent } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getConfig } from "@/lib/config";
 import { PageHeader, StatCard } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
-import { formatCurrency, STATUS_OS_LABEL } from "@/lib/format";
+import { formatCurrency, formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export default async function RelatoriosPage({
 
   const supabase = await createClient();
 
-  const [{ data: pagos }, { data: aReceberData }, { data: ordens }] = await Promise.all([
+  const [{ data: pagos }, { data: aReceberData }, { data: ordens }, config] = await Promise.all([
     supabase
       .from("lancamentos_financeiros")
       .select("tipo, valor, data_pagamento, cliente_id, clientes(nome), categorias_financeiras(nome)")
@@ -36,9 +37,10 @@ export default async function RelatoriosPage({
       .lte("data_competencia", fim),
     supabase
       .from("ordens_servico")
-      .select("status, valor_total, data_abertura")
+      .select("id, numero, status, valor_total, custo_total, tecnico, data_abertura, clientes(nome)")
       .gte("data_abertura", inicio)
       .lte("data_abertura", `${fim}T23:59:59`),
+    getConfig(),
   ]);
 
   const lista = pagos || [];
@@ -99,6 +101,48 @@ export default async function RelatoriosPage({
     .map(([label, value]) => ({ label, value, color: "bg-brand-500" }))
     .sort((a, b) => b.value - a.value);
 
+  // ===== Lucratividade (OS concluídas/entregues) =====
+  const faturadas = (ordens || []).filter((o) => ["concluida", "entregue"].includes(o.status));
+  const lucroOS = faturadas.map((o) => ({
+    id: o.id,
+    numero: o.numero,
+    // @ts-expect-error relação
+    cliente: o.clientes?.nome || "Sem cliente",
+    tecnico: o.tecnico || "Sem técnico",
+    receita: Number(o.valor_total),
+    custo: Number(o.custo_total || 0),
+    lucro: Number(o.valor_total) - Number(o.custo_total || 0),
+  }));
+
+  const lucroTotal = lucroOS.reduce((s, o) => s + o.lucro, 0);
+  const custoTotal = lucroOS.reduce((s, o) => s + o.custo, 0);
+  const margem = lucroOS.reduce((s, o) => s + o.receita, 0) > 0
+    ? (lucroTotal / lucroOS.reduce((s, o) => s + o.receita, 0)) * 100
+    : 0;
+
+  const topLucroOS = [...lucroOS].sort((a, b) => b.lucro - a.lucro).slice(0, 8);
+
+  // Lucro por cliente
+  const porClienteLucro: Record<string, number> = {};
+  for (const o of lucroOS) porClienteLucro[o.cliente] = (porClienteLucro[o.cliente] || 0) + o.lucro;
+  const lucroClienteItems = Object.entries(porClienteLucro)
+    .map(([label, value]) => ({ label, value, color: "bg-emerald-500" }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6);
+
+  // Comissão por técnico (% sobre o lucro)
+  const comissaoPercent = Number(config.comissao_percent || 0);
+  const porTecnico: Record<string, { lucro: number; receita: number; qtd: number }> = {};
+  for (const o of lucroOS) {
+    if (!porTecnico[o.tecnico]) porTecnico[o.tecnico] = { lucro: 0, receita: 0, qtd: 0 };
+    porTecnico[o.tecnico].lucro += o.lucro;
+    porTecnico[o.tecnico].receita += o.receita;
+    porTecnico[o.tecnico].qtd += 1;
+  }
+  const tecnicos = Object.entries(porTecnico)
+    .map(([nome, v]) => ({ nome, ...v, comissao: (v.lucro * comissaoPercent) / 100 }))
+    .sort((a, b) => b.lucro - a.lucro);
+
   return (
     <div>
       <PageHeader title="Relatórios gerenciais" subtitle={`Desempenho do ano de ${ano}`} />
@@ -141,6 +185,85 @@ export default async function RelatoriosPage({
           <HBarList items={statusItems} formatValue={(v) => String(v)} />
         </div>
       </div>
+
+      {/* Lucratividade */}
+      <h2 className="mt-10 mb-4 text-lg font-semibold text-slate-900">Lucratividade</h2>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard title="Lucro bruto (OS)" value={formatCurrency(lucroTotal)} tone="green" icon={<PiggyBank className="h-5 w-5" />} hint={`${faturadas.length} OS faturadas`} />
+        <StatCard title="Custo total" value={formatCurrency(custoTotal)} tone="red" icon={<TrendingDown className="h-5 w-5" />} />
+        <StatCard title="Margem média" value={`${margem.toFixed(1)}%`} tone="blue" icon={<Percent className="h-5 w-5" />} />
+        <StatCard title="Comissão técnicos" value={formatCurrency(tecnicos.reduce((s, t) => s + t.comissao, 0))} tone="amber" icon={<Trophy className="h-5 w-5" />} hint={`${comissaoPercent}% do lucro`} />
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="card p-5">
+          <h2 className="mb-4 font-semibold text-slate-900">Lucro por cliente</h2>
+          <HBarList items={lucroClienteItems} formatValue={formatCurrency} />
+        </div>
+        <div className="card overflow-x-auto p-5">
+          <h2 className="mb-4 font-semibold text-slate-900">Comissão por técnico</h2>
+          {tecnicos.length === 0 ? (
+            <p className="text-sm text-slate-400">Sem OS faturadas no período.</p>
+          ) : (
+            <table className="table-base">
+              <thead>
+                <tr>
+                  <th>Técnico</th>
+                  <th className="text-center">OS</th>
+                  <th className="text-right">Lucro</th>
+                  <th className="text-right">Comissão</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tecnicos.map((t) => (
+                  <tr key={t.nome}>
+                    <td className="font-medium">{t.nome}</td>
+                    <td className="text-center">{t.qtd}</td>
+                    <td className="text-right text-green-600">{formatCurrency(t.lucro)}</td>
+                    <td className="text-right font-semibold text-amber-600">{formatCurrency(t.comissao)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 card overflow-x-auto p-5">
+        <h2 className="mb-4 font-semibold text-slate-900">Maiores lucros por OS</h2>
+        {topLucroOS.length === 0 ? (
+          <p className="text-sm text-slate-400">Sem OS faturadas no período.</p>
+        ) : (
+          <table className="table-base">
+            <thead>
+              <tr>
+                <th>OS</th>
+                <th>Cliente</th>
+                <th className="text-right">Receita</th>
+                <th className="text-right">Custo</th>
+                <th className="text-right">Lucro</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topLucroOS.map((o) => (
+                <tr key={o.id}>
+                  <td className="font-medium">{formatNumeroOS(o.numero)}</td>
+                  <td>{o.cliente}</td>
+                  <td className="text-right">{formatCurrency(o.receita)}</td>
+                  <td className="text-right text-red-600">{formatCurrency(o.custo)}</td>
+                  <td className="text-right font-semibold text-green-600">{formatCurrency(o.lucro)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {comissaoPercent === 0 && (
+        <p className="mt-3 text-xs text-slate-400">
+          Defina o percentual de comissão em Configurações para calcular a comissão dos técnicos automaticamente.
+        </p>
+      )}
     </div>
   );
 }

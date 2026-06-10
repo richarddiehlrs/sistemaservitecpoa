@@ -10,6 +10,8 @@ import {
   BarChart3,
   CalendarDays,
   PieChart,
+  LineChart,
+  CalendarCog,
   BookText,
   Settings,
   UserCog,
@@ -38,6 +40,8 @@ const GRUPOS: { titulo: string; itens: NavItem[] }[] = [
     titulo: "Financeiro",
     itens: [
       { href: "/financeiro", label: "Financeiro", icon: DollarSign },
+      { href: "/financeiro/fluxo", label: "Fluxo de caixa", icon: LineChart },
+      { href: "/financeiro/recorrentes", label: "Despesas fixas", icon: CalendarCog },
       { href: "/relatorios", label: "Relatórios", icon: PieChart },
       { href: "/dre", label: "DRE", icon: BarChart3 },
     ],
@@ -102,7 +106,8 @@ export function Sidebar({
               <div className="space-y-0.5">
                 {itens.map((item) => {
                   const active =
-                    pathname === item.href || pathname.startsWith(item.href + "/");
+                    pathname === item.href ||
+                    (pathname.startsWith(item.href + "/") && item.href !== "/financeiro");
                   const Icon = item.icon;
                   return (
                     <Link

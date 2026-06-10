@@ -13,6 +13,7 @@ export type EmpresaConfig = {
   termo_garantia: string;
   politica_os: string;
   msg_whatsapp: string;
+  comissao_percent: number;
 };
 
 // Carrega as configurações da empresa do banco, com fallback nas variáveis de ambiente.
@@ -38,6 +39,7 @@ export async function getConfig(): Promise<EmpresaConfig> {
       msg_whatsapp:
         c?.msg_whatsapp ||
         'Olá! Aqui é da {empresa}. Sobre sua OS {os}: status "{status}".',
+      comissao_percent: Number(c?.comissao_percent ?? 0),
     };
   } catch {
     return {
@@ -51,6 +53,7 @@ export async function getConfig(): Promise<EmpresaConfig> {
       termo_garantia: "",
       politica_os: "",
       msg_whatsapp: 'Olá! Aqui é da {empresa}. Sobre sua OS {os}: status "{status}".',
+      comissao_percent: 0,
     };
   }
 }

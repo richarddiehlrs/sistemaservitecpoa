@@ -6,6 +6,54 @@ export function formatCurrency(value: number | null | undefined): string {
   });
 }
 
+// Valor monetário por extenso (pt-BR). Ex.: 1.234,50 -> "mil duzentos e trinta e quatro reais e cinquenta centavos".
+export function valorPorExtenso(value: number | null | undefined): string {
+  const n = Math.round(Number(value ?? 0) * 100) / 100;
+  const reais = Math.floor(n);
+  const centavos = Math.round((n - reais) * 100);
+
+  const unidades = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez",
+    "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
+  const dezenas = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
+  const centenas = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos"];
+
+  function ate999(num: number): string {
+    if (num === 0) return "";
+    if (num === 100) return "cem";
+    const c = Math.floor(num / 100);
+    const resto = num % 100;
+    const partes: string[] = [];
+    if (c > 0) partes.push(centenas[c]);
+    if (resto > 0) {
+      if (resto < 20) partes.push(unidades[resto]);
+      else {
+        const d = Math.floor(resto / 10);
+        const u = resto % 10;
+        partes.push(u > 0 ? `${dezenas[d]} e ${unidades[u]}` : dezenas[d]);
+      }
+    }
+    return partes.join(" e ");
+  }
+
+  function inteiroExtenso(num: number): string {
+    if (num === 0) return "zero";
+    const milhoes = Math.floor(num / 1_000_000);
+    const milhares = Math.floor((num % 1_000_000) / 1000);
+    const resto = num % 1000;
+    const partes: string[] = [];
+    if (milhoes > 0) partes.push(milhoes === 1 ? "um milhão" : `${ate999(milhoes)} milhões`);
+    if (milhares > 0) partes.push(milhares === 1 ? "mil" : `${ate999(milhares)} mil`);
+    if (resto > 0) partes.push(ate999(resto));
+    return partes.join(" e ");
+  }
+
+  const partes: string[] = [];
+  if (reais > 0) partes.push(`${inteiroExtenso(reais)} ${reais === 1 ? "real" : "reais"}`);
+  if (centavos > 0) partes.push(`${inteiroExtenso(centavos)} ${centavos === 1 ? "centavo" : "centavos"}`);
+  if (partes.length === 0) return "zero reais";
+  return partes.join(" e ");
+}
+
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "-";
   const d = typeof value === "string" ? new Date(value) : value;

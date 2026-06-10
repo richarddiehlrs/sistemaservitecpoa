@@ -3,6 +3,9 @@ import { Plus, Wrench, Users, DollarSign, AlertCircle, CalendarDays, MapPin } fr
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
+import { MetaCard } from "@/components/meta-card";
+import { salvarMeta } from "@/app/(app)/financeiro/actions";
+import { saldoEmAberto } from "@/lib/financeiro";
 import {
   formatCurrency,
   formatDate,
@@ -72,15 +75,15 @@ export default async function DashboardPage() {
       .limit(6),
     supabase
       .from("lancamentos_financeiros")
-      .select("valor")
+      .select("valor_pago")
       .eq("tipo", "receita")
-      .eq("status", "pago")
+      .in("status", ["pago", "parcial"])
       .gte("data_pagamento", inicioMes.toISOString().slice(0, 10)),
     supabase
       .from("lancamentos_financeiros")
-      .select("valor")
+      .select("valor, valor_pago, juros, multa")
       .eq("tipo", "receita")
-      .eq("status", "pendente"),
+      .in("status", ["pendente", "parcial"]),
     supabase
       .from("lancamentos_financeiros")
       .select("tipo, valor, data_pagamento")
@@ -97,8 +100,18 @@ export default async function DashboardPage() {
       .limit(6),
   ]);
 
-  const receitaMes = (recebimentos || []).reduce((s, r) => s + Number(r.valor), 0);
-  const aReceber = (contasReceber || []).reduce((s, r) => s + Number(r.valor), 0);
+  const receitaMes = (recebimentos || []).reduce((s, r) => s + Number(r.valor_pago), 0);
+  const aReceber = (contasReceber || []).reduce((s, r) => s + saldoEmAberto(r), 0);
+
+  const anoAtual = new Date().getFullYear();
+  const mesAtual = new Date().getMonth() + 1;
+  const { data: metaRow } = await supabase
+    .from("metas_faturamento")
+    .select("valor")
+    .eq("ano", anoAtual)
+    .eq("mes", mesAtual)
+    .maybeSingle();
+  const meta = Number(metaRow?.valor || 0);
 
   // Receita x despesa dos últimos 6 meses
   const chartData = meses.map((m) => {
@@ -146,6 +159,10 @@ export default async function DashboardPage() {
           <h2 className="mb-4 font-semibold text-slate-900">Ordens por status</h2>
           <HBarList items={statusItems} formatValue={(v) => String(v)} />
         </div>
+      </div>
+
+      <div className="mt-6">
+        <MetaCard ano={anoAtual} mes={mesAtual} meta={meta} realizado={receitaMes} action={salvarMeta} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">

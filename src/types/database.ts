@@ -102,6 +102,7 @@ export type Configuracao = {
   termo_garantia: string | null;
   politica_os: string | null;
   msg_whatsapp: string | null;
+  comissao_percent: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -198,12 +199,42 @@ export type LancamentoFinanceiro = {
   os_id: string | null;
   cliente_id: string | null;
   valor: number;
+  valor_pago: number;
+  juros: number;
+  multa: number;
+  taxa_cartao: number;
+  valor_liquido: number | null;
+  parcela_num: number | null;
+  parcela_total: number | null;
+  recorrencia_id: string | null;
+  tecnico: string | null;
   data_competencia: string;
   data_vencimento: string | null;
   data_pagamento: string | null;
-  status: "pendente" | "pago" | "cancelado";
+  status: "pendente" | "parcial" | "pago" | "cancelado";
   forma_pagamento: string | null;
   observacoes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DespesaRecorrente = {
+  id: string;
+  descricao: string;
+  categoria_id: string | null;
+  valor: number;
+  dia_vencimento: number;
+  ativo: boolean;
+  observacoes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MetaFaturamento = {
+  id: string;
+  ano: number;
+  mes: number;
+  valor: number;
   created_at: string;
   updated_at: string;
 };
@@ -234,6 +265,8 @@ export type Database = {
       profiles: TableDef<Profile>;
       servicos_catalogo: TableDef<ServicoCatalogo>;
       os_anexos: TableDef<OsAnexo>;
+      despesas_recorrentes: TableDef<DespesaRecorrente>;
+      metas_faturamento: TableDef<MetaFaturamento>;
     };
     Views: {
       vw_dre: {

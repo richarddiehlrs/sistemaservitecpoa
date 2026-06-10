@@ -126,6 +126,27 @@ export function ConfigForm({
         </div>
       </div>
 
+      <div className="card p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Financeiro
+        </h3>
+        <div className="max-w-xs">
+          <label className="label">Comissão do técnico (% sobre o lucro)</label>
+          <input
+            name="comissao_percent"
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            defaultValue={config.comissao_percent}
+            className="input"
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Usado no relatório de comissão por técnico.
+          </p>
+        </div>
+      </div>
+
       <div className="flex items-center justify-end gap-3">
         {salvo && (
           <span className="flex items-center gap-1 text-sm text-green-600">

@@ -24,6 +24,7 @@ export async function salvarConfig(formData: FormData) {
       termo_garantia: str(formData.get("termo_garantia")),
       politica_os: str(formData.get("politica_os")),
       msg_whatsapp: str(formData.get("msg_whatsapp")),
+      comissao_percent: Number(String(formData.get("comissao_percent") || "0").replace(",", ".")) || 0,
     })
     .eq("id", 1);
 
@@ -31,4 +32,5 @@ export async function salvarConfig(formData: FormData) {
 
   revalidatePath("/configuracoes");
   revalidatePath("/dashboard");
+  revalidatePath("/relatorios");
 }

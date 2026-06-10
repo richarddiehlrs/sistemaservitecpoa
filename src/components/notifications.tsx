@@ -5,10 +5,11 @@ import Link from "next/link";
 import { Bell, AlertCircle, CalendarClock, DollarSign } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatDate, formatHora, formatNumeroOS } from "@/lib/format";
+import { saldoEmAberto } from "@/lib/financeiro";
 
 type OsAtrasada = { id: string; numero: number; data_previsao: string; clientes?: { nome?: string } | null };
 type AgendaHoje = { id: string; titulo: string; hora_inicio: string | null };
-type ContaVencer = { id: string; descricao: string; valor: number; data_vencimento: string };
+type ContaVencer = { id: string; descricao: string; valor: number; valor_pago: number; juros: number; multa: number; data_vencimento: string };
 
 const STATUS_ABERTOS = ["aberta", "em_analise", "aguardando_aprovacao", "aprovada", "em_roteiro", "em_execucao", "aguardando_peca"];
 
@@ -54,9 +55,9 @@ export function Notifications() {
           .limit(10),
         supabase
           .from("lancamentos_financeiros")
-          .select("id, descricao, valor, data_vencimento")
+          .select("id, descricao, valor, valor_pago, juros, multa, data_vencimento")
           .eq("tipo", "receita")
-          .eq("status", "pendente")
+          .in("status", ["pendente", "parcial"])
           .not("data_vencimento", "is", null)
           .lte("data_vencimento", limiteStr)
           .order("data_vencimento", { ascending: true })
@@ -117,13 +118,18 @@ export function Notifications() {
                 </Link>
               ))}
             </Secao>
-            <Secao titulo="Contas a vencer" icon={<DollarSign className="h-4 w-4 text-amber-500" />} vazio={contas.length === 0}>
-              {contas.map((c) => (
-                <Link key={c.id} href="/financeiro" onClick={() => setOpen(false)} className="block rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50">
-                  <span className="text-slate-700">{c.descricao}</span>
-                  <span className="block text-xs text-amber-600">{formatCurrency(c.valor)} • vence {formatDate(c.data_vencimento)}</span>
-                </Link>
-              ))}
+            <Secao titulo="Contas a receber" icon={<DollarSign className="h-4 w-4 text-amber-500" />} vazio={contas.length === 0}>
+              {contas.map((c) => {
+                const vencido = c.data_vencimento < new Date().toISOString().slice(0, 10);
+                return (
+                  <Link key={c.id} href="/financeiro?vencidos=1" onClick={() => setOpen(false)} className="block rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50">
+                    <span className="text-slate-700">{c.descricao}</span>
+                    <span className={`block text-xs ${vencido ? "text-red-600" : "text-amber-600"}`}>
+                      {formatCurrency(saldoEmAberto(c))} • {vencido ? "vencido" : "vence"} {formatDate(c.data_vencimento)}
+                    </span>
+                  </Link>
+                );
+              })}
             </Secao>
           </div>
         </div>

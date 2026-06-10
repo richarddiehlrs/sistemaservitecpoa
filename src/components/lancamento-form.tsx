@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Loader2, Plus, X } from "lucide-react";
 import type { CategoriaFinanceira } from "@/types/database";
+import { useToast } from "./toast";
 
 export function LancamentoForm({
   categorias,
@@ -13,14 +14,22 @@ export function LancamentoForm({
 }) {
   const [aberto, setAberto] = useState(false);
   const [tipo, setTipo] = useState<"receita" | "despesa">("despesa");
+  const [forma, setForma] = useState("");
   const [pending, startTransition] = useTransition();
+  const toast = useToast();
 
   const cats = categorias.filter((c) => c.tipo === tipo);
+  const ehCartao = forma === "Cartão de crédito";
 
   function handle(formData: FormData) {
     startTransition(async () => {
-      await action(formData);
-      setAberto(false);
+      try {
+        await action(formData);
+        toast.push("Lançamento salvo com sucesso.", "success");
+        setAberto(false);
+      } catch (e) {
+        toast.push((e as Error)?.message || "Erro ao salvar.", "error");
+      }
     });
   }
 
@@ -45,11 +54,11 @@ export function LancamentoForm({
           <div className="flex rounded-lg border border-slate-200 p-0.5 text-sm">
             <button type="button" onClick={() => setTipo("receita")}
               className={`flex-1 rounded-md py-1.5 ${tipo === "receita" ? "bg-green-600 text-white" : "text-slate-600"}`}>
-              Receita
+              Receita (a receber)
             </button>
             <button type="button" onClick={() => setTipo("despesa")}
               className={`flex-1 rounded-md py-1.5 ${tipo === "despesa" ? "bg-red-600 text-white" : "text-slate-600"}`}>
-              Despesa
+              Despesa (a pagar)
             </button>
           </div>
           <input type="hidden" name="tipo" value={tipo} />
@@ -61,7 +70,7 @@ export function LancamentoForm({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Valor (R$) *</label>
+              <label className="label">Valor total (R$) *</label>
               <input name="valor" type="number" step="0.01" min="0" required className="input" />
             </div>
             <div>
@@ -80,7 +89,7 @@ export function LancamentoForm({
                 defaultValue={new Date().toISOString().slice(0, 10)} />
             </div>
             <div>
-              <label className="label">Vencimento</label>
+              <label className="label">1º vencimento</label>
               <input name="data_vencimento" type="date" className="input" />
             </div>
           </div>
@@ -95,7 +104,7 @@ export function LancamentoForm({
             </div>
             <div>
               <label className="label">Forma de pagamento</label>
-              <select name="forma_pagamento" className="input">
+              <select name="forma_pagamento" className="input" value={forma} onChange={(e) => setForma(e.target.value)}>
                 <option value="">-</option>
                 <option>Dinheiro</option>
                 <option>PIX</option>
@@ -106,6 +115,28 @@ export function LancamentoForm({
               </select>
             </div>
           </div>
+
+          {/* Parcelamento e taxa (cartão) */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Parcelas</label>
+              <input name="parcelas" type="number" min="1" max="36" defaultValue={1} className="input" />
+              <p className="mt-1 text-[11px] text-slate-400">Gera 1 lançamento por parcela (mensal).</p>
+            </div>
+            <div>
+              <label className="label">Taxa de cartão (R$)</label>
+              <input name="taxa_cartao" type="number" step="0.01" min="0" defaultValue={0}
+                className={`input ${!ehCartao ? "opacity-60" : ""}`} placeholder="0,00" />
+              <p className="mt-1 text-[11px] text-slate-400">Abatida do valor líquido recebido.</p>
+            </div>
+          </div>
+
+          {tipo === "receita" && (
+            <div>
+              <label className="label">Técnico (comissão)</label>
+              <input name="tecnico" className="input" placeholder="Opcional" />
+            </div>
+          )}
 
           <div>
             <label className="label">Observações</label>
