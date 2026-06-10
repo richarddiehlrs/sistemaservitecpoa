@@ -8,6 +8,7 @@ import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import { sincronizarAgendamentoOs, sincronizarAgendaStatusOs } from "@/lib/agenda-os";
+import { notificarTecnicoNovaOs } from "@/lib/push";
 import type { StatusOS } from "@/types/database";
 
 type ItemInput = {
@@ -217,6 +218,17 @@ export async function criarOrdem(formData: FormData) {
     tecnico_id,
   });
 
+  if (tecnico_id && profile.id !== tecnico_id) {
+    const { data: cli } = await supabase.from("clientes").select("nome").eq("id", clienteId).single();
+    notificarTecnicoNovaOs({
+      tecnicoId: tecnico_id,
+      osId: os!.id,
+      numero: os!.numero,
+      clienteNome: cli?.nome,
+      dataVisita,
+    }).catch(() => {});
+  }
+
   revalidatePath("/ordens");
   revalidatePath("/agenda");
   revalidatePath("/campo");
@@ -241,7 +253,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
 
   const { data: osAtual } = await supabase
     .from("ordens_servico")
-    .select("numero, cliente_id")
+    .select("numero, cliente_id, tecnico_id")
     .eq("id", id)
     .single();
 
@@ -283,6 +295,21 @@ export async function atualizarOrdem(id: string, formData: FormData) {
       tecnico,
       tecnico_id,
     });
+
+    if (tecnico_id && tecnico_id !== osAtual.tecnico_id) {
+      const { data: cli } = await supabase
+        .from("clientes")
+        .select("nome")
+        .eq("id", osAtual.cliente_id)
+        .single();
+      notificarTecnicoNovaOs({
+        tecnicoId: tecnico_id,
+        osId: id,
+        numero: osAtual.numero,
+        clienteNome: cli?.nome,
+        dataVisita,
+      }).catch(() => {});
+    }
   }
 
   await supabase.from("os_itens").delete().eq("os_id", id);

@@ -1,4 +1,4 @@
-const CACHE = "servitec-v1";
+const CACHE = "servitec-v2";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -13,7 +13,6 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Network-first com fallback ao cache (bom para um app de gestão sempre online).
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -28,5 +27,39 @@ self.addEventListener("fetch", (event) => {
         return res;
       })
       .catch(() => caches.match(req))
+  );
+});
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let data = { title: "ServitecPoa", body: "Nova notificação", url: "/campo", tag: "servitec" };
+  try {
+    data = { ...data, ...event.data.json() };
+  } catch {
+    data.body = event.data.text();
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      tag: data.tag || "servitec",
+      data: { url: data.url || "/campo" },
+      vibrate: [120, 60, 120],
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/campo";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes(url) && "focus" in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
   );
 });

@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "ServitecPoa ERP",
     short_name: "ServitecPoa",
     description: "Gestão de assistência técnica de eletrodomésticos",
-    start_url: "/",
+    start_url: "/campo",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

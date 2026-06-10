@@ -196,6 +196,16 @@ export type Agendamento = {
   updated_at: string;
 };
 
+export type PushSubscription = {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PosicaoTecnico = {
   user_id: string;
   tecnico_nome: string | null;
@@ -287,6 +297,7 @@ export type Database = {
       categorias_financeiras: TableDef<CategoriaFinanceira>;
       lancamentos_financeiros: TableDef<LancamentoFinanceiro>;
       agendamentos: TableDef<Agendamento>;
+      push_subscriptions: TableDef<PushSubscription>;
       posicoes_tecnico: TableDef<PosicaoTecnico>;
       configuracoes: TableDef<Configuracao>;
       profiles: TableDef<Profile>;

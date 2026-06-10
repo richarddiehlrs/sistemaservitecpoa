@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { CheckCircle2, Clock, UserX } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { OsAprovar } from "@/components/os-aprovar";
+import { PortalTimeline, PortalVisitaStatus } from "@/components/portal-visita";
 import { PrintButton } from "@/components/print-button";
 import {
   formatCurrency,
@@ -30,6 +31,8 @@ export default async function PortalOsPage({
   const empresa = os.empresa || {};
   const itens: any[] = os.itens || [];
   const anexosAusente: { url: string }[] = os.anexos_ausente || [];
+  const historico: { status: string; observacao?: string | null; created_at: string }[] =
+    os.historico || [];
   const ehClienteAusente = os.status === "cliente_ausente";
   const podeAprovar = !os.aprovado && os.status !== "cancelada" && !ehClienteAusente;
   const valorTotal = calcValorTotalCliente(
@@ -95,6 +98,15 @@ export default async function PortalOsPage({
           {os.diagnostico && <Bloco titulo="Diagnóstico" valor={os.diagnostico} />}
           {os.servico && <Bloco titulo="Serviço executado" valor={os.servico} />}
         </div>
+
+        <PortalVisitaStatus
+          status={os.status}
+          dataPrevisao={os.data_previsao}
+          turno={os.turno}
+          tecnico={os.tecnico}
+        />
+
+        <PortalTimeline historico={historico} />
 
         {/* Cliente ausente */}
         {ehClienteAusente && (
