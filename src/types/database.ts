@@ -7,6 +7,7 @@ export type StatusOS =
   | "em_analise"
   | "aguardando_aprovacao"
   | "aprovada"
+  | "em_roteiro"
   | "em_execucao"
   | "aguardando_peca"
   | "concluida"
