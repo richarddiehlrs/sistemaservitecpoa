@@ -15,6 +15,7 @@ type ItemState = {
   descricao: string;
   quantidade: number;
   valor_unitario: number;
+  custo_unitario: number;
 };
 
 type Props = {
@@ -75,8 +76,9 @@ export function OrdemForm({
           descricao: i.descricao,
           quantidade: Number(i.quantidade),
           valor_unitario: Number(i.valor_unitario),
+          custo_unitario: Number(i.custo_unitario || 0),
         }))
-      : [{ tipo: "servico", descricao: "", quantidade: 1, valor_unitario: 0 }]
+      : [{ tipo: "servico", descricao: "", quantidade: 1, valor_unitario: 0, custo_unitario: 0 }]
   );
 
   // ---- Valores ----
@@ -89,10 +91,15 @@ export function OrdemForm({
     (s, i) => s + (Number(i.quantidade) || 0) * (Number(i.valor_unitario) || 0),
     0
   );
+  const custoItens = itens.reduce(
+    (s, i) => s + (Number(i.quantidade) || 0) * (Number(i.custo_unitario) || 0),
+    0
+  );
   const totalGeral = Math.max(
     0,
     valorItens + acrescimo - desconto - (abaterVisita ? valorVisita : 0)
   );
+  const lucro = totalGeral - custoItens;
 
   // Busca de clientes (debounce simples)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
@@ -147,7 +154,7 @@ export function OrdemForm({
   function addItem() {
     setItens((arr) => [
       ...arr,
-      { tipo: "servico", descricao: "", quantidade: 1, valor_unitario: 0 },
+      { tipo: "servico", descricao: "", quantidade: 1, valor_unitario: 0, custo_unitario: 0 },
     ]);
   }
   function addDoCatalogo(id: string) {
@@ -155,7 +162,7 @@ export function OrdemForm({
     if (!s) return;
     setItens((arr) => [
       ...arr,
-      { tipo: s.tipo, descricao: s.descricao, quantidade: 1, valor_unitario: Number(s.valor) },
+      { tipo: s.tipo, descricao: s.descricao, quantidade: 1, valor_unitario: Number(s.valor), custo_unitario: 0 },
     ]);
   }
   function updItem(idx: number, patch: Partial<ItemState>) {
@@ -476,6 +483,14 @@ export function OrdemForm({
             </button>
           </div>
         </div>
+        <div className="mb-1 hidden grid-cols-12 gap-2 px-1 text-xs font-medium text-slate-400 sm:grid">
+          <span className="col-span-2">Tipo</span>
+          <span className="col-span-4">Descrição</span>
+          <span className="col-span-1">Qtd</span>
+          <span className="col-span-2">Custo unit.</span>
+          <span className="col-span-2">Venda unit.</span>
+          <span className="col-span-1"></span>
+        </div>
         <div className="space-y-2">
           {itens.map((item, idx) => (
             <div key={idx} className="grid grid-cols-12 gap-2">
@@ -484,21 +499,52 @@ export function OrdemForm({
                 <option value="servico">Serviço</option>
                 <option value="peca">Peça</option>
               </select>
-              <input className="input col-span-9 sm:col-span-5" placeholder="Descrição"
+              <input className="input col-span-9 sm:col-span-4" placeholder="Descrição"
                 value={item.descricao} onChange={(e) => updItem(idx, { descricao: e.target.value })} />
               <input type="number" min="0" step="0.01" className="input col-span-3 sm:col-span-1" placeholder="Qtd"
                 value={item.quantidade} onChange={(e) => updItem(idx, { quantidade: Number(e.target.value) })} />
-              <input type="number" min="0" step="0.01" className="input col-span-4 sm:col-span-2" placeholder="Valor unit."
+              <input type="number" min="0" step="0.01" className="input col-span-4 sm:col-span-2" placeholder="Custo"
+                title="Custo que você pagou (peça/serviço)"
+                value={item.custo_unitario} onChange={(e) => updItem(idx, { custo_unitario: Number(e.target.value) })} />
+              <input type="number" min="0" step="0.01" className="input col-span-4 sm:col-span-2" placeholder="Venda"
+                title="Valor cobrado do cliente"
                 value={item.valor_unitario} onChange={(e) => updItem(idx, { valor_unitario: Number(e.target.value) })} />
-              <div className="col-span-4 sm:col-span-1 flex items-center text-sm font-medium text-slate-600">
-                {formatCurrency((Number(item.quantidade) || 0) * (Number(item.valor_unitario) || 0))}
-              </div>
               <button type="button" onClick={() => rmItem(idx)}
                 className="col-span-1 flex items-center justify-center text-slate-400 hover:text-red-500">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* ====================== AGENDAMENTO ====================== */}
+      <div className="card p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Agendamento da visita
+        </h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <label className="label">Data da visita</label>
+            <input type="date" name="data_previsao" className="input"
+              defaultValue={ordem?.data_previsao || new Date().toISOString().slice(0, 10)} />
+          </div>
+          <div>
+            <label className="label">Turno</label>
+            <select name="turno" className="input" defaultValue={ordem?.turno || "manha"}>
+              <option value="manha">Manhã (09:00–12:00)</option>
+              <option value="tarde">Tarde (13:00–17:30)</option>
+              <option value="dia">Dia inteiro</option>
+            </select>
+          </div>
+          {!modoEdicao && (
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
+                <input type="checkbox" name="agendar" defaultChecked />
+                Criar na agenda automaticamente
+              </label>
+            </div>
+          )}
         </div>
       </div>
 
@@ -521,11 +567,6 @@ export function OrdemForm({
                 <option value="alta">Alta</option>
                 <option value="urgente">Urgente</option>
               </select>
-            </div>
-            <div>
-              <label className="label">Previsão de entrega</label>
-              <input type="date" name="data_previsao" className="input"
-                defaultValue={ordem?.data_previsao || ""} />
             </div>
             <div>
               <label className="label">Garantia (dias)</label>
@@ -604,8 +645,21 @@ export function OrdemForm({
             )}
 
             <div className="flex items-center justify-between border-t border-slate-200 pt-3">
-              <span className="font-semibold text-slate-900">Total</span>
+              <span className="font-semibold text-slate-900">Total (cliente)</span>
               <span className="text-xl font-bold text-brand-700">{formatCurrency(totalGeral)}</span>
+            </div>
+
+            <div className="mt-2 space-y-1 rounded-lg bg-slate-50 p-3 text-xs">
+              <div className="flex items-center justify-between text-slate-500">
+                <span>Custo total (peças/serviços)</span>
+                <span>{formatCurrency(custoItens)}</span>
+              </div>
+              <div className="flex items-center justify-between font-semibold">
+                <span className="text-slate-700">Lucro líquido</span>
+                <span className={lucro >= 0 ? "text-green-600" : "text-red-600"}>
+                  {formatCurrency(lucro)}
+                </span>
+              </div>
             </div>
           </div>
         </div>

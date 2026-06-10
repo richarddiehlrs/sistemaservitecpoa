@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { horarioTurno } from "@/lib/turnos";
 
 function str(v: FormDataEntryValue | null): string | null {
   const s = v == null ? "" : String(v).trim();
@@ -11,12 +12,16 @@ function str(v: FormDataEntryValue | null): string | null {
 export async function criarAgendamento(formData: FormData) {
   const supabase = await createClient();
 
+  const turno = str(formData.get("turno"));
+  const horas = horarioTurno(turno);
+
   const { error } = await supabase.from("agendamentos").insert({
     titulo: String(formData.get("titulo") || "").trim() || "Atendimento",
     tipo: (str(formData.get("tipo")) as never) || "visita",
+    turno: (turno as never),
     data: str(formData.get("data")) || new Date().toISOString().slice(0, 10),
-    hora_inicio: str(formData.get("hora_inicio")),
-    hora_fim: str(formData.get("hora_fim")),
+    hora_inicio: str(formData.get("hora_inicio")) || horas.inicio,
+    hora_fim: str(formData.get("hora_fim")) || horas.fim,
     tecnico: str(formData.get("tecnico")),
     endereco: str(formData.get("endereco")),
     cliente_id: str(formData.get("cliente_id")),

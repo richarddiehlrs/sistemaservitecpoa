@@ -10,6 +10,7 @@ import { OsFotos } from "@/components/os-fotos";
 import { OsAssinatura } from "@/components/os-assinatura";
 import { CopyLink } from "@/components/copy-link";
 import { getConfig } from "@/lib/config";
+import { TURNO_LABEL } from "@/lib/turnos";
 import {
   formatCurrency,
   formatDate,
@@ -177,10 +178,19 @@ export default async function OrdemDetalhePage({
                 valor={`${os.abater_visita ? "- " : ""}${formatCurrency(os.valor_visita)}`}
               />
               <div className="flex items-center justify-between border-t border-slate-200 pt-2">
-                <span className="text-base font-semibold">Total</span>
+                <span className="text-base font-semibold">Total (cliente)</span>
                 <span className="text-xl font-bold text-brand-700">
                   {formatCurrency(os.valor_total)}
                 </span>
+              </div>
+              <div className="mt-2 space-y-1 rounded-lg bg-slate-50 p-3 text-xs">
+                <Linha titulo="Custo total (peças/serviços)" valor={formatCurrency(os.custo_total || 0)} />
+                <div className="flex items-center justify-between font-semibold">
+                  <span className="text-slate-700">Lucro líquido</span>
+                  <span className={(os.valor_total - (os.custo_total || 0)) >= 0 ? "text-green-600" : "text-red-600"}>
+                    {formatCurrency(os.valor_total - (os.custo_total || 0))}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -213,6 +223,7 @@ export default async function OrdemDetalhePage({
               msgTemplate={config.msg_whatsapp}
               clienteNomeRaw={cliente?.nome}
               empresaNome={config.nome}
+              portalUrl={portalUrl}
             />
             {portalUrl && (
               <div className="mt-3 border-t border-slate-100 pt-3">
@@ -254,12 +265,20 @@ export default async function OrdemDetalhePage({
               <ul className="space-y-2 text-sm">
                 {lancamentos.map((l) => (
                   <li key={l.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                    <span className={l.status === "pago" ? "text-green-600" : "text-amber-600"}>
-                      {l.status === "pago" ? "Recebido" : "A receber"}
+                    <span className={l.tipo === "despesa" ? "text-red-600" : l.status === "pago" ? "text-green-600" : "text-amber-600"}>
+                      {l.tipo === "despesa" ? "Custo" : l.status === "pago" ? "Recebido" : "A receber"}
                     </span>
-                    <span className="font-medium">{formatCurrency(l.valor)}</span>
+                    <span className="font-medium">
+                      {l.tipo === "despesa" ? "- " : ""}{formatCurrency(l.valor)}
+                    </span>
                   </li>
                 ))}
+                <li className="flex items-center justify-between border-t border-slate-200 px-3 pt-2 font-semibold">
+                  <span>Lucro líquido</span>
+                  <span className="text-green-700">
+                    {formatCurrency(os.valor_total - (os.custo_total || 0))}
+                  </span>
+                </li>
               </ul>
             ) : (
               <form action={financeiroAction} className="space-y-2">
@@ -269,7 +288,8 @@ export default async function OrdemDetalhePage({
                 </select>
                 <input type="date" name="data_vencimento" className="input" />
                 <button className="btn-primary w-full">
-                  Lançar {formatCurrency(os.valor_total)}
+                  Lançar receita {formatCurrency(os.valor_total)}
+                  {os.custo_total > 0 ? ` + custo ${formatCurrency(os.custo_total)}` : ""}
                 </button>
               </form>
             )}
@@ -291,7 +311,10 @@ export default async function OrdemDetalhePage({
 
           <div className="card p-5 text-sm text-slate-600">
             <p><span className="font-medium">Técnico:</span> {os.tecnico || "-"}</p>
-            <p><span className="font-medium">Previsão:</span> {formatDate(os.data_previsao)}</p>
+            <p>
+              <span className="font-medium">Visita:</span> {formatDate(os.data_previsao)}
+              {os.turno ? ` • ${TURNO_LABEL[os.turno] || ""}` : ""}
+            </p>
             <p><span className="font-medium">Garantia:</span> {os.garantia_dias} dias</p>
             <p><span className="font-medium">Pagamento:</span> {os.forma_pagamento || "-"}</p>
           </div>

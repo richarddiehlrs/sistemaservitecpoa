@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { CheckCircle2, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { OsAprovar } from "@/components/os-aprovar";
+import { PrintButton } from "@/components/print-button";
 import {
   formatCurrency,
   formatDate,
@@ -30,6 +31,7 @@ export default async function PortalOsPage({
 
   return (
     <div className="min-h-screen bg-slate-100 py-8">
+      <PrintButton />
       <div className="mx-auto max-w-2xl px-4">
         {/* Cabeçalho da empresa */}
         <div className="card mb-4 flex items-center gap-3 p-5">
@@ -123,7 +125,7 @@ export default async function PortalOsPage({
 
         {/* Aprovação */}
         {podeAprovar ? (
-          <div className="card p-5">
+          <div className="card p-5 no-print">
             <h2 className="mb-3 font-semibold text-slate-900">Aprovar orçamento</h2>
             <OsAprovar token={token} />
           </div>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { onlyDigits } from "@/lib/format";
+import { horarioTurno } from "@/lib/turnos";
 import type { StatusOS } from "@/types/database";
 
 type ItemInput = {
@@ -11,6 +12,7 @@ type ItemInput = {
   descricao: string;
   quantidade: number;
   valor_unitario: number;
+  custo_unitario: number;
 };
 
 function num(v: FormDataEntryValue | null): number {
@@ -36,12 +38,21 @@ function calcTotais(
     (s, i) => s + Number(i.quantidade) * Number(i.valor_unitario),
     0
   );
+  const custoItens = itens.reduce(
+    (s, i) => s + Number(i.quantidade) * Number(i.custo_unitario || 0),
+    0
+  );
   let total = valorItens + acrescimo - desconto - (abaterVisita ? valorVisita : 0);
   if (total < 0) total = 0;
-  return { valorItens, total };
+  return { valorItens, custoItens, total };
 }
 
-// Resolve cliente: usa o existente OU grava um novo a partir dos dados da OS.
+function lerItens(formData: FormData): ItemInput[] {
+  return JSON.parse(String(formData.get("itens_json") || "[]")).filter(
+    (i: ItemInput) => i.descricao && i.descricao.trim()
+  );
+}
+
 async function resolverCliente(
   supabase: Awaited<ReturnType<typeof createClient>>,
   formData: FormData
@@ -55,12 +66,8 @@ async function resolverCliente(
   const dados = {
     nome,
     tipo: "PF" as const,
-    cpf_cnpj: str(formData.get("novo_cpf_cnpj"))
-      ? onlyDigits(String(formData.get("novo_cpf_cnpj")))
-      : null,
-    telefone: str(formData.get("novo_telefone"))
-      ? onlyDigits(String(formData.get("novo_telefone")))
-      : null,
+    cpf_cnpj: str(formData.get("novo_cpf_cnpj")) ? onlyDigits(String(formData.get("novo_cpf_cnpj"))) : null,
+    telefone: str(formData.get("novo_telefone")) ? onlyDigits(String(formData.get("novo_telefone"))) : null,
     email: str(formData.get("novo_email")),
     cep: str(formData.get("novo_cep")) ? onlyDigits(String(formData.get("novo_cep"))) : null,
     logradouro: str(formData.get("novo_logradouro")),
@@ -71,16 +78,11 @@ async function resolverCliente(
     uf: str(formData.get("novo_uf")),
   };
 
-  const { data, error } = await supabase
-    .from("clientes")
-    .insert(dados)
-    .select("id")
-    .single();
+  const { data, error } = await supabase.from("clientes").insert(dados).select("id").single();
   if (error) throw new Error(error.message);
   return data!.id;
 }
 
-// Resolve equipamento: usa existente OU cria a partir dos dados informados.
 async function resolverEquipamento(
   supabase: Awaited<ReturnType<typeof createClient>>,
   formData: FormData,
@@ -109,29 +111,63 @@ async function resolverEquipamento(
   return data!.id;
 }
 
+// Cria automaticamente o agendamento da visita na agenda (turno).
+async function criarAgendamentoVisita(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  opts: {
+    osId: string;
+    clienteId: string;
+    numero: number;
+    data: string;
+    turno: string;
+    tecnico: string | null;
+  }
+) {
+  const { data: cli } = await supabase
+    .from("clientes")
+    .select("nome, logradouro, numero, complemento, bairro, cidade, uf")
+    .eq("id", opts.clienteId)
+    .single();
+
+  const endereco = cli
+    ? [cli.logradouro, cli.numero, cli.complemento, cli.bairro, cli.cidade && `${cli.cidade}/${cli.uf ?? ""}`]
+        .filter(Boolean)
+        .join(", ")
+    : null;
+
+  const { inicio, fim } = horarioTurno(opts.turno);
+
+  await supabase.from("agendamentos").insert({
+    os_id: opts.osId,
+    cliente_id: opts.clienteId,
+    titulo: `Visita OS-${String(opts.numero).padStart(5, "0")}${cli?.nome ? ` - ${cli.nome}` : ""}`,
+    tipo: "visita",
+    turno: (opts.turno as never) || null,
+    data: opts.data,
+    hora_inicio: inicio,
+    hora_fim: fim,
+    tecnico: opts.tecnico,
+    endereco,
+    status: "agendado",
+  });
+}
+
 export async function criarOrdem(formData: FormData) {
   const supabase = await createClient();
 
   const clienteId = await resolverCliente(supabase, formData);
   const equipamentoId = await resolverEquipamento(supabase, formData, clienteId);
 
-  const itens: ItemInput[] = JSON.parse(
-    String(formData.get("itens_json") || "[]")
-  ).filter((i: ItemInput) => i.descricao && i.descricao.trim());
-
+  const itens = lerItens(formData);
   const valorVisita = num(formData.get("valor_visita"));
   const abaterVisita = formData.get("abater_visita") === "on";
   const desconto = num(formData.get("desconto"));
   const acrescimo = num(formData.get("acrescimo"));
-  const { valorItens, total } = calcTotais(
-    itens,
-    valorVisita,
-    abaterVisita,
-    desconto,
-    acrescimo
-  );
+  const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
 
   const status = (str(formData.get("status")) as StatusOS) || "aberta";
+  const turno = str(formData.get("turno"));
+  const dataVisita = str(formData.get("data_previsao"));
 
   const { data: os, error } = await supabase
     .from("ordens_servico")
@@ -146,12 +182,14 @@ export async function criarOrdem(formData: FormData) {
       estado_aparelho: str(formData.get("estado_aparelho")),
       tecnico: str(formData.get("tecnico")),
       prioridade: (str(formData.get("prioridade")) as never) || "normal",
-      data_previsao: str(formData.get("data_previsao")),
+      data_previsao: dataVisita,
+      turno: (turno as never),
       valor_visita: valorVisita,
       abater_visita: abaterVisita,
       desconto,
       acrescimo,
       valor_itens: valorItens,
+      custo_total: custoItens,
       valor_total: total,
       forma_pagamento: str(formData.get("forma_pagamento")),
       garantia_dias: Math.round(num(formData.get("garantia_dias"))) || 90,
@@ -170,6 +208,7 @@ export async function criarOrdem(formData: FormData) {
         descricao: i.descricao,
         quantidade: Number(i.quantidade) || 1,
         valor_unitario: Number(i.valor_unitario) || 0,
+        custo_unitario: Number(i.custo_unitario) || 0,
       }))
     );
     if (itensErr) throw new Error(itensErr.message);
@@ -181,28 +220,32 @@ export async function criarOrdem(formData: FormData) {
     observacao: "Ordem de serviço aberta",
   });
 
+  // Agendamento automático da visita (se marcado e com data)
+  if (formData.get("agendar") === "on" && dataVisita) {
+    await criarAgendamentoVisita(supabase, {
+      osId: os!.id,
+      clienteId,
+      numero: os!.numero,
+      data: dataVisita,
+      turno: turno || "dia",
+      tecnico: str(formData.get("tecnico")),
+    });
+  }
+
   revalidatePath("/ordens");
+  revalidatePath("/agenda");
   redirect(`/ordens/${os!.id}`);
 }
 
 export async function atualizarOrdem(id: string, formData: FormData) {
   const supabase = await createClient();
 
-  const itens: ItemInput[] = JSON.parse(
-    String(formData.get("itens_json") || "[]")
-  ).filter((i: ItemInput) => i.descricao && i.descricao.trim());
-
+  const itens = lerItens(formData);
   const valorVisita = num(formData.get("valor_visita"));
   const abaterVisita = formData.get("abater_visita") === "on";
   const desconto = num(formData.get("desconto"));
   const acrescimo = num(formData.get("acrescimo"));
-  const { valorItens, total } = calcTotais(
-    itens,
-    valorVisita,
-    abaterVisita,
-    desconto,
-    acrescimo
-  );
+  const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
 
   const { error } = await supabase
     .from("ordens_servico")
@@ -215,11 +258,13 @@ export async function atualizarOrdem(id: string, formData: FormData) {
       tecnico: str(formData.get("tecnico")),
       prioridade: (str(formData.get("prioridade")) as never) || "normal",
       data_previsao: str(formData.get("data_previsao")),
+      turno: (str(formData.get("turno")) as never),
       valor_visita: valorVisita,
       abater_visita: abaterVisita,
       desconto,
       acrescimo,
       valor_itens: valorItens,
+      custo_total: custoItens,
       valor_total: total,
       forma_pagamento: str(formData.get("forma_pagamento")),
       garantia_dias: Math.round(num(formData.get("garantia_dias"))) || 90,
@@ -229,7 +274,6 @@ export async function atualizarOrdem(id: string, formData: FormData) {
 
   if (error) throw new Error(error.message);
 
-  // Regrava itens (estratégia simples: apaga e insere novamente)
   await supabase.from("os_itens").delete().eq("os_id", id);
   if (itens.length > 0) {
     await supabase.from("os_itens").insert(
@@ -239,6 +283,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
         descricao: i.descricao,
         quantidade: Number(i.quantidade) || 1,
         valor_unitario: Number(i.valor_unitario) || 0,
+        custo_unitario: Number(i.custo_unitario) || 0,
       }))
     );
   }
@@ -273,13 +318,13 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
   revalidatePath("/ordens");
 }
 
-// Lança a receita da OS no financeiro (contas a receber).
+// Lança a OS no financeiro: receita (valor total) + custo (despesa) = lucro automático.
 export async function lancarFinanceiro(id: string, formData: FormData) {
   const supabase = await createClient();
 
   const { data: os } = await supabase
     .from("ordens_servico")
-    .select("id, numero, cliente_id, valor_total, forma_pagamento")
+    .select("id, numero, cliente_id, valor_total, custo_total, forma_pagamento")
     .eq("id", id)
     .single();
   if (!os) throw new Error("OS não encontrada.");
@@ -287,29 +332,48 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
   const status = String(formData.get("status_pagamento") || "pendente");
   const dataVencimento = str(formData.get("data_vencimento"));
   const formaPagamento = str(formData.get("forma_pagamento")) || os.forma_pagamento;
-
-  const { data: cat } = await supabase
-    .from("categorias_financeiras")
-    .select("id")
-    .eq("nome", "Serviços de assistência técnica")
-    .limit(1)
-    .single();
-
+  const numeroFmt = `OS-${String(os.numero).padStart(5, "0")}`;
   const hoje = new Date().toISOString().slice(0, 10);
 
-  const { error } = await supabase.from("lancamentos_financeiros").insert({
-    tipo: "receita",
-    descricao: `Receita OS-${String(os.numero).padStart(5, "0")}`,
-    categoria_id: cat?.id ?? null,
-    os_id: os.id,
-    cliente_id: os.cliente_id,
-    valor: os.valor_total,
-    data_competencia: hoje,
-    data_vencimento: dataVencimento || hoje,
-    data_pagamento: status === "pago" ? hoje : null,
-    status,
-    forma_pagamento: formaPagamento,
-  });
+  const [{ data: catReceita }, { data: catCusto }] = await Promise.all([
+    supabase.from("categorias_financeiras").select("id").eq("nome", "Serviços de assistência técnica").limit(1).single(),
+    supabase.from("categorias_financeiras").select("id").eq("nome", "Compra de peças").limit(1).single(),
+  ]);
+
+  const lancamentos: Record<string, unknown>[] = [
+    {
+      tipo: "receita",
+      descricao: `Receita ${numeroFmt}`,
+      categoria_id: catReceita?.id ?? null,
+      os_id: os.id,
+      cliente_id: os.cliente_id,
+      valor: os.valor_total,
+      data_competencia: hoje,
+      data_vencimento: dataVencimento || hoje,
+      data_pagamento: status === "pago" ? hoje : null,
+      status,
+      forma_pagamento: formaPagamento,
+    },
+  ];
+
+  // Custo da OS -> despesa (gera o lucro líquido automaticamente no financeiro/DRE)
+  if (Number(os.custo_total) > 0) {
+    lancamentos.push({
+      tipo: "despesa",
+      descricao: `Custo ${numeroFmt}`,
+      categoria_id: catCusto?.id ?? null,
+      os_id: os.id,
+      cliente_id: os.cliente_id,
+      valor: os.custo_total,
+      data_competencia: hoje,
+      data_vencimento: hoje,
+      data_pagamento: status === "pago" ? hoje : null,
+      status,
+      forma_pagamento: formaPagamento,
+    });
+  }
+
+  const { error } = await supabase.from("lancamentos_financeiros").insert(lancamentos);
   if (error) throw new Error(error.message);
 
   revalidatePath(`/ordens/${id}`);

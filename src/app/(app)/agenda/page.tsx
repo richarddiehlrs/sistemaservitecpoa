@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Check, X, MapPin, Clock, Phone } from "lucide-react";
+import type { ReactNode } from "react";
+import { ChevronLeft, ChevronRight, Check, X, MapPin, Clock, Phone, Sun, Sunset } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui";
 import { AgendaForm } from "@/components/agenda-form";
@@ -9,6 +10,7 @@ import {
   formatHora,
   formatTelefone,
 } from "@/lib/format";
+import { TURNOS } from "@/lib/turnos";
 import { criarAgendamento, alterarStatusAgendamento, excluirAgendamento } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +20,7 @@ function ymd(d: Date) {
 }
 function inicioSemana(base: Date) {
   const d = new Date(base);
-  const dia = (d.getDay() + 6) % 7; // segunda = 0
+  const dia = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - dia);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -27,6 +29,12 @@ function addDias(d: Date, n: number) {
   const x = new Date(d);
   x.setDate(x.getDate() + n);
   return x;
+}
+function turnoDe(a: any): "manha" | "tarde" {
+  if (a.turno === "tarde") return "tarde";
+  if (a.turno === "manha" || a.turno === "dia") return "manha";
+  if (a.hora_inicio && a.hora_inicio >= "13:00") return "tarde";
+  return "manha";
 }
 
 const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
@@ -52,9 +60,7 @@ export default async function AgendaPage({
 
   const semanaAnterior = ymd(addDias(segunda, -7));
   const proximaSemana = ymd(addDias(segunda, 7));
-
-  const porDia = (dataStr: string) =>
-    (agendamentos || []).filter((a) => a.data === dataStr);
+  const todos = agendamentos || [];
 
   const periodoLabel = `${segunda.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} a ${domingo.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}`;
 
@@ -62,7 +68,7 @@ export default async function AgendaPage({
     <div>
       <PageHeader
         title="Agenda de atendimentos"
-        subtitle={`Semana de ${periodoLabel}`}
+        subtitle={`Semana de ${periodoLabel} • Manhã ${TURNOS.manha.inicio}–${TURNOS.manha.fim} · Tarde ${TURNOS.tarde.inicio}–${TURNOS.tarde.fim}`}
         action={<AgendaForm action={criarAgendamento} dataPadrao={hojeStr} />}
       />
 
@@ -80,77 +86,95 @@ export default async function AgendaPage({
         {DIAS.map((nomeDia, i) => {
           const dia = addDias(segunda, i);
           const dataStr = ymd(dia);
-          const itens = porDia(dataStr);
+          const doDia = todos.filter((a) => a.data === dataStr);
+          const manha = doDia.filter((a) => turnoDe(a) === "manha");
+          const tarde = doDia.filter((a) => turnoDe(a) === "tarde");
           const ehHoje = dataStr === hojeStr;
+
           return (
-            <div
-              key={i}
-              className={`card flex flex-col ${ehHoje ? "ring-2 ring-brand-400" : ""}`}
-            >
-              <div className={`rounded-t-xl px-3 py-2 ${ehHoje ? "bg-brand-600 text-white" : "bg-slate-50 text-slate-700"}`}>
+            <div key={i} className={`card flex flex-col overflow-hidden ${ehHoje ? "ring-2 ring-brand-400" : ""}`}>
+              <div className={`px-3 py-2 ${ehHoje ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-700"}`}>
                 <p className="text-xs font-semibold uppercase">{nomeDia}</p>
                 <p className="text-sm">{dia.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>
               </div>
-              <div className="flex-1 space-y-2 p-2">
-                {itens.length === 0 && (
-                  <p className="px-1 py-4 text-center text-xs text-slate-300">—</p>
-                )}
-                {itens.map((a) => {
-                  // @ts-expect-error relação
-                  const cli = a.clientes;
-                  const cancelado = a.status === "cancelado";
-                  const realizado = a.status === "realizado";
-                  return (
-                    <div
-                      key={a.id}
-                      className={`rounded-lg border-l-4 p-2 text-xs ${TIPO_AGENDAMENTO_COLOR[a.tipo] || ""} ${cancelado ? "opacity-50 line-through" : ""}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold">{TIPO_AGENDAMENTO_LABEL[a.tipo]}</span>
-                        {(a.hora_inicio || a.hora_fim) && (
-                          <span className="flex items-center gap-0.5 text-[10px]">
-                            <Clock className="h-3 w-3" />
-                            {formatHora(a.hora_inicio)}{a.hora_fim ? `-${formatHora(a.hora_fim)}` : ""}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 font-medium text-slate-800">{a.titulo}</p>
-                      {cli?.nome && <p className="text-slate-600">{cli.nome}</p>}
-                      {cli?.telefone && (
-                        <p className="flex items-center gap-0.5 text-slate-500">
-                          <Phone className="h-3 w-3" /> {formatTelefone(cli.telefone)}
-                        </p>
-                      )}
-                      {a.endereco && (
-                        <p className="flex items-start gap-0.5 text-slate-500">
-                          <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {a.endereco}
-                        </p>
-                      )}
-                      {a.tecnico && <p className="text-slate-400">Téc.: {a.tecnico}</p>}
-                      {realizado && <p className="mt-1 font-semibold text-green-700">✓ Realizado</p>}
 
-                      {!cancelado && !realizado && (
-                        <div className="mt-1 flex gap-1">
-                          <form action={alterarStatusAgendamento.bind(null, a.id, "realizado")}>
-                            <button className="rounded bg-white/70 p-1 text-green-600 hover:bg-white" title="Marcar realizado">
-                              <Check className="h-3 w-3" />
-                            </button>
-                          </form>
-                          <form action={excluirAgendamento.bind(null, a.id)}>
-                            <button className="rounded bg-white/70 p-1 text-red-500 hover:bg-white" title="Excluir">
-                              <X className="h-3 w-3" />
-                            </button>
-                          </form>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <TurnoBloco titulo="Manhã" icone={<Sun className="h-3.5 w-3.5" />} itens={manha} />
+              <div className="border-t border-slate-100" />
+              <TurnoBloco titulo="Tarde" icone={<Sunset className="h-3.5 w-3.5" />} itens={tarde} />
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function TurnoBloco({
+  titulo,
+  icone,
+  itens,
+}: {
+  titulo: string;
+  icone: ReactNode;
+  itens: any[];
+}) {
+  return (
+    <div className="flex-1 p-2">
+      <p className="mb-1 flex items-center gap-1 px-1 text-[11px] font-semibold uppercase text-slate-400">
+        {icone} {titulo} {itens.length > 0 && <span className="text-slate-300">({itens.length})</span>}
+      </p>
+      <div className="space-y-2">
+        {itens.length === 0 && <p className="px-1 py-1 text-center text-[11px] text-slate-300">—</p>}
+        {itens.map((a) => <CardAgendamento key={a.id} a={a} />)}
+      </div>
+    </div>
+  );
+}
+
+function CardAgendamento({ a }: { a: any }) {
+  const cli = a.clientes;
+  const cancelado = a.status === "cancelado";
+  const realizado = a.status === "realizado";
+  return (
+    <div className={`rounded-lg border-l-4 p-2 text-xs ${TIPO_AGENDAMENTO_COLOR[a.tipo] || ""} ${cancelado ? "opacity-50 line-through" : ""}`}>
+      <div className="flex items-center justify-between">
+        <span className="font-semibold">{TIPO_AGENDAMENTO_LABEL[a.tipo]}</span>
+        {(a.hora_inicio || a.hora_fim) && (
+          <span className="flex items-center gap-0.5 text-[10px]">
+            <Clock className="h-3 w-3" />
+            {formatHora(a.hora_inicio)}{a.hora_fim ? `-${formatHora(a.hora_fim)}` : ""}
+          </span>
+        )}
+      </div>
+      <p className="mt-0.5 font-medium text-slate-800">{a.titulo}</p>
+      {cli?.nome && <p className="text-slate-600">{cli.nome}</p>}
+      {cli?.telefone && (
+        <p className="flex items-center gap-0.5 text-slate-500">
+          <Phone className="h-3 w-3" /> {formatTelefone(cli.telefone)}
+        </p>
+      )}
+      {a.endereco && (
+        <p className="flex items-start gap-0.5 text-slate-500">
+          <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {a.endereco}
+        </p>
+      )}
+      {a.tecnico && <p className="text-slate-400">Téc.: {a.tecnico}</p>}
+      {realizado && <p className="mt-1 font-semibold text-green-700">✓ Realizado</p>}
+
+      {!cancelado && !realizado && (
+        <div className="mt-1 flex gap-1">
+          <form action={alterarStatusAgendamento.bind(null, a.id, "realizado")}>
+            <button className="rounded bg-white/70 p-1 text-green-600 hover:bg-white" title="Marcar realizado">
+              <Check className="h-3 w-3" />
+            </button>
+          </form>
+          <form action={excluirAgendamento.bind(null, a.id)}>
+            <button className="rounded bg-white/70 p-1 text-red-500 hover:bg-white" title="Excluir">
+              <X className="h-3 w-3" />
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

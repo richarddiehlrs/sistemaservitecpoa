@@ -78,6 +78,8 @@ export type OrdemServico = {
   forma_pagamento: string | null;
   garantia_dias: number;
   observacoes: string | null;
+  turno: "manha" | "tarde" | "dia" | null;
+  custo_total: number;
   aprovacao_token: string;
   aprovado: boolean;
   data_aprovacao: string | null;
@@ -140,6 +142,7 @@ export type OsItem = {
   descricao: string;
   quantidade: number;
   valor_unitario: number;
+  custo_unitario: number;
   subtotal: number;
   created_at: string;
 };
@@ -166,6 +169,7 @@ export type Agendamento = {
   cliente_id: string | null;
   titulo: string;
   tipo: TipoAgendamento;
+  turno: "manha" | "tarde" | "dia" | null;
   data: string;
   hora_inicio: string | null;
   hora_fim: string | null;

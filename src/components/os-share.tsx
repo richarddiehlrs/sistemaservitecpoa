@@ -23,6 +23,7 @@ type Props = {
   msgTemplate?: string | null;
   clienteNomeRaw?: string | null;
   empresaNome?: string | null;
+  portalUrl?: string | null;
 };
 
 function mensagemCompleta(p: Props): string {
@@ -38,7 +39,9 @@ function mensagemCompleta(p: Props): string {
     `Valor total: ${formatCurrency(p.valorTotal)}`,
     `Garantia: ${p.garantiaDias} dias`,
     "",
-    "Qualquer dúvida estamos à disposição.",
+    p.portalUrl ? `Acesse e baixe sua OS em PDF:` : "Qualquer dúvida estamos à disposição.",
+    p.portalUrl || "",
+    "",
     EMPRESA.telefone ? `Contato: ${EMPRESA.telefone}` : "",
   ].filter(Boolean);
   return linhas.join("\n");
@@ -76,9 +79,9 @@ export function OsShare(props: Props) {
           target="_blank"
           rel="noopener noreferrer"
           className={`btn inline-flex bg-green-600 text-white hover:bg-green-700 ${semTel ? "pointer-events-none opacity-50" : ""}`}
-          title={semTel ? "Cliente sem telefone válido" : "Enviar resumo da OS"}
+          title={semTel ? "Cliente sem telefone válido" : "Enviar OS (com link do PDF) ao cliente"}
         >
-          <MessageCircle className="h-4 w-4" /> WhatsApp
+          <MessageCircle className="h-4 w-4" /> Enviar OS (PDF)
         </a>
         <a
           href={mailUrl}

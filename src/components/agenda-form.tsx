@@ -146,21 +146,32 @@ export function AgendaForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Data *</label>
               <input type="date" name="data" required className="input"
                 defaultValue={dataPadrao || new Date().toISOString().slice(0, 10)} />
             </div>
             <div>
-              <label className="label">Início</label>
+              <label className="label">Turno</label>
+              <select name="turno" className="input" defaultValue="manha">
+                <option value="manha">Manhã (09:00–12:00)</option>
+                <option value="tarde">Tarde (13:00–17:30)</option>
+                <option value="dia">Dia inteiro</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Início (opcional)</label>
               <input type="time" name="hora_inicio" className="input" />
             </div>
             <div>
-              <label className="label">Fim</label>
+              <label className="label">Fim (opcional)</label>
               <input type="time" name="hora_fim" className="input" />
             </div>
           </div>
+          <p className="text-xs text-slate-400">Se deixar os horários em branco, usamos o horário padrão do turno.</p>
 
           <div>
             <label className="label">Endereço do atendimento</label>
