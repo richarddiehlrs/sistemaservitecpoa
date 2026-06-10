@@ -135,6 +135,20 @@ export function maskCep(value: string): string {
   return v.replace(/(\d{5})(\d{1,3})$/, "$1-$2");
 }
 
+export const PRIORIDADE_LABEL: Record<string, string> = {
+  urgente: "Urgente",
+  alta: "Alta",
+  normal: "Normal",
+  baixa: "Baixa",
+};
+
+export const PRIORIDADE_COLOR: Record<string, string> = {
+  urgente: "bg-red-100 text-red-700",
+  alta: "bg-orange-100 text-orange-700",
+  normal: "bg-slate-100 text-slate-600",
+  baixa: "bg-slate-50 text-slate-400",
+};
+
 export const STATUS_OS_LABEL: Record<string, string> = {
   aberta: "Aberta",
   em_analise: "Em análise",

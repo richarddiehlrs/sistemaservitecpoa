@@ -144,6 +144,7 @@ async function criarAgendamentoVisita(
     data: string;
     turno: string;
     tecnico: string | null;
+    tecnico_id: string | null;
   }
 ) {
   const { data: cli } = await supabase
@@ -170,6 +171,7 @@ async function criarAgendamentoVisita(
     hora_inicio: inicio,
     hora_fim: fim,
     tecnico: opts.tecnico,
+    tecnico_id: opts.tecnico_id,
     endereco,
     status: "agendado",
   });
@@ -255,6 +257,7 @@ export async function criarOrdem(formData: FormData) {
       data: dataVisita,
       turno: turno || "dia",
       tecnico,
+      tecnico_id,
     });
   }
 
@@ -302,6 +305,12 @@ export async function atualizarOrdem(id: string, formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+
+  await supabase
+    .from("agendamentos")
+    .update({ tecnico, tecnico_id })
+    .eq("os_id", id)
+    .in("status", ["agendado", "confirmado"]);
 
   await supabase.from("os_itens").delete().eq("os_id", id);
   if (itens.length > 0) {

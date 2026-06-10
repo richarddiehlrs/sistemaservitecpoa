@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { buscarCep } from "@/lib/cep";
 import { formatCurrency, formatTelefone } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
+import { TecnicoCargaTrabalho } from "@/components/tecnico-carga-trabalho";
 import type { TecnicoOpcao } from "@/lib/tecnicos";
 import type { Equipamento, OrdemServico, OsItem, ServicoCatalogo } from "@/types/database";
 
@@ -55,6 +56,19 @@ export function OrdemForm({
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [pending, startTransition] = useTransition();
+
+  const tecnicoIdInicial = useMemo(() => {
+    if (ordem?.tecnico_id) return ordem.tecnico_id;
+    if (ordem?.tecnico) {
+      const match = tecnicos.find(
+        (t) => t.nome.toLowerCase() === ordem.tecnico!.toLowerCase()
+      );
+      return match?.id || "";
+    }
+    return tecnicoIdPadrao || "";
+  }, [ordem, tecnicos, tecnicoIdPadrao]);
+
+  const [tecnicoSelecionado, setTecnicoSelecionado] = useState(tecnicoIdInicial);
 
   // ---- Cliente ----
   const [modoCliente, setModoCliente] = useState<"existente" | "novo">(
@@ -568,13 +582,14 @@ export function OrdemForm({
                 <input type="hidden" name="tecnico" value={tecnicoPadrao || ordem?.tecnico || ""} />
               </>
             ) : (
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-4">
                 <label className="label">Técnico responsável *</label>
                 <select
                   name="tecnico_id"
                   className="input"
                   required
-                  defaultValue={ordem?.tecnico_id || ""}
+                  value={tecnicoSelecionado}
+                  onChange={(e) => setTecnicoSelecionado(e.target.value)}
                 >
                   <option value="">Selecione o técnico cadastrado...</option>
                   {tecnicos.map((t) => (
@@ -588,6 +603,7 @@ export function OrdemForm({
                     Nenhum técnico cadastrado. Crie em Usuários com papel Técnico.
                   </p>
                 )}
+                <TecnicoCargaTrabalho tecnicoId={tecnicoSelecionado} />
               </div>
             )}
             <div>

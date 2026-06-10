@@ -7,8 +7,10 @@ import {
   formatCpfCnpj,
   formatCep,
   formatDate,
+  formatDateTime,
   formatNumeroOS,
   formatTelefone,
+  STATUS_OS_LABEL,
 } from "@/lib/format";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 
@@ -30,11 +32,10 @@ export default async function ImprimirOsPage({
 
   if (!os) notFound();
 
-  const { data: itens } = await supabase
-    .from("os_itens")
-    .select("*")
-    .eq("os_id", id)
-    .order("created_at");
+  const [{ data: itens }, { data: anexos }] = await Promise.all([
+    supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),
+    supabase.from("os_anexos").select("*").eq("os_id", id).eq("momento", "cliente_ausente").order("created_at"),
+  ]);
 
   const config = await getConfig();
 
@@ -46,7 +47,7 @@ export default async function ImprimirOsPage({
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
   const publicUrl = siteUrl ? `${siteUrl}/os/${os.aprovacao_token}` : "";
 
-  const dados = { os, cliente, equip, itens: itens || [], config, publicUrl };
+  const dados = { os, cliente, equip, itens: itens || [], anexosAusente: anexos || [], config, publicUrl };
 
   return (
     <>
@@ -65,6 +66,7 @@ function ViaOS({
   cliente,
   equip,
   itens,
+  anexosAusente,
   config,
   publicUrl,
   via,
@@ -73,6 +75,7 @@ function ViaOS({
   cliente: any;
   equip: any;
   itens: any[];
+  anexosAusente: { url: string }[];
   config: any;
   publicUrl: string;
   via: string;
@@ -108,6 +111,8 @@ function ViaOS({
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>{formatNumeroOS(os.numero)}</div>
           <div style={{ fontSize: 9 }}>Abertura: {formatDate(os.data_abertura)}</div>
+          {os.tecnico && <div style={{ fontSize: 9 }}>Técnico: {os.tecnico}</div>}
+          <div style={{ fontSize: 9, color: "#64748b" }}>{STATUS_OS_LABEL[os.status] || os.status}</div>
           <div style={{ fontSize: 9, fontWeight: 700, color: "#1d4ed8" }}>{via}</div>
         </div>
       </div>
@@ -190,6 +195,31 @@ function ViaOS({
         </table>
       </div>
 
+      {/* Cliente ausente */}
+      {os.status === "cliente_ausente" && (
+        <div style={{ marginTop: 6, border: "1px solid #fecdd3", borderRadius: 4, padding: 6, background: "#fff1f2" }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: "#be123c", marginBottom: 4 }}>
+            CLIENTE AUSENTE — visita não realizada
+          </div>
+          {os.cliente_ausente_registrado_at && (
+            <div style={{ fontSize: 9, color: "#64748b" }}>
+              Registrado em {formatDateTime(os.cliente_ausente_registrado_at)}
+            </div>
+          )}
+          {os.observacao_cliente_ausente && (
+            <div style={{ fontSize: 9, marginTop: 2 }}>{os.observacao_cliente_ausente}</div>
+          )}
+          {anexosAusente.length > 0 && (
+            <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+              {anexosAusente.map((a, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={i} src={a.url} alt="Comprovante" style={{ height: 56, width: 56, objectFit: "cover", borderRadius: 4, border: "1px solid #fecdd3" }} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Termo de garantia + QR */}
       <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "flex-start" }}>
         <div style={{ flex: 1, fontSize: 8, color: "#475569" }}>
@@ -229,7 +259,17 @@ function ViaOS({
         ) : (
           <Assinatura label="Assinatura do cliente" />
         )}
-        <Assinatura label="Responsável técnico" />
+        {os.assinatura_tecnico ? (
+          <div style={{ flex: 1, textAlign: "center" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={os.assinatura_tecnico} alt="assinatura técnico" style={{ height: 40, objectFit: "contain" }} />
+            <div style={{ borderTop: "1px solid #0f172a", paddingTop: 2, fontSize: 9 }}>
+              Responsável técnico{os.tecnico ? ` — ${os.tecnico}` : ""}
+            </div>
+          </div>
+        ) : (
+          <Assinatura label={`Responsável técnico${os.tecnico ? ` — ${os.tecnico}` : ""}`} />
+        )}
       </div>
     </div>
   );

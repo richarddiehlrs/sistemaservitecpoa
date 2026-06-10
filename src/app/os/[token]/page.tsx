@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
-import { CheckCircle2, Clock } from "lucide-react";
+import { CheckCircle2, Clock, UserX } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { OsAprovar } from "@/components/os-aprovar";
 import { PrintButton } from "@/components/print-button";
 import {
   formatCurrency,
   formatDate,
+  formatDateTime,
   formatNumeroOS,
   STATUS_OS_LABEL,
 } from "@/lib/format";
@@ -28,7 +29,9 @@ export default async function PortalOsPage({
 
   const empresa = os.empresa || {};
   const itens: any[] = os.itens || [];
-  const podeAprovar = !os.aprovado && os.status !== "cancelada";
+  const anexosAusente: { url: string }[] = os.anexos_ausente || [];
+  const ehClienteAusente = os.status === "cliente_ausente";
+  const podeAprovar = !os.aprovado && os.status !== "cancelada" && !ehClienteAusente;
   const valorTotal = calcValorTotalCliente(
     Number(os.valor_itens),
     Number(os.valor_visita),
@@ -85,12 +88,52 @@ export default async function PortalOsPage({
             <Info titulo="Equipamento" valor={os.equipamento} />
             <Info titulo="Abertura" valor={formatDate(os.data_abertura)} />
             <Info titulo="Garantia" valor={`${os.garantia_dias} dias`} />
+            {os.tecnico && <Info titulo="Técnico" valor={os.tecnico} />}
           </dl>
 
           {os.defeito && <Bloco titulo="Defeito relatado" valor={os.defeito} />}
           {os.diagnostico && <Bloco titulo="Diagnóstico" valor={os.diagnostico} />}
           {os.servico && <Bloco titulo="Serviço executado" valor={os.servico} />}
         </div>
+
+        {/* Cliente ausente */}
+        {ehClienteAusente && (
+          <div className="card mb-4 border-rose-200 bg-rose-50/60 p-5">
+            <div className="mb-3 flex items-center gap-2 text-rose-800">
+              <UserX className="h-5 w-5" />
+              <h2 className="font-semibold">Cliente ausente na visita</h2>
+            </div>
+            <p className="text-sm text-slate-600">
+              O técnico registrou que não foi possível realizar o atendimento por ausência do cliente.
+            </p>
+            {os.cliente_ausente_registrado_at && (
+              <p className="mt-2 text-xs text-slate-500">
+                Registrado em {formatDateTime(os.cliente_ausente_registrado_at)}
+              </p>
+            )}
+            {os.observacao_cliente_ausente && (
+              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{os.observacao_cliente_ausente}</p>
+            )}
+            {os.assinatura_tecnico && (
+              <div className="mt-3 rounded-lg border bg-white p-3">
+                <p className="mb-1 text-xs text-slate-500">Assinatura do técnico</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={os.assinatura_tecnico} alt="Assinatura técnico" className="h-16 object-contain" />
+              </div>
+            )}
+            {anexosAusente.length > 0 && (
+              <div className="mt-3">
+                <p className="mb-2 text-xs font-semibold text-slate-500">Foto comprobatória</p>
+                <div className="flex flex-wrap gap-2">
+                  {anexosAusente.map((a, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={i} src={a.url} alt="Comprovante" className="h-24 w-24 rounded-lg border object-cover" />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Itens e total */}
         <div className="card mb-4 overflow-hidden">

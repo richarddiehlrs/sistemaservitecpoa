@@ -73,7 +73,9 @@ export default async function AgendaPage({
 
   if (profile.papel === "tecnico") {
     const nome = nomeTecnico(profile);
-    queryAgenda = queryAgenda.or(`tecnico.ilike.%${nome}%,tecnico.is.null`);
+    queryAgenda = queryAgenda.or(
+      `tecnico_id.eq.${profile.id},tecnico.ilike.%${nome}%,tecnico.is.null`
+    );
   }
 
   const limiteGps = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();

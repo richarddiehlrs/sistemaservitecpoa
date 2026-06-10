@@ -89,12 +89,19 @@ async function validarAgendamentoTecnico(
   id: string,
   profile: Awaited<ReturnType<typeof requirePermissao>>
 ) {
-  const { data: ag } = await supabase.from("agendamentos").select("tecnico").eq("id", id).single();
+  const { data: ag } = await supabase
+    .from("agendamentos")
+    .select("tecnico, tecnico_id")
+    .eq("id", id)
+    .single();
   if (!ag) throw new Error("Agendamento não encontrado.");
   if (profile.papel === "tecnico") {
+    if (ag.tecnico_id && ag.tecnico_id !== profile.id) {
+      throw new Error("Este atendimento não está atribuído a você.");
+    }
     const nome = nomeTecnico(profile);
     const atribuido = ag.tecnico?.trim();
-    if (atribuido && !atribuido.toLowerCase().includes(nome.toLowerCase())) {
+    if (!ag.tecnico_id && atribuido && !atribuido.toLowerCase().includes(nome.toLowerCase())) {
       throw new Error("Este atendimento não está atribuído a você.");
     }
   }
@@ -111,13 +118,13 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
 
   const { data: ag } = await supabase
     .from("agendamentos")
-    .select("tecnico, os_id")
+    .select("tecnico, tecnico_id, os_id")
     .eq("id", id)
     .single();
   if (!ag) throw new Error("Agendamento não encontrado.");
 
   const nome = nomeTecnico(profile);
-  const assumir = !ag.tecnico?.trim();
+  const assumir = !ag.tecnico_id && !ag.tecnico?.trim();
   const updates: Record<string, string | number | null> = {
     checkin_at: new Date().toISOString(),
     checkin_por: profile.id,
@@ -125,16 +132,21 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
     checkin_lat: lat,
     checkin_lng: lng,
   };
-  if (assumir) updates.tecnico = nome;
+  if (assumir || profile.papel === "tecnico") {
+    updates.tecnico = nome;
+    updates.tecnico_id = profile.id;
+  }
 
   const { error } = await supabase.from("agendamentos").update(updates).eq("id", id);
   if (error) throw new Error(error.message);
 
-  if (assumir && ag.os_id) {
-    await supabase
-      .from("ordens_servico")
-      .update({ tecnico: nome, status: "em_execucao" })
-      .eq("id", ag.os_id);
+  if (ag.os_id) {
+    const osUpdate: Record<string, string> = { status: "em_execucao" };
+    if (assumir || profile.papel === "tecnico") {
+      osUpdate.tecnico = nome;
+      osUpdate.tecnico_id = profile.id;
+    }
+    await supabase.from("ordens_servico").update(osUpdate).eq("id", ag.os_id);
   }
 
   if (lat != null && lng != null) {

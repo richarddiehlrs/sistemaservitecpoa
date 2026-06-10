@@ -65,7 +65,13 @@ export async function CampoCentral() {
           {listaTecnicos.map((t) => {
             const pos = posMap.get(t.id);
             const atendimentos = (agendaHoje || []).filter(
-              (a) => a.tecnico?.toLowerCase().includes((t.nome || "").toLowerCase()) || a.checkin_por === t.id
+              (a) =>
+                a.tecnico_id === t.id ||
+                a.checkin_por === t.id ||
+                (a.tecnico?.toLowerCase().includes((t.nome || "").toLowerCase()) ?? false)
+            );
+            const osDoTecnico = (osCampo || []).filter(
+              (o) => o.tecnico_id === t.id || o.tecnico?.toLowerCase().includes((t.nome || "").toLowerCase())
             );
             const emServico = atendimentos.some((a) => a.status === "em_atendimento");
             return (
@@ -76,6 +82,7 @@ export async function CampoCentral() {
                     {t.email && <p className="text-xs text-slate-400">{t.email}</p>}
                     <p className="mt-1 text-xs text-slate-500">
                       {atendimentos.length} atendimento(s) hoje
+                      {osDoTecnico.length > 0 && ` • ${osDoTecnico.length} OS em campo`}
                       {emServico && <span className="ml-1 font-semibold text-green-600">• Em serviço</span>}
                     </p>
                   </div>

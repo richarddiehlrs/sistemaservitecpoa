@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { MapPin, Wrench, Plus, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { OsPendentesLista } from "@/components/os-pendentes-lista";
 import { PageHeader, StatCard } from "@/components/ui";
+import { STATUS_OS_ABERTAS, ordenarOsPendentes } from "@/lib/os-status";
 import { DespesaCampoForm } from "@/components/despesa-campo-form";
 import { CheckinButtons } from "@/components/checkin-buttons";
 import { CompartilharGps } from "@/components/compartilhar-gps";
@@ -33,12 +35,14 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       .limit(10),
     supabase
       .from("ordens_servico")
-      .select("id, numero, tecnico, clientes(nome)")
+      .select("id, numero, status, prioridade, data_previsao, data_abertura, defeito_relatado, turno, clientes(nome, bairro, cidade)")
       .or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${tecnico}%`)
-      .in("status", ["aberta", "em_analise", "em_roteiro", "em_execucao", "aguardando_aprovacao", "aprovada", "cliente_ausente"])
+      .in("status", [...STATUS_OS_ABERTAS])
       .order("data_abertura", { ascending: false })
-      .limit(20),
+      .limit(30),
   ]);
+
+  const osPendentes = ordenarOsPendentes(osAbertas || []);
 
   const osOpcoes = (osAbertas || []).map((o) => ({
     id: o.id,
@@ -78,6 +82,17 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
         <StatCard title="Em atendimento" value={String(emAtendimento)} tone="amber" />
         <StatCard title="Despesas do mês" value={formatCurrency(totalDespesasMes)} tone="red" />
         <StatCard title="OS em aberto" value={String(osAbertas?.length || 0)} icon={<Wrench className="h-5 w-5" />} />
+      </div>
+
+      <div className="card mb-6 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-semibold text-slate-900">Minhas ordens de serviço</h2>
+          <Link href="/ordens" className="text-sm text-brand-600 hover:underline">Ver todas</Link>
+        </div>
+        <OsPendentesLista
+          lista={osPendentes as never[]}
+          titulo={`${osPendentes.length} ordem(ns) atribuída(s) a você — prioridade e visita`}
+        />
       </div>
 
       <div className="card mb-6 p-4">

@@ -181,6 +181,7 @@ export type Agendamento = {
   hora_inicio: string | null;
   hora_fim: string | null;
   tecnico: string | null;
+  tecnico_id: string | null;
   endereco: string | null;
   status: "agendado" | "confirmado" | "em_atendimento" | "realizado" | "cancelado";
   observacoes: string | null;

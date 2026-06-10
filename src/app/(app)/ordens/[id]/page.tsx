@@ -315,10 +315,28 @@ export default async function OrdemDetalhePage({
                 <p className="mb-2 text-sm text-slate-600">{os.observacao_cliente_ausente}</p>
               )}
               {os.assinatura_tecnico && (
-                <div className="rounded-lg border bg-white p-2">
+                <div className="mb-3 rounded-lg border bg-white p-2">
                   <p className="mb-1 text-xs text-slate-500">Assinatura do técnico</p>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={os.assinatura_tecnico} alt="Assinatura técnico" className="h-16 object-contain" />
+                </div>
+              )}
+              {(anexos || []).filter((a) => a.momento === "cliente_ausente").length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-slate-500">Foto comprobatória</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(anexos || [])
+                      .filter((a) => a.momento === "cliente_ausente")
+                      .map((a) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={a.id}
+                          src={a.url}
+                          alt="Cliente ausente"
+                          className="h-24 w-24 rounded-lg border object-cover"
+                        />
+                      ))}
+                  </div>
                 </div>
               )}
             </div>

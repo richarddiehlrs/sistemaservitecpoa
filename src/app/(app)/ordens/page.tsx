@@ -26,7 +26,7 @@ export default async function OrdensPage({
 
   let query = supabase
     .from("ordens_servico")
-    .select("id, numero, status, valor_total, data_abertura, defeito_relatado, clientes(nome)", { count: "exact" })
+    .select("id, numero, status, valor_total, data_abertura, defeito_relatado, tecnico, clientes(nome)", { count: "exact" })
     .order("data_abertura", { ascending: false });
 
   if (status) query = query.eq("status", status);
@@ -133,6 +133,7 @@ export default async function OrdensPage({
                   <th>OS</th>
                   <th>Cliente</th>
                   <th>Defeito</th>
+                  {profile.papel !== "tecnico" && <th>Técnico</th>}
                   <th>Abertura</th>
                   <th>Status</th>
                   <th className="text-right">Total</th>
@@ -150,6 +151,9 @@ export default async function OrdensPage({
                     {/* @ts-expect-error relação embutida */}
                     <td>{os.clientes?.nome ?? "-"}</td>
                     <td className="max-w-xs truncate">{os.defeito_relatado || "-"}</td>
+                    {profile.papel !== "tecnico" && (
+                      <td className="text-sm text-slate-600">{os.tecnico || "—"}</td>
+                    )}
                     <td>{formatDate(os.data_abertura)}</td>
                     <td><StatusBadge status={os.status} /></td>
                     <td className="text-right font-medium">{formatCurrency(os.valor_total)}</td>
