@@ -10,6 +10,9 @@ import {
   BarChart3,
   CalendarDays,
   PieChart,
+  BookText,
+  Settings,
+  UserCog,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,10 +25,20 @@ const NAV = [
   { href: "/financeiro", label: "Financeiro", icon: DollarSign },
   { href: "/relatorios", label: "Relatórios", icon: PieChart },
   { href: "/dre", label: "DRE", icon: BarChart3 },
+  { href: "/catalogo", label: "Catálogo", icon: BookText },
+  { href: "/usuarios", label: "Usuários", icon: UserCog, adminOnly: true },
+  { href: "/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
 ];
 
-export function Sidebar({ userEmail }: { userEmail?: string | null }) {
+export function Sidebar({
+  userEmail,
+  role = "admin",
+}: {
+  userEmail?: string | null;
+  role?: string;
+}) {
   const pathname = usePathname();
+  const nav = NAV.filter((item) => !item.adminOnly || role === "admin");
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white">
@@ -42,7 +55,7 @@ export function Sidebar({ userEmail }: { userEmail?: string | null }) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;

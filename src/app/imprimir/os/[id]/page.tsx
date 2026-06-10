@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PrintButton } from "@/components/print-button";
-import { EMPRESA } from "@/lib/utils";
+import { getConfig } from "@/lib/config";
 import {
   formatCurrency,
   formatCpfCnpj,
@@ -35,19 +35,24 @@ export default async function ImprimirOsPage({
     .eq("os_id", id)
     .order("created_at");
 
+  const config = await getConfig();
+
   // @ts-expect-error relação embutida
   const cliente = os.clientes;
   // @ts-expect-error relação embutida
   const equip = os.equipamentos;
 
-  const dados = { os, cliente, equip, itens: itens || [] };
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+  const publicUrl = siteUrl ? `${siteUrl}/os/${os.aprovacao_token}` : "";
+
+  const dados = { os, cliente, equip, itens: itens || [], config, publicUrl };
 
   return (
     <>
       <PrintButton />
       <div className="folha-a4">
         <ViaOS {...dados} via="Via do Cliente" />
-        <div className="linha-corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>
+        <div className="linha-corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>
         <ViaOS {...dados} via="Via da Empresa" />
       </div>
     </>
@@ -59,27 +64,35 @@ function ViaOS({
   cliente,
   equip,
   itens,
+  config,
+  publicUrl,
   via,
 }: {
   os: any;
   cliente: any;
   equip: any;
   itens: any[];
+  config: any;
+  publicUrl: string;
   via: string;
 }) {
   return (
     <div className="via-os" style={{ fontSize: 11, color: "#0f172a", lineHeight: 1.35 }}>
       {/* Cabeçalho */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "2px solid #1d4ed8", paddingBottom: 6 }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#1d4ed8" }}>{EMPRESA.nome}</div>
-          <div style={{ fontSize: 9, color: "#475569" }}>
-            {EMPRESA.cnpj && `CNPJ: ${EMPRESA.cnpj} • `}
-            {EMPRESA.endereco}
-          </div>
-          <div style={{ fontSize: 9, color: "#475569" }}>
-            {EMPRESA.telefone && `Fone: ${EMPRESA.telefone} • `}
-            {EMPRESA.email}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {config.logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={config.logo_url} alt="logo" style={{ height: 46, width: "auto", objectFit: "contain" }} />
+          )}
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1d4ed8" }}>{config.nome}</div>
+            <div style={{ fontSize: 9, color: "#475569" }}>
+              {config.cnpj && `CNPJ: ${config.cnpj} • `}{config.endereco}
+            </div>
+            <div style={{ fontSize: 9, color: "#475569" }}>
+              {config.telefone && `Fone: ${config.telefone} • `}{config.email}
+            </div>
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -165,30 +178,53 @@ function ViaOS({
         </table>
       </div>
 
-      {/* Rodapé: garantia + assinaturas */}
-      <div style={{ marginTop: 6, fontSize: 9, color: "#475569" }}>
-        Garantia do serviço: <strong>{os.garantia_dias} dias</strong>.{" "}
-        {os.forma_pagamento && <>Pagamento: {os.forma_pagamento}.</>}{" "}
-        A visita técnica é cobrada e abatida do valor total caso o serviço seja aprovado e executado.
+      {/* Termo de garantia + QR */}
+      <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "flex-start" }}>
+        <div style={{ flex: 1, fontSize: 8, color: "#475569" }}>
+          {config.termo_garantia && (
+            <p style={{ margin: 0 }}><strong>Garantia:</strong> {config.termo_garantia}</p>
+          )}
+          {config.politica_os && (
+            <p style={{ margin: "2px 0 0" }}>{config.politica_os}</p>
+          )}
+          {!config.termo_garantia && (
+            <p style={{ margin: 0 }}>Garantia do serviço: <strong>{os.garantia_dias} dias</strong>.</p>
+          )}
+        </div>
+        {publicUrl && (
+          <div style={{ textAlign: "center" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(publicUrl)}`}
+              alt="QR"
+              style={{ width: 64, height: 64 }}
+            />
+            <div style={{ fontSize: 7, color: "#64748b", maxWidth: 70 }}>Acompanhe/aprove sua OS</div>
+          </div>
+        )}
       </div>
-      <div style={{ display: "flex", gap: 24, marginTop: 16 }}>
-        <Assinatura label="Assinatura do cliente" />
+
+      {/* Assinaturas */}
+      <div style={{ display: "flex", gap: 24, marginTop: 14, alignItems: "flex-end" }}>
+        {os.assinatura_cliente ? (
+          <div style={{ flex: 1, textAlign: "center" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={os.assinatura_cliente} alt="assinatura" style={{ height: 40, objectFit: "contain" }} />
+            <div style={{ borderTop: "1px solid #0f172a", paddingTop: 2, fontSize: 9 }}>
+              Assinatura do cliente {os.aprovado ? "(aprovado)" : ""}
+            </div>
+          </div>
+        ) : (
+          <Assinatura label="Assinatura do cliente" />
+        )}
         <Assinatura label="Responsável técnico" />
       </div>
     </div>
   );
 }
 
-const thStyle: React.CSSProperties = {
-  border: "1px solid #cbd5e1",
-  padding: "3px 5px",
-  textAlign: "left",
-  fontSize: 9,
-};
-const tdStyle: React.CSSProperties = {
-  border: "1px solid #e2e8f0",
-  padding: "3px 5px",
-};
+const thStyle: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "3px 5px", textAlign: "left", fontSize: 9 };
+const tdStyle: React.CSSProperties = { border: "1px solid #e2e8f0", padding: "3px 5px" };
 
 function Bloco({ titulo, children, style }: { titulo: string; children: React.ReactNode; style?: React.CSSProperties }) {
   return (

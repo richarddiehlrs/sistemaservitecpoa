@@ -23,13 +23,14 @@ export default async function EditarOrdemPage({
 
   if (!os) notFound();
 
-  const [{ data: itens }, { data: equipamentos }] = await Promise.all([
+  const [{ data: itens }, { data: equipamentos }, { data: catalogo }] = await Promise.all([
     supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),
     supabase
       .from("equipamentos")
       .select("*")
       .eq("cliente_id", os.cliente_id)
       .order("created_at", { ascending: false }),
+    supabase.from("servicos_catalogo").select("*").eq("ativo", true).order("descricao"),
   ]);
 
   // @ts-expect-error relação embutida
@@ -45,6 +46,7 @@ export default async function EditarOrdemPage({
         clienteInicial={clienteInicial}
         equipamentos={equipamentos || []}
         itensIniciais={itens || []}
+        catalogo={catalogo || []}
         modoEdicao
       />
     </div>

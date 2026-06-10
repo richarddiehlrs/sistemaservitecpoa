@@ -6,7 +6,7 @@ import { Loader2, Plus, Search, Trash2, UserCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { buscarCep } from "@/lib/cep";
 import { formatCurrency, formatTelefone } from "@/lib/format";
-import type { Equipamento, OrdemServico, OsItem } from "@/types/database";
+import type { Equipamento, OrdemServico, OsItem, ServicoCatalogo } from "@/types/database";
 
 type ClienteLite = { id: string; nome: string; telefone: string | null };
 
@@ -23,6 +23,7 @@ type Props = {
   clienteInicial?: ClienteLite | null;
   equipamentos?: Equipamento[];
   itensIniciais?: OsItem[];
+  catalogo?: ServicoCatalogo[];
   modoEdicao?: boolean;
 };
 
@@ -37,6 +38,7 @@ export function OrdemForm({
   clienteInicial,
   equipamentos = [],
   itensIniciais = [],
+  catalogo = [],
   modoEdicao = false,
 }: Props) {
   const router = useRouter();
@@ -146,6 +148,14 @@ export function OrdemForm({
     setItens((arr) => [
       ...arr,
       { tipo: "servico", descricao: "", quantidade: 1, valor_unitario: 0 },
+    ]);
+  }
+  function addDoCatalogo(id: string) {
+    const s = catalogo.find((c) => c.id === id);
+    if (!s) return;
+    setItens((arr) => [
+      ...arr,
+      { tipo: s.tipo, descricao: s.descricao, quantidade: 1, valor_unitario: Number(s.valor) },
     ]);
   }
   function updItem(idx: number, patch: Partial<ItemState>) {
@@ -446,9 +456,25 @@ export function OrdemForm({
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
             Serviços e peças
           </h3>
-          <button type="button" onClick={addItem} className="btn-secondary text-sm">
-            <Plus className="h-4 w-4" /> Adicionar item
-          </button>
+          <div className="flex items-center gap-2">
+            {catalogo.length > 0 && (
+              <select
+                className="input max-w-[220px] text-sm"
+                value=""
+                onChange={(e) => { addDoCatalogo(e.target.value); e.target.value = ""; }}
+              >
+                <option value="">+ Do catálogo...</option>
+                {catalogo.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.descricao} — {formatCurrency(c.valor)}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button type="button" onClick={addItem} className="btn-secondary text-sm">
+              <Plus className="h-4 w-4" /> Adicionar item
+            </button>
+          </div>
         </div>
         <div className="space-y-2">
           {itens.map((item, idx) => (

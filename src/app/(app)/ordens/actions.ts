@@ -317,6 +317,16 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
   redirect(`/ordens/${id}`);
 }
 
+export async function salvarAssinatura(id: string, dataUrl: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("ordens_servico")
+    .update({ assinatura_cliente: dataUrl })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/ordens/${id}`);
+}
+
 export async function excluirOrdem(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("ordens_servico").delete().eq("id", id);

@@ -78,8 +78,59 @@ export type OrdemServico = {
   forma_pagamento: string | null;
   garantia_dias: number;
   observacoes: string | null;
+  aprovacao_token: string;
+  aprovado: boolean;
+  data_aprovacao: string | null;
+  assinatura_cliente: string | null;
+  observacao_aprovacao: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type Configuracao = {
+  id: number;
+  nome: string;
+  cnpj: string | null;
+  telefone: string | null;
+  email: string | null;
+  endereco: string | null;
+  cidade: string | null;
+  logo_url: string | null;
+  termo_garantia: string | null;
+  politica_os: string | null;
+  msg_whatsapp: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Profile = {
+  id: string;
+  nome: string | null;
+  email: string | null;
+  papel: "admin" | "atendente" | "tecnico";
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ServicoCatalogo = {
+  id: string;
+  descricao: string;
+  tipo: "servico" | "peca";
+  valor: number;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type OsAnexo = {
+  id: string;
+  os_id: string;
+  url: string;
+  path: string | null;
+  descricao: string | null;
+  momento: "antes" | "depois" | "outro";
+  created_at: string;
 };
 
 export type OsItem = {
@@ -174,6 +225,10 @@ export type Database = {
       categorias_financeiras: TableDef<CategoriaFinanceira>;
       lancamentos_financeiros: TableDef<LancamentoFinanceiro>;
       agendamentos: TableDef<Agendamento>;
+      configuracoes: TableDef<Configuracao>;
+      profiles: TableDef<Profile>;
+      servicos_catalogo: TableDef<ServicoCatalogo>;
+      os_anexos: TableDef<OsAnexo>;
     };
     Views: {
       vw_dre: {
@@ -192,7 +247,20 @@ export type Database = {
         };
       };
     };
-    Functions: Record<string, never>;
+    Functions: {
+      os_publica: {
+        Args: { p_token: string };
+        Returns: unknown;
+      };
+      os_aprovar: {
+        Args: { p_token: string; p_assinatura?: string | null; p_obs?: string | null };
+        Returns: unknown;
+      };
+      is_admin: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+    };
     Enums: Record<string, never>;
   };
 };

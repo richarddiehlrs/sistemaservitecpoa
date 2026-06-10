@@ -13,6 +13,12 @@ export default async function NovaOrdemPage({
   const { cliente: clienteId } = await searchParams;
   const supabase = await createClient();
 
+  const { data: catalogo } = await supabase
+    .from("servicos_catalogo")
+    .select("*")
+    .eq("ativo", true)
+    .order("descricao");
+
   let clienteInicial = null;
   let equipamentos = undefined;
 
@@ -40,6 +46,7 @@ export default async function NovaOrdemPage({
         action={criarOrdem}
         clienteInicial={clienteInicial}
         equipamentos={equipamentos}
+        catalogo={catalogo || []}
       />
     </div>
   );

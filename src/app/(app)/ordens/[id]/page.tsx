@@ -3,8 +3,13 @@ import { notFound } from "next/navigation";
 import { Pencil, Printer, DollarSign } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatusBadge } from "@/components/ui";
+import { ImageIcon, PenLine, Link2 } from "lucide-react";
 import { OsStatusControl } from "@/components/os-status-control";
 import { OsShare } from "@/components/os-share";
+import { OsFotos } from "@/components/os-fotos";
+import { OsAssinatura } from "@/components/os-assinatura";
+import { CopyLink } from "@/components/copy-link";
+import { getConfig } from "@/lib/config";
 import {
   formatCurrency,
   formatDate,
@@ -32,7 +37,7 @@ export default async function OrdemDetalhePage({
 
   if (!os) notFound();
 
-  const [{ data: itens }, { data: historico }, { data: lancamentos }] =
+  const [{ data: itens }, { data: historico }, { data: lancamentos }, { data: anexos }, config] =
     await Promise.all([
       supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),
       supabase
@@ -45,7 +50,12 @@ export default async function OrdemDetalhePage({
         .select("*")
         .eq("os_id", id)
         .order("created_at", { ascending: false }),
+      supabase.from("os_anexos").select("*").eq("os_id", id).order("created_at"),
+      getConfig(),
     ]);
+
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+  const portalUrl = siteUrl ? `${siteUrl}/os/${os.aprovacao_token}` : "";
 
   // @ts-expect-error relação embutida
   const cliente = os.clientes;
@@ -200,7 +210,39 @@ export default async function OrdemDetalhePage({
               valorTotal={os.valor_total}
               garantiaDias={os.garantia_dias}
               previsao={os.data_previsao}
+              msgTemplate={config.msg_whatsapp}
+              clienteNomeRaw={cliente?.nome}
+              empresaNome={config.nome}
             />
+            {portalUrl && (
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <p className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
+                  <Link2 className="h-3.5 w-3.5" /> Link do portal do cliente
+                </p>
+                <CopyLink url={portalUrl} />
+                {os.aprovado && (
+                  <p className="mt-1 text-xs font-medium text-green-600">
+                    ✓ Orçamento aprovado pelo cliente em {formatDate(os.data_aprovacao)}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Fotos / anexos */}
+          <div className="card p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <ImageIcon className="h-4 w-4" /> Fotos do equipamento
+            </h3>
+            <OsFotos osId={id} anexos={anexos || []} />
+          </div>
+
+          {/* Assinatura */}
+          <div className="card p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <PenLine className="h-4 w-4" /> Assinatura do cliente
+            </h3>
+            <OsAssinatura osId={id} assinaturaAtual={os.assinatura_cliente} />
           </div>
 
           {/* Financeiro */}
