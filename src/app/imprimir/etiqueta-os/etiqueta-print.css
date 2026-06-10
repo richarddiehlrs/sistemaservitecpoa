@@ -1,0 +1,101 @@
+@page {
+  size: 100mm 50mm;
+  margin: 1.5mm;
+}
+
+.folha-etiqueta {
+  width: 96mm;
+  height: 46mm;
+  margin: 0 auto;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.etiqueta-os {
+  display: flex;
+  align-items: stretch;
+  gap: 2mm;
+  height: 100%;
+  padding: 1.5mm;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #0f172a;
+}
+
+.etiqueta-os-qr {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.etiqueta-os-qr img {
+  width: 22mm;
+  height: 22mm;
+  object-fit: contain;
+}
+
+.etiqueta-os-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4mm;
+  line-height: 1.15;
+}
+
+.etiqueta-os-empresa {
+  font-size: 6pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #475569;
+  margin: 0;
+}
+
+.etiqueta-os-numero {
+  font-size: 13pt;
+  font-weight: 800;
+  margin: 0 0 0.5mm;
+  letter-spacing: -0.02em;
+}
+
+.etiqueta-os-linha {
+  font-size: 7pt;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.etiqueta-os-data {
+  font-size: 6pt;
+  color: #64748b;
+  margin: 0.5mm 0 0;
+}
+
+@media screen {
+  body.modo-etiqueta {
+    background: #e2e8f0;
+    padding: 16px 0;
+  }
+  .folha-etiqueta {
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  }
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .folha-etiqueta {
+    box-shadow: none;
+    width: 100%;
+    height: 100%;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+  }
+}

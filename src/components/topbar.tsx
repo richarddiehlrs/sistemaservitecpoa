@@ -1,7 +1,8 @@
 "use client";
 
-import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import type { Papel } from "@/lib/permissoes";
+import Link from "next/link";
+import { Menu, PanelLeftClose, PanelLeftOpen, QrCode } from "lucide-react";
+import { temPermissao, type Papel } from "@/lib/permissoes";
 import { GlobalSearch } from "./global-search";
 import { Notifications } from "./notifications";
 
@@ -40,6 +41,15 @@ export function Topbar({
       <GlobalSearch />
 
       <div className="ml-auto flex items-center gap-1">
+        {papel && temPermissao(papel, "ordens") && (
+          <Link
+            href="/escanear"
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-brand-600"
+            title="Escanear QR da OS"
+          >
+            <QrCode className="h-5 w-5" />
+          </Link>
+        )}
         <Notifications papel={papel} userId={userId} userNome={userNome} />
       </div>
     </header>

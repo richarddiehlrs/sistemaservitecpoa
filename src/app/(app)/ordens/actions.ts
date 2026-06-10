@@ -267,6 +267,9 @@ export async function criarOrdem(formData: FormData) {
   revalidatePath("/agenda");
   revalidatePath("/campo");
   revalidatePath("/painel");
+  if (tipo === "oficina") {
+    redirect(`/ordens/${os!.id}?etiqueta=1`);
+  }
   redirect(`/ordens/${os!.id}`);
 }
 

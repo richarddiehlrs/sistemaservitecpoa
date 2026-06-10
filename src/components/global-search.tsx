@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, Wrench, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatNumeroOS, formatTelefone, STATUS_OS_LABEL } from "@/lib/format";
+import { extrairReferenciaOs } from "@/lib/os-scan";
 
 type CliRes = { id: string; nome: string; telefone: string | null };
 type OsRes = { id: string; numero: number; status: string; clientes?: { nome?: string } | null };
@@ -39,6 +40,23 @@ export function GlobalSearch() {
     setOpen(true);
     clearTimeout(deb.current);
     deb.current = setTimeout(async () => {
+      const ref = extrairReferenciaOs(q);
+      if (ref) {
+        const osRef =
+          ref.tipo === "id"
+            ? supabase.from("ordens_servico").select("id, numero, status, clientes(nome)").eq("id", ref.valor).limit(1)
+            : supabase
+                .from("ordens_servico")
+                .select("id, numero, status, clientes(nome)")
+                .eq("numero", ref.valor)
+                .limit(1);
+        const { data } = await osRef;
+        if (data?.[0]) {
+          go(`/ordens/${data[0].id}`);
+          return;
+        }
+      }
+
       const term = `%${q.trim()}%`;
       const numero = parseInt(q.replace(/\D/g, ""), 10);
 

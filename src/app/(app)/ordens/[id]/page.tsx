@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Printer, DollarSign, Trash2 } from "lucide-react";
+import { Pencil, Printer, DollarSign, Trash2, QrCode } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { ImageIcon, PenLine, Link2 } from "lucide-react";
@@ -30,15 +30,19 @@ import {
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
 import { alterarStatusForm, excluirOrdem, lancarFinanceiro, registrarClienteAusente } from "../actions";
+import { OsEtiquetaPrompt } from "@/components/os-etiqueta-prompt";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrdemDetalhePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ etiqueta?: string }>;
 }) {
   const { id } = await params;
+  const { etiqueta } = await searchParams;
   const profile = await requireProfile();
   const podeExcluirOs = temPermissao(profile.papel, "ordens_excluir");
   const podeFinanceiro = temPermissao(profile.papel, "financeiro");
@@ -109,13 +113,21 @@ export default async function OrdemDetalhePage({
     ehTecnico &&
     !["cliente_ausente", "cancelada", "entregue", "concluida"].includes(os.status);
 
+  const ehOficina = os.tipo_atendimento === "oficina";
+
   return (
     <div>
+      {etiqueta === "1" && ehOficina && <OsEtiquetaPrompt osId={id} />}
       <PageHeader
         title={`Ordem ${formatNumeroOS(os.numero)}`}
-        subtitle={`Aberta em ${formatDateTime(os.data_abertura)}`}
+        subtitle={`Aberta em ${formatDateTime(os.data_abertura)}${ehOficina ? " · Oficina" : ""}`}
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {ehOficina && (
+              <Link href={`/imprimir/etiqueta-os/${id}`} target="_blank" className="btn-secondary">
+                <QrCode className="h-4 w-4" /> Etiqueta QR
+              </Link>
+            )}
             <Link href={`/imprimir/os/${id}`} target="_blank" className="btn-secondary">
               <Printer className="h-4 w-4" /> Imprimir / PDF
             </Link>

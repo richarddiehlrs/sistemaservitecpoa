@@ -19,6 +19,7 @@ import {
   LogOut,
   MapPin,
   LayoutGrid,
+  QrCode,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { temPermissao, PAPEL_LABEL, type Papel, type Permissao } from "@/lib/permissoes";
@@ -41,6 +42,7 @@ const GRUPOS: { titulo: string; itens: NavItem[] }[] = [
     itens: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: "dashboard" },
       { href: "/painel", label: "Painel", icon: LayoutGrid, perm: "ordens" },
+      { href: "/escanear", label: "Escanear OS", icon: QrCode, perm: "ordens" },
       { href: "/agenda", label: "Agenda", icon: CalendarDays, perm: "agenda" },
       { href: "/ordens", label: "Ordens de Serviço", icon: Wrench, perm: "ordens" },
       { href: "/clientes", label: "Clientes", icon: Users, perm: "clientes" },

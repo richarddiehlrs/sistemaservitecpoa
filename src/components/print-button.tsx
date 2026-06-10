@@ -4,19 +4,27 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { Printer } from "lucide-react";
 
-export function PrintButton({ auto = false, href }: { auto?: boolean; href?: string }) {
+export function PrintButton({
+  auto = false,
+  href,
+  bodyClass = "modo-impressao",
+}: {
+  auto?: boolean;
+  href?: string;
+  bodyClass?: string;
+}) {
   useEffect(() => {
     if (href) return;
-    document.body.classList.add("modo-impressao");
+    document.body.classList.add(bodyClass);
     if (auto) {
       const t = setTimeout(() => window.print(), 600);
       return () => {
         clearTimeout(t);
-        document.body.classList.remove("modo-impressao");
+        document.body.classList.remove(bodyClass);
       };
     }
-    return () => document.body.classList.remove("modo-impressao");
-  }, [auto, href]);
+    return () => document.body.classList.remove(bodyClass);
+  }, [auto, href, bodyClass]);
 
   return (
     <div className="no-print fixed right-4 top-4 z-50 flex gap-2">
