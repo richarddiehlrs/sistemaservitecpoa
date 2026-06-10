@@ -10,7 +10,11 @@ export default async function CampoPage() {
   const profile = await requireProfile();
 
   if (temPermissao(profile.papel, "campo_central")) {
-    return <CampoCentral />;
+    return (
+      <PullToRefresh>
+        <CampoCentral />
+      </PullToRefresh>
+    );
   }
 
   if (!temPermissao(profile.papel, "despesas_campo")) {
