@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { podeAcessarRota, type Papel } from "@/lib/permissoes";
+import { homePorPapel, podeAcessarRota, type Papel } from "@/lib/permissoes";
 
 export function RouteGuard({ role }: { role: Papel }) {
   const pathname = usePathname();
@@ -11,7 +11,7 @@ export function RouteGuard({ role }: { role: Papel }) {
 
   useEffect(() => {
     if (!podeAcessarRota(role, pathname)) {
-      router.replace("/dashboard?erro=sem_permissao");
+      router.replace(`${homePorPapel(role)}?erro=sem_permissao`);
     }
   }, [pathname, role, router]);
 

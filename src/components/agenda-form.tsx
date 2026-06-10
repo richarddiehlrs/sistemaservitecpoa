@@ -141,8 +141,8 @@ export function AgendaForm({
               </select>
             </div>
             <div>
-              <label className="label">Técnico</label>
-              <input name="tecnico" className="input" />
+              <label className="label">Técnico (opcional)</label>
+              <input name="tecnico" className="input" placeholder="Deixe vazio — técnico assume no check-in" />
             </div>
           </div>
 

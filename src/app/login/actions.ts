@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { homePorPapel, type Papel } from "@/lib/permissoes";
 
 export async function login(_prev: unknown, formData: FormData) {
   const email = String(formData.get("email") || "").trim();
@@ -19,7 +20,19 @@ export async function login(_prev: unknown, formData: FormData) {
     return { error: "Credenciais inválidas. Verifique e-mail e senha." };
   }
 
-  redirect(redirectTo || "/dashboard");
+  const { data: { user } } = await supabase.auth.getUser();
+  let destino = redirectTo || "/dashboard";
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("papel")
+      .eq("id", user.id)
+      .maybeSingle();
+    const papel = (profile?.papel as Papel) || "admin";
+    destino = papel === "tecnico" ? homePorPapel("tecnico") : destino;
+  }
+
+  redirect(destino);
 }
 
 export async function signup(_prev: unknown, formData: FormData) {

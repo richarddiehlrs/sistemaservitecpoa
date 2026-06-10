@@ -45,7 +45,10 @@ export default async function NovaOrdemPage({
 
   return (
     <div>
-      <PageHeader title="Nova ordem de serviço" subtitle="Abertura de atendimento" />
+      <PageHeader
+        title="Nova ordem de serviço"
+        subtitle={ehTecnico ? "Abertura em campo — você será o técnico responsável" : "Abertura sem técnico — o técnico assume no check-in da agenda"}
+      />
       <OrdemForm
         action={criarOrdem}
         clienteInicial={clienteInicial}
@@ -53,6 +56,7 @@ export default async function NovaOrdemPage({
         catalogo={catalogo || []}
         tecnicoPadrao={ehTecnico ? nomeTecnico(profile) : undefined}
         tecnicoFixo={ehTecnico}
+        mostrarCampoTecnico={false}
       />
     </div>
   );

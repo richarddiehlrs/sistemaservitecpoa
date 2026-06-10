@@ -43,8 +43,13 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && pathname === "/login") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("papel")
+      .eq("id", user.id)
+      .maybeSingle();
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = profile?.papel === "tecnico" ? "/campo" : "/dashboard";
     return NextResponse.redirect(url);
   }
 

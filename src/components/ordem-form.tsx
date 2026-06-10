@@ -28,6 +28,8 @@ type Props = {
   modoEdicao?: boolean;
   tecnicoPadrao?: string;
   tecnicoFixo?: boolean;
+  /** Atendente/admin: técnico só na edição; abertura fica sem atribuição. */
+  mostrarCampoTecnico?: boolean;
 };
 
 const UFS = [
@@ -45,6 +47,7 @@ export function OrdemForm({
   modoEdicao = false,
   tecnicoPadrao,
   tecnicoFixo = false,
+  mostrarCampoTecnico = true,
 }: Props) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -559,15 +562,21 @@ export function OrdemForm({
             Condições
           </h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-            <div>
-              <label className="label">Técnico responsável</label>
-              <input
-                name="tecnico"
-                className="input"
-                defaultValue={ordem?.tecnico || tecnicoPadrao || ""}
-                readOnly={tecnicoFixo}
-              />
-            </div>
+            {tecnicoFixo ? (
+              <input type="hidden" name="tecnico" value={tecnicoPadrao || ordem?.tecnico || ""} />
+            ) : mostrarCampoTecnico ? (
+              <div>
+                <label className="label">Técnico (opcional)</label>
+                <input
+                  name="tecnico"
+                  className="input"
+                  defaultValue={ordem?.tecnico || ""}
+                  placeholder="Atribuir depois — o técnico assume no check-in"
+                />
+              </div>
+            ) : (
+              <input type="hidden" name="tecnico" value="" />
+            )}
             <div>
               <label className="label">Prioridade</label>
               <select name="prioridade" className="input" defaultValue={ordem?.prioridade || "normal"}>

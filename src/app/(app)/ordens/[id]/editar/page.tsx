@@ -54,6 +54,7 @@ export default async function EditarOrdemPage({
         modoEdicao
         tecnicoPadrao={ehTecnico ? nomeTecnico(profile) : undefined}
         tecnicoFixo={ehTecnico}
+        mostrarCampoTecnico={!ehTecnico}
       />
     </div>
   );

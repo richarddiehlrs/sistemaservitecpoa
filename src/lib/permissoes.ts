@@ -36,12 +36,17 @@ const MATRIZ: Record<Papel, Permissao[]> = {
     "relatorios", "dre", "catalogo",
   ],
   tecnico: [
-    "dashboard", "agenda", "agenda_checkin",
+    "agenda", "agenda_checkin",
     "ordens", "ordens_criar", "ordens_editar",
     "clientes", "clientes_criar",
     "despesas_campo",
   ],
 };
+
+/** Página inicial após login conforme o papel. */
+export function homePorPapel(papel: Papel): string {
+  return papel === "tecnico" ? "/campo" : "/dashboard";
+}
 
 export function temPermissao(papel: Papel, perm: Permissao): boolean {
   return MATRIZ[papel]?.includes(perm) ?? false;

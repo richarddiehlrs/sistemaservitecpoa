@@ -28,7 +28,8 @@ export default async function OrdensPage({
 
   if (status) query = query.eq("status", status);
   if (profile.papel === "tecnico") {
-    query = query.ilike("tecnico", `%${nomeTecnico(profile)}%`);
+    const nome = nomeTecnico(profile);
+    query = query.or(`tecnico.ilike.%${nome}%,tecnico.is.null`);
   }
   if (q && q.trim()) {
     const num = parseInt(q.replace(/\D/g, ""), 10);

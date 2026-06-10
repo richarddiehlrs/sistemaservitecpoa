@@ -194,7 +194,11 @@ function CardAgendamento({
           <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {a.endereco}
         </p>
       )}
-      {a.tecnico && <p className="text-slate-400">Téc.: {a.tecnico}</p>}
+      {a.tecnico ? (
+        <p className="text-slate-400">Téc.: {a.tecnico}</p>
+      ) : (
+        <p className="font-medium text-amber-600">Sem técnico — disponível</p>
+      )}
       {emAtendimento && <p className="mt-1 font-semibold text-brand-700">{STATUS_AGENDAMENTO_LABEL.em_atendimento}</p>}
       {realizado && <p className="mt-1 font-semibold text-green-700">✓ Realizado</p>}
       {a.checkin_at && !realizado && (

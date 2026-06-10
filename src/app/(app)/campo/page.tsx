@@ -34,8 +34,8 @@ export default async function CampoPage() {
       .limit(10),
     supabase
       .from("ordens_servico")
-      .select("id, numero, clientes(nome)")
-      .eq("tecnico", tecnico)
+      .select("id, numero, tecnico, clientes(nome)")
+      .or(`tecnico.ilike.%${tecnico}%,tecnico.is.null`)
       .in("status", ["aberta", "em_analise", "em_roteiro", "em_execucao", "aguardando_aprovacao", "aprovada"])
       .order("data_abertura", { ascending: false })
       .limit(20),
@@ -86,7 +86,14 @@ export default async function CampoPage() {
               <div key={a.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-slate-800">{TIPO_AGENDAMENTO_LABEL[a.tipo]} — {a.titulo}</p>
+                    <p className="font-semibold text-slate-800">
+                      {TIPO_AGENDAMENTO_LABEL[a.tipo]} — {a.titulo}
+                      {!a.tecnico && (
+                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                          Disponível
+                        </span>
+                      )}
+                    </p>
                     <p className="text-sm text-slate-500">
                       {formatHora(a.hora_inicio)}{a.hora_fim ? `–${formatHora(a.hora_fim)}` : ""}
                       {/* @ts-expect-error relação */}

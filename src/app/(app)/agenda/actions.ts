@@ -77,18 +77,35 @@ export async function checkinAgendamento(id: string) {
   const supabase = await createClient();
   await validarAgendamentoTecnico(supabase, id, profile);
 
-  const { error } = await supabase
+  const { data: ag } = await supabase
     .from("agendamentos")
-    .update({
-      checkin_at: new Date().toISOString(),
-      checkin_por: profile.id,
-      status: "em_atendimento",
-    })
-    .eq("id", id);
+    .select("tecnico, os_id")
+    .eq("id", id)
+    .single();
+  if (!ag) throw new Error("Agendamento não encontrado.");
+
+  const nome = nomeTecnico(profile);
+  const assumir = !ag.tecnico?.trim();
+  const updates: Record<string, string> = {
+    checkin_at: new Date().toISOString(),
+    checkin_por: profile.id,
+    status: "em_atendimento",
+  };
+  if (assumir) updates.tecnico = nome;
+
+  const { error } = await supabase.from("agendamentos").update(updates).eq("id", id);
   if (error) throw new Error(error.message);
+
+  if (assumir && ag.os_id) {
+    await supabase
+      .from("ordens_servico")
+      .update({ tecnico: nome, status: "em_execucao" })
+      .eq("id", ag.os_id);
+  }
 
   revalidatePath("/agenda");
   revalidatePath("/campo");
+  revalidatePath("/ordens");
 }
 
 export async function checkoutAgendamento(id: string) {
