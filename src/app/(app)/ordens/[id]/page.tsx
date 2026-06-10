@@ -127,7 +127,7 @@ export default async function OrdemDetalhePage({
                 action={excluirOrdem.bind(null, id)}
                 className="btn-danger"
                 title="Excluir ordem de serviço"
-                message="Deseja excluir esta ordem de serviço permanentemente? Lançamentos financeiros vinculados também serão removidos."
+                message="Deseja excluir esta ordem de serviço permanentemente? Agendamentos, lançamentos financeiros e todos os dados vinculados serão removidos."
                 confirmLabel="Excluir OS"
                 successMsg="Ordem excluída."
               >

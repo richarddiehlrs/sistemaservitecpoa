@@ -9,7 +9,7 @@ export function ExcluirOrdemButton({ action }: { action: () => Promise<void> }) 
       action={action}
       className="rounded p-1.5 text-red-500 hover:bg-red-50"
       title="Excluir ordem de serviço"
-      message="Deseja excluir esta ordem permanentemente? Lançamentos financeiros vinculados também serão removidos."
+      message="Deseja excluir esta ordem permanentemente? Agendamentos, lançamentos financeiros e todos os dados vinculados serão removidos."
       confirmLabel="Excluir"
       successMsg="Ordem excluída."
     >

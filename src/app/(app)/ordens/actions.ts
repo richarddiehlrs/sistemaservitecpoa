@@ -8,6 +8,7 @@ import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import { sincronizarAgendamentoOs, sincronizarAgendaStatusOs } from "@/lib/agenda-os";
+import { limparDadosVinculadosOs } from "@/lib/limpar-os";
 import { notificarTecnicoNovaOs } from "@/lib/push";
 import type { StatusOS } from "@/types/database";
 
@@ -536,8 +537,13 @@ export async function excluirOrdem(id: string) {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
 
-  await supabase.from("lancamentos_financeiros").delete().eq("os_id", id);
-  await supabase.from("agendamentos").update({ os_id: null }).eq("os_id", id);
+  const { data: os } = await supabase
+    .from("ordens_servico")
+    .select("numero")
+    .eq("id", id)
+    .single();
+
+  await limparDadosVinculadosOs(supabase, id, os?.numero);
 
   const { error } = await supabase.from("ordens_servico").delete().eq("id", id);
   if (error) throw new Error(error.message);
@@ -545,5 +551,7 @@ export async function excluirOrdem(id: string) {
   revalidatePath("/ordens");
   revalidatePath("/financeiro");
   revalidatePath("/agenda");
+  revalidatePath("/campo");
+  revalidatePath("/dashboard");
   redirect("/ordens");
 }

@@ -1,3 +1,4 @@
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { requireProfile } from "@/lib/auth-guard";
 import { temPermissao } from "@/lib/permissoes";
 import { CampoCentral } from "./campo-central";
@@ -18,5 +19,9 @@ export default async function CampoPage() {
     redirect(`${homePorPapel(profile.papel)}?erro=sem_permissao`);
   }
 
-  return <CampoTecnico profile={profile} />;
+  return (
+    <PullToRefresh>
+      <CampoTecnico profile={profile} />
+    </PullToRefresh>
+  );
 }
