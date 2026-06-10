@@ -11,10 +11,14 @@ import type { Papel } from "@/lib/permissoes";
 export function AppShell({
   userEmail,
   role,
+  userId,
+  userNome,
   children,
 }: {
   userEmail?: string | null;
   role?: string;
+  userId?: string;
+  userNome?: string;
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -57,7 +61,14 @@ export function AppShell({
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar collapsed={collapsed} onToggleSidebar={toggleCollapsed} onOpenMobile={() => setMobileOpen(true)} />
+          <Topbar
+            collapsed={collapsed}
+            onToggleSidebar={toggleCollapsed}
+            onOpenMobile={() => setMobileOpen(true)}
+            papel={(role as Papel) || "admin"}
+            userId={userId}
+            userNome={userNome}
+          />
           <main className="flex-1 overflow-y-auto">
             <div className="mx-auto max-w-7xl animate-fade-in-up p-4 sm:p-6 lg:p-8">{children}</div>
           </main>

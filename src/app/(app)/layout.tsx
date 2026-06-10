@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
-import { getRole } from "@/lib/config";
+import { getCurrentProfile } from "@/lib/config";
+import { nomeTecnico } from "@/lib/permissoes";
 
 export default async function AppLayout({
   children,
@@ -11,10 +12,15 @@ export default async function AppLayout({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const role = await getRole();
+  const profile = await getCurrentProfile();
 
   return (
-    <AppShell userEmail={user?.email} role={role}>
+    <AppShell
+      userEmail={user?.email}
+      role={profile?.papel ?? "admin"}
+      userId={profile?.id}
+      userNome={profile ? nomeTecnico(profile) : undefined}
+    >
       {children}
     </AppShell>
   );

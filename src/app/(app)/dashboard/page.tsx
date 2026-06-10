@@ -14,17 +14,10 @@ import {
   STATUS_OS_LABEL,
   TIPO_AGENDAMENTO_LABEL,
 } from "@/lib/format";
+import { STATUS_AGENDA_PENDENTE, STATUS_OS_ATRASO } from "@/lib/alertas";
+import { STATUS_OS_ABERTAS } from "@/lib/os-status";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_ABERTAS = [
-  "aberta",
-  "em_analise",
-  "aguardando_aprovacao",
-  "aprovada",
-  "em_execucao",
-  "aguardando_peca",
-];
 
 function ultimosMeses(n: number) {
   const arr: { ano: number; mes: number; label: string; inicio: string }[] = [];
@@ -62,12 +55,15 @@ export default async function DashboardPage() {
     { data: lanc6m },
     { data: ordensStatus },
     { data: agendaProx },
+    { count: osAtrasadas },
+    { count: osAguardandoAprovacao },
+    { count: visitasHoje },
   ] = await Promise.all([
     supabase.from("clientes").select("id", { count: "exact", head: true }),
     supabase
       .from("ordens_servico")
       .select("id", { count: "exact", head: true })
-      .in("status", STATUS_ABERTAS),
+      .in("status", [...STATUS_OS_ABERTAS]),
     supabase
       .from("ordens_servico")
       .select("id, numero, status, valor_total, data_abertura, clientes(nome)")
@@ -92,12 +88,27 @@ export default async function DashboardPage() {
     supabase.from("ordens_servico").select("status"),
     supabase
       .from("agendamentos")
-      .select("id, titulo, tipo, data, hora_inicio, endereco, status, clientes(nome)")
+      .select("id, titulo, tipo, data, hora_inicio, endereco, status, os_id, tecnico, clientes(nome)")
       .gte("data", hojeStr)
-      .neq("status", "cancelado")
+      .in("status", [...STATUS_AGENDA_PENDENTE])
       .order("data", { ascending: true })
       .order("hora_inicio", { ascending: true })
-      .limit(6),
+      .limit(8),
+    supabase
+      .from("ordens_servico")
+      .select("id", { count: "exact", head: true })
+      .in("status", [...STATUS_OS_ATRASO])
+      .lt("data_previsao", hojeStr)
+      .not("data_previsao", "is", null),
+    supabase
+      .from("ordens_servico")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "aguardando_aprovacao"),
+    supabase
+      .from("agendamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("data", hojeStr)
+      .in("status", [...STATUS_AGENDA_PENDENTE]),
   ]);
 
   const receitaMes = (recebimentos || []).reduce((s, r) => s + Number(r.valor_pago), 0);
@@ -148,6 +159,26 @@ export default async function DashboardPage() {
         <StatCard title="Recebido no mês" value={formatCurrency(receitaMes)} icon={<DollarSign className="h-5 w-5" />} tone="green" />
         <StatCard title="A receber" value={formatCurrency(aReceber)} icon={<AlertCircle className="h-5 w-5" />} tone="amber" />
       </div>
+
+      {(osAtrasadas || osAguardandoAprovacao || visitasHoje) ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {(osAtrasadas ?? 0) > 0 && (
+            <Link href="/ordens?status=em_roteiro" className="badge bg-red-100 text-red-700 ring-1 ring-red-200 hover:bg-red-200">
+              {osAtrasadas} OS com visita atrasada
+            </Link>
+          )}
+          {(osAguardandoAprovacao ?? 0) > 0 && (
+            <Link href="/ordens?status=aguardando_aprovacao" className="badge bg-amber-100 text-amber-800 ring-1 ring-amber-200 hover:bg-amber-200">
+              {osAguardandoAprovacao} aguardando aprovação
+            </Link>
+          )}
+          {(visitasHoje ?? 0) > 0 && (
+            <Link href="/agenda" className="badge bg-brand-100 text-brand-800 ring-1 ring-brand-200 hover:bg-brand-200">
+              {visitasHoje} visita(s) hoje na agenda
+            </Link>
+          )}
+        </div>
+      ) : null}
 
       {/* Gráficos */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -228,6 +259,12 @@ export default async function DashboardPage() {
                     </span>
                   </div>
                   <p className="text-slate-600">{a.titulo}</p>
+                  {a.tecnico && <p className="text-xs text-slate-400">Téc.: {a.tecnico}</p>}
+                  {a.os_id && (
+                    <Link href={`/ordens/${a.os_id}`} className="text-xs font-medium text-brand-600 hover:underline">
+                      Ver ordem de serviço →
+                    </Link>
+                  )}
                   {/* @ts-expect-error relação */}
                   {a.clientes?.nome && <p className="text-xs text-slate-500">{a.clientes.nome}</p>}
                   {a.endereco && (
