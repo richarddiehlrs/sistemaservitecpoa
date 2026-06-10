@@ -72,3 +72,32 @@ export async function lancarDespesaCampo(formData: FormData) {
   revalidatePath("/campo");
   revalidatePath("/financeiro");
 }
+
+function coord(v: FormDataEntryValue | null): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function registrarPosicaoTecnico(formData: FormData) {
+  const profile = await requirePermissao("despesas_campo");
+  const lat = coord(formData.get("lat"));
+  const lng = coord(formData.get("lng"));
+  if (lat == null || lng == null) throw new Error("Coordenadas inválidas.");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("posicoes_tecnico").upsert({
+    user_id: profile.id,
+    tecnico_nome: nomeTecnico(profile),
+    lat,
+    lng,
+    precisao: coord(formData.get("precisao")),
+    em_atendimento: formData.get("em_atendimento") === "1",
+    agendamento_id: str(formData.get("agendamento_id")),
+    atualizado_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/campo");
+  revalidatePath("/agenda");
+}

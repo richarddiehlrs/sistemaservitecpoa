@@ -182,8 +182,23 @@ export type Agendamento = {
   checkin_at: string | null;
   checkout_at: string | null;
   checkin_por: string | null;
+  checkin_lat: number | null;
+  checkin_lng: number | null;
+  checkout_lat: number | null;
+  checkout_lng: number | null;
   created_at: string;
   updated_at: string;
+};
+
+export type PosicaoTecnico = {
+  user_id: string;
+  tecnico_nome: string | null;
+  lat: number;
+  lng: number;
+  precisao: number | null;
+  em_atendimento: boolean;
+  agendamento_id: string | null;
+  atualizado_at: string;
 };
 
 export type CategoriaFinanceira = {
@@ -266,6 +281,7 @@ export type Database = {
       categorias_financeiras: TableDef<CategoriaFinanceira>;
       lancamentos_financeiros: TableDef<LancamentoFinanceiro>;
       agendamentos: TableDef<Agendamento>;
+      posicoes_tecnico: TableDef<PosicaoTecnico>;
       configuracoes: TableDef<Configuracao>;
       profiles: TableDef<Profile>;
       servicos_catalogo: TableDef<ServicoCatalogo>;

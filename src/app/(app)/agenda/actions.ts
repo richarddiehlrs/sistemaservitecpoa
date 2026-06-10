@@ -11,6 +11,34 @@ function str(v: FormDataEntryValue | null): string | null {
   return s === "" ? null : s;
 }
 
+function coord(v: FormDataEntryValue | null | undefined): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function salvarPosicaoTecnico(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profile: Awaited<ReturnType<typeof requirePermissao>>,
+  lat: number,
+  lng: number,
+  precisao: number | null,
+  emAtendimento: boolean,
+  agendamentoId: string | null
+) {
+  const nome = nomeTecnico(profile);
+  await supabase.from("posicoes_tecnico").upsert({
+    user_id: profile.id,
+    tecnico_nome: nome,
+    lat,
+    lng,
+    precisao,
+    em_atendimento: emAtendimento,
+    agendamento_id: agendamentoId,
+    atualizado_at: new Date().toISOString(),
+  });
+}
+
 export async function criarAgendamento(formData: FormData) {
   await requirePermissao("agenda_criar");
   const supabase = await createClient();
@@ -72,10 +100,14 @@ async function validarAgendamentoTecnico(
   }
 }
 
-export async function checkinAgendamento(id: string) {
+export async function checkinAgendamento(id: string, formData?: FormData) {
   const profile = await requirePermissao("agenda_checkin");
   const supabase = await createClient();
   await validarAgendamentoTecnico(supabase, id, profile);
+
+  const lat = coord(formData?.get("lat"));
+  const lng = coord(formData?.get("lng"));
+  const precisao = coord(formData?.get("precisao"));
 
   const { data: ag } = await supabase
     .from("agendamentos")
@@ -86,10 +118,12 @@ export async function checkinAgendamento(id: string) {
 
   const nome = nomeTecnico(profile);
   const assumir = !ag.tecnico?.trim();
-  const updates: Record<string, string> = {
+  const updates: Record<string, string | number | null> = {
     checkin_at: new Date().toISOString(),
     checkin_por: profile.id,
     status: "em_atendimento",
+    checkin_lat: lat,
+    checkin_lng: lng,
   };
   if (assumir) updates.tecnico = nome;
 
@@ -103,24 +137,37 @@ export async function checkinAgendamento(id: string) {
       .eq("id", ag.os_id);
   }
 
+  if (lat != null && lng != null) {
+    await salvarPosicaoTecnico(supabase, profile, lat, lng, precisao, true, id);
+  }
+
   revalidatePath("/agenda");
   revalidatePath("/campo");
   revalidatePath("/ordens");
 }
 
-export async function checkoutAgendamento(id: string) {
+export async function checkoutAgendamento(id: string, formData?: FormData) {
   const profile = await requirePermissao("agenda_checkin");
   const supabase = await createClient();
   await validarAgendamentoTecnico(supabase, id, profile);
 
-  const { error } = await supabase
-    .from("agendamentos")
-    .update({
-      checkout_at: new Date().toISOString(),
-      status: "realizado",
-    })
-    .eq("id", id);
+  const lat = coord(formData?.get("lat"));
+  const lng = coord(formData?.get("lng"));
+  const precisao = coord(formData?.get("precisao"));
+
+  const updates: Record<string, string | number | null> = {
+    checkout_at: new Date().toISOString(),
+    status: "realizado",
+    checkout_lat: lat,
+    checkout_lng: lng,
+  };
+
+  const { error } = await supabase.from("agendamentos").update(updates).eq("id", id);
   if (error) throw new Error(error.message);
+
+  if (lat != null && lng != null) {
+    await salvarPosicaoTecnico(supabase, profile, lat, lng, precisao, false, null);
+  }
 
   revalidatePath("/agenda");
   revalidatePath("/campo");

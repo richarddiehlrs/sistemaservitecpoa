@@ -14,6 +14,7 @@ import {
 } from "@/lib/format";
 import { TURNOS } from "@/lib/turnos";
 import { ConfirmButton } from "@/components/confirm-button";
+import { TecnicosMapa, LinkMapaCheckin } from "@/components/tecnicos-mapa";
 import { requireProfile } from "@/lib/auth-guard";
 import { nomeTecnico, temPermissao } from "@/lib/permissoes";
 import {
@@ -75,7 +76,20 @@ export default async function AgendaPage({
     queryAgenda = queryAgenda.or(`tecnico.ilike.%${nome}%,tecnico.is.null`);
   }
 
-  const { data: agendamentos } = await queryAgenda;
+  const limiteGps = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const verGps = profile.papel !== "tecnico";
+
+  const [{ data: agendamentos }, { data: posicoes }] = await Promise.all([
+    queryAgenda,
+    verGps
+      ? supabase
+          .from("posicoes_tecnico")
+          .select("*")
+          .gte("atualizado_at", limiteGps)
+          .order("atualizado_at", { ascending: false })
+      : Promise.resolve({ data: [] as never[] }),
+  ]);
+
   const podeCriar = temPermissao(profile.papel, "agenda_criar");
   const podeCheckin = temPermissao(profile.papel, "agenda_checkin");
 
@@ -92,6 +106,8 @@ export default async function AgendaPage({
         subtitle={`Semana de ${periodoLabel} • Manhã ${TURNOS.manha.inicio}–${TURNOS.manha.fim} · Tarde ${TURNOS.tarde.inicio}–${TURNOS.tarde.fim}`}
         action={podeCriar ? <AgendaForm action={criarAgendamento} dataPadrao={hojeStr} /> : undefined}
       />
+
+      {verGps && <TecnicosMapa posicoes={(posicoes || []) as never[]} />}
 
       <div className="mb-4 flex items-center gap-2">
         <Link href={`/agenda?inicio=${semanaAnterior}`} className="btn-secondary">
@@ -204,6 +220,7 @@ function CardAgendamento({
       {a.checkin_at && !realizado && (
         <p className="mt-0.5 text-[10px] text-green-600">
           Check-in {new Date(a.checkin_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+          <LinkMapaCheckin lat={a.checkin_lat} lng={a.checkin_lng} />
         </p>
       )}
 

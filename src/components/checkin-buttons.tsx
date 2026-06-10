@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, LogOut, Loader2 } from "lucide-react";
+import { obterPosicaoGps } from "@/lib/geo";
 
 export function CheckinButtons({
   agendamento,
@@ -10,8 +11,8 @@ export function CheckinButtons({
   checkoutAction,
 }: {
   agendamento: { status: string; checkin_at: string | null; checkout_at: string | null };
-  checkinAction: () => Promise<void>;
-  checkoutAction: () => Promise<void>;
+  checkinAction: (formData: FormData) => Promise<void>;
+  checkoutAction: (formData: FormData) => Promise<void>;
 }) {
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -22,11 +23,22 @@ export function CheckinButtons({
   const podeCheckout = !!agendamento.checkin_at && !agendamento.checkout_at;
   if (!podeCheckin && !podeCheckout) return null;
 
-  function executar(fn: () => Promise<void>) {
-    start(async () => {
-      await fn();
-      router.refresh();
-    });
+  async function comGps(fn: (formData: FormData) => Promise<void>) {
+    const fd = new FormData();
+    try {
+      const pos = await obterPosicaoGps();
+      fd.set("lat", String(pos.lat));
+      fd.set("lng", String(pos.lng));
+      fd.set("precisao", String(pos.precisao));
+    } catch {
+      // check-in/out segue sem GPS se o usuário negar permissão
+    }
+    await fn(fd);
+    router.refresh();
+  }
+
+  function executar(fn: (formData: FormData) => Promise<void>) {
+    start(() => comGps(fn));
   }
 
   return (
@@ -37,6 +49,7 @@ export function CheckinButtons({
           disabled={pending}
           onClick={() => executar(checkinAction)}
           className="btn-primary px-2 py-1.5 text-xs"
+          title="Check-in com localização GPS"
         >
           {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
           Check-in
@@ -48,6 +61,7 @@ export function CheckinButtons({
           disabled={pending}
           onClick={() => executar(checkoutAction)}
           className="btn-secondary px-2 py-1.5 text-xs"
+          title="Check-out com localização GPS"
         >
           {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
           Check-out

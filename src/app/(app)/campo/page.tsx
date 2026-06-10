@@ -4,9 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard } from "@/components/ui";
 import { DespesaCampoForm } from "@/components/despesa-campo-form";
 import { CheckinButtons } from "@/components/checkin-buttons";
+import { CompartilharGps } from "@/components/compartilhar-gps";
 import { requirePermissao, tecnicoDoProfile } from "@/lib/auth-guard";
 import { formatCurrency, formatDate, formatHora, formatNumeroOS, TIPO_AGENDAMENTO_LABEL } from "@/lib/format";
-import { lancarDespesaCampo } from "./actions";
+import { lancarDespesaCampo, registrarPosicaoTecnico } from "./actions";
 import { checkinAgendamento, checkoutAgendamento } from "../agenda/actions";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,7 @@ export default async function CampoPage() {
     .reduce((s, d) => s + Number(d.valor), 0);
 
   const emAtendimento = (agendaHoje || []).filter((a) => a.status === "em_atendimento").length;
+  const atendimentoAtivo = (agendaHoje || []).find((a) => a.status === "em_atendimento");
 
   return (
     <div>
@@ -64,6 +66,14 @@ export default async function CampoPage() {
           </Link>
         }
       />
+
+      <div className="mb-6">
+        <CompartilharGps
+          action={registrarPosicaoTecnico}
+          emAtendimento={emAtendimento > 0}
+          agendamentoId={atendimentoAtivo?.id}
+        />
+      </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard title="Atendimentos hoje" value={String(agendaHoje?.length || 0)} icon={<Clock className="h-5 w-5" />} tone="blue" />
