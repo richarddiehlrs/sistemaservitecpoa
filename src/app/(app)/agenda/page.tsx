@@ -4,15 +4,25 @@ import { ChevronLeft, ChevronRight, Check, X, MapPin, Clock, Phone, Sun, Sunset 
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui";
 import { AgendaForm } from "@/components/agenda-form";
+import { CheckinButtons } from "@/components/checkin-buttons";
 import {
   TIPO_AGENDAMENTO_LABEL,
   TIPO_AGENDAMENTO_COLOR,
+  STATUS_AGENDAMENTO_LABEL,
   formatHora,
   formatTelefone,
 } from "@/lib/format";
 import { TURNOS } from "@/lib/turnos";
 import { ConfirmButton } from "@/components/confirm-button";
-import { criarAgendamento, alterarStatusAgendamento, excluirAgendamento } from "./actions";
+import { requireProfile } from "@/lib/auth-guard";
+import { nomeTecnico, temPermissao } from "@/lib/permissoes";
+import {
+  criarAgendamento,
+  alterarStatusAgendamento,
+  excluirAgendamento,
+  checkinAgendamento,
+  checkoutAgendamento,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -51,13 +61,23 @@ export default async function AgendaPage({
   const domingo = addDias(segunda, 6);
   const hojeStr = ymd(new Date());
 
+  const profile = await requireProfile();
   const supabase = await createClient();
-  const { data: agendamentos } = await supabase
+  let queryAgenda = supabase
     .from("agendamentos")
     .select("*, clientes(nome, telefone)")
     .gte("data", ymd(segunda))
     .lte("data", ymd(domingo))
     .order("hora_inicio", { ascending: true });
+
+  if (profile.papel === "tecnico") {
+    const nome = nomeTecnico(profile);
+    queryAgenda = queryAgenda.or(`tecnico.ilike.%${nome}%,tecnico.is.null`);
+  }
+
+  const { data: agendamentos } = await queryAgenda;
+  const podeCriar = temPermissao(profile.papel, "agenda_criar");
+  const podeCheckin = temPermissao(profile.papel, "agenda_checkin");
 
   const semanaAnterior = ymd(addDias(segunda, -7));
   const proximaSemana = ymd(addDias(segunda, 7));
@@ -70,7 +90,7 @@ export default async function AgendaPage({
       <PageHeader
         title="Agenda de atendimentos"
         subtitle={`Semana de ${periodoLabel} • Manhã ${TURNOS.manha.inicio}–${TURNOS.manha.fim} · Tarde ${TURNOS.tarde.inicio}–${TURNOS.tarde.fim}`}
-        action={<AgendaForm action={criarAgendamento} dataPadrao={hojeStr} />}
+        action={podeCriar ? <AgendaForm action={criarAgendamento} dataPadrao={hojeStr} /> : undefined}
       />
 
       <div className="mb-4 flex items-center gap-2">
@@ -99,9 +119,9 @@ export default async function AgendaPage({
                 <p className="text-sm">{dia.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>
               </div>
 
-              <TurnoBloco titulo="Manhã" icone={<Sun className="h-3.5 w-3.5" />} itens={manha} />
+              <TurnoBloco titulo="Manhã" icone={<Sun className="h-3.5 w-3.5" />} itens={manha} podeCriar={podeCriar} podeCheckin={podeCheckin} />
               <div className="border-t border-slate-100" />
-              <TurnoBloco titulo="Tarde" icone={<Sunset className="h-3.5 w-3.5" />} itens={tarde} />
+              <TurnoBloco titulo="Tarde" icone={<Sunset className="h-3.5 w-3.5" />} itens={tarde} podeCriar={podeCriar} podeCheckin={podeCheckin} />
             </div>
           );
         })}
@@ -114,10 +134,14 @@ function TurnoBloco({
   titulo,
   icone,
   itens,
+  podeCriar,
+  podeCheckin,
 }: {
   titulo: string;
   icone: ReactNode;
   itens: any[];
+  podeCriar: boolean;
+  podeCheckin: boolean;
 }) {
   return (
     <div className="flex-1 p-2">
@@ -126,16 +150,27 @@ function TurnoBloco({
       </p>
       <div className="space-y-2">
         {itens.length === 0 && <p className="px-1 py-1 text-center text-[11px] text-slate-300">—</p>}
-        {itens.map((a) => <CardAgendamento key={a.id} a={a} />)}
+        {itens.map((a) => (
+          <CardAgendamento key={a.id} a={a} podeCriar={podeCriar} podeCheckin={podeCheckin} />
+        ))}
       </div>
     </div>
   );
 }
 
-function CardAgendamento({ a }: { a: any }) {
+function CardAgendamento({
+  a,
+  podeCriar,
+  podeCheckin,
+}: {
+  a: any;
+  podeCriar: boolean;
+  podeCheckin: boolean;
+}) {
   const cli = a.clientes;
   const cancelado = a.status === "cancelado";
   const realizado = a.status === "realizado";
+  const emAtendimento = a.status === "em_atendimento";
   return (
     <div className={`rounded-lg border-l-4 p-2 text-xs ${TIPO_AGENDAMENTO_COLOR[a.tipo] || ""} ${cancelado ? "opacity-50 line-through" : ""}`}>
       <div className="flex items-center justify-between">
@@ -160,9 +195,25 @@ function CardAgendamento({ a }: { a: any }) {
         </p>
       )}
       {a.tecnico && <p className="text-slate-400">Téc.: {a.tecnico}</p>}
+      {emAtendimento && <p className="mt-1 font-semibold text-brand-700">{STATUS_AGENDAMENTO_LABEL.em_atendimento}</p>}
       {realizado && <p className="mt-1 font-semibold text-green-700">✓ Realizado</p>}
+      {a.checkin_at && !realizado && (
+        <p className="mt-0.5 text-[10px] text-green-600">
+          Check-in {new Date(a.checkin_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+        </p>
+      )}
 
-      {!cancelado && !realizado && (
+      {podeCheckin && !cancelado && !realizado && (
+        <div className="mt-1">
+          <CheckinButtons
+            agendamento={a}
+            checkinAction={checkinAgendamento.bind(null, a.id)}
+            checkoutAction={checkoutAgendamento.bind(null, a.id)}
+          />
+        </div>
+      )}
+
+      {podeCriar && !cancelado && !realizado && (
         <div className="mt-1 flex gap-1">
           <form action={alterarStatusAgendamento.bind(null, a.id, "realizado")}>
             <button className="rounded bg-white/70 p-1 text-green-600 hover:bg-white" title="Marcar realizado">

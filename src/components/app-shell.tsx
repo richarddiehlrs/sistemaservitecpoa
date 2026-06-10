@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { ToastProvider } from "./toast";
 import { RegisterSW } from "./register-sw";
+import { RouteGuard } from "./route-guard";
+import type { Papel } from "@/lib/permissoes";
 
 export function AppShell({
   userEmail,
@@ -35,6 +37,9 @@ export function AppShell({
   return (
     <ToastProvider>
       <RegisterSW />
+      <Suspense fallback={null}>
+        <RouteGuard role={(role as Papel) || "admin"} />
+      </Suspense>
       <div className="flex h-screen overflow-hidden bg-[#f6f8fb]">
         {/* Sidebar desktop */}
         <div className="hidden lg:block">

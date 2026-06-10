@@ -2,6 +2,7 @@ import Link from "next/link";
 import { TrendingUp, TrendingDown, Wallet, Clock, Receipt, CalendarCog, LineChart, RefreshCw, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getConfig } from "@/lib/config";
+import { requirePermissao } from "@/lib/auth-guard";
 import { PageHeader, StatCard, EmptyState } from "@/components/ui";
 import { LancamentoForm } from "@/components/lancamento-form";
 import { RegistrarPagamento } from "@/components/registrar-pagamento";
@@ -36,6 +37,7 @@ export default async function FinanceiroPage({
   searchParams: Promise<{ mes?: string; tipo?: string; status?: string; vencidos?: string }>;
 }) {
   const { mes, tipo, status, vencidos } = await searchParams;
+  await requirePermissao("financeiro");
   const periodo = inicioFimMes(mes);
   const supabase = await createClient();
   const hoje = new Date().toISOString().slice(0, 10);
@@ -206,6 +208,11 @@ export default async function FinanceiroPage({
                     </td>
                     <td className="font-medium">
                       {l.descricao}
+                      {l.origem === "campo" && (
+                        <span className="ml-1 inline-block rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
+                          Campo{l.tecnico ? ` • ${l.tecnico}` : ""}
+                        </span>
+                      )}
                       {cli?.nome && <span className="block text-xs text-slate-400">{cli.nome}</span>}
                     </td>
                     {/* @ts-expect-error relação */}

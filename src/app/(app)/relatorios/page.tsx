@@ -1,6 +1,7 @@
 import { TrendingUp, TrendingDown, Wallet, Receipt, Wrench, Trophy, PiggyBank, Percent } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getConfig } from "@/lib/config";
+import { requirePermissao } from "@/lib/auth-guard";
 import { PageHeader, StatCard } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
 import { formatCurrency, formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
@@ -15,6 +16,7 @@ export default async function RelatoriosPage({
   searchParams: Promise<{ ano?: string }>;
 }) {
   const sp = await searchParams;
+  await requirePermissao("relatorios");
   const ano = Number(sp.ano) || new Date().getFullYear();
   const inicio = `${ano}-01-01`;
   const fim = `${ano}-12-31`;

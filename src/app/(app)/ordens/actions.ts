@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth-guard";
+import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits } from "@/lib/format";
 import { horarioTurno } from "@/lib/turnos";
 import type { StatusOS } from "@/types/database";
@@ -153,6 +155,7 @@ async function criarAgendamentoVisita(
 }
 
 export async function criarOrdem(formData: FormData) {
+  const profile = await requirePermissao("ordens_criar");
   const supabase = await createClient();
 
   const clienteId = await resolverCliente(supabase, formData);
@@ -168,6 +171,8 @@ export async function criarOrdem(formData: FormData) {
   const status = (str(formData.get("status")) as StatusOS) || "aberta";
   const turno = str(formData.get("turno"));
   const dataVisita = str(formData.get("data_previsao"));
+  const tecnico =
+    profile.papel === "tecnico" ? nomeTecnico(profile) : str(formData.get("tecnico"));
 
   const { data: os, error } = await supabase
     .from("ordens_servico")
@@ -180,7 +185,7 @@ export async function criarOrdem(formData: FormData) {
       servico_executado: str(formData.get("servico_executado")),
       acompanha: str(formData.get("acompanha")),
       estado_aparelho: str(formData.get("estado_aparelho")),
-      tecnico: str(formData.get("tecnico")),
+      tecnico,
       prioridade: (str(formData.get("prioridade")) as never) || "normal",
       data_previsao: dataVisita,
       turno: (turno as never),
@@ -228,7 +233,7 @@ export async function criarOrdem(formData: FormData) {
       numero: os!.numero,
       data: dataVisita,
       turno: turno || "dia",
-      tecnico: str(formData.get("tecnico")),
+      tecnico,
     });
   }
 
@@ -238,6 +243,7 @@ export async function criarOrdem(formData: FormData) {
 }
 
 export async function atualizarOrdem(id: string, formData: FormData) {
+  const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
   const itens = lerItens(formData);
@@ -246,6 +252,8 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   const desconto = num(formData.get("desconto"));
   const acrescimo = num(formData.get("acrescimo"));
   const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
+  const tecnico =
+    profile.papel === "tecnico" ? nomeTecnico(profile) : str(formData.get("tecnico"));
 
   const { error } = await supabase
     .from("ordens_servico")
@@ -255,7 +263,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
       servico_executado: str(formData.get("servico_executado")),
       acompanha: str(formData.get("acompanha")),
       estado_aparelho: str(formData.get("estado_aparelho")),
-      tecnico: str(formData.get("tecnico")),
+      tecnico,
       prioridade: (str(formData.get("prioridade")) as never) || "normal",
       data_previsao: str(formData.get("data_previsao")),
       turno: (str(formData.get("turno")) as never),

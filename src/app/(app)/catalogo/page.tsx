@@ -1,12 +1,14 @@
 import { PageHeader } from "@/components/ui";
 import { CatalogoManager } from "@/components/catalogo-manager";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth-guard";
 import { getRole } from "@/lib/config";
 import { salvarServico, excluirServico } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function CatalogoPage() {
+  await requirePermissao("catalogo");
   const supabase = await createClient();
   const [{ data: servicos }, role] = await Promise.all([
     supabase.from("servicos_catalogo").select("*").order("descricao"),

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth-guard";
 import { PageHeader } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 
@@ -29,6 +30,7 @@ export default async function DrePage({
   searchParams: Promise<{ ano?: string; mes?: string }>;
 }) {
   const sp = await searchParams;
+  await requirePermissao("dre");
   const ano = Number(sp.ano) || new Date().getFullYear();
   const mes = sp.mes ? Number(sp.mes) : undefined;
   const p = periodo(ano, mes);

@@ -16,42 +16,48 @@ import {
   Settings,
   UserCog,
   LogOut,
+  MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { temPermissao, PAPEL_LABEL, type Papel, type Permissao } from "@/lib/permissoes";
 
 type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  adminOnly?: boolean;
+  perm: Permissao;
 };
 
 const GRUPOS: { titulo: string; itens: NavItem[] }[] = [
   {
+    titulo: "Campo",
+    itens: [{ href: "/campo", label: "Painel de campo", icon: MapPin, perm: "despesas_campo" }],
+  },
+  {
     titulo: "Operação",
     itens: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/agenda", label: "Agenda", icon: CalendarDays },
-      { href: "/ordens", label: "Ordens de Serviço", icon: Wrench },
-      { href: "/clientes", label: "Clientes", icon: Users },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: "dashboard" },
+      { href: "/agenda", label: "Agenda", icon: CalendarDays, perm: "agenda" },
+      { href: "/ordens", label: "Ordens de Serviço", icon: Wrench, perm: "ordens" },
+      { href: "/clientes", label: "Clientes", icon: Users, perm: "clientes" },
     ],
   },
   {
     titulo: "Financeiro",
     itens: [
-      { href: "/financeiro", label: "Financeiro", icon: DollarSign },
-      { href: "/financeiro/fluxo", label: "Fluxo de caixa", icon: LineChart },
-      { href: "/financeiro/recorrentes", label: "Despesas fixas", icon: CalendarCog },
-      { href: "/relatorios", label: "Relatórios", icon: PieChart },
-      { href: "/dre", label: "DRE", icon: BarChart3 },
+      { href: "/financeiro", label: "Financeiro", icon: DollarSign, perm: "financeiro" },
+      { href: "/financeiro/fluxo", label: "Fluxo de caixa", icon: LineChart, perm: "financeiro_fluxo" },
+      { href: "/financeiro/recorrentes", label: "Despesas fixas", icon: CalendarCog, perm: "financeiro_recorrentes" },
+      { href: "/relatorios", label: "Relatórios", icon: PieChart, perm: "relatorios" },
+      { href: "/dre", label: "DRE", icon: BarChart3, perm: "dre" },
     ],
   },
   {
     titulo: "Administração",
     itens: [
-      { href: "/catalogo", label: "Catálogo", icon: BookText },
-      { href: "/usuarios", label: "Usuários", icon: UserCog, adminOnly: true },
-      { href: "/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
+      { href: "/catalogo", label: "Catálogo", icon: BookText, perm: "catalogo" },
+      { href: "/usuarios", label: "Usuários", icon: UserCog, perm: "usuarios" },
+      { href: "/configuracoes", label: "Configurações", icon: Settings, perm: "configuracoes" },
     ],
   },
 ];
@@ -68,6 +74,7 @@ export function Sidebar({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const papel = (role as Papel) || "admin";
   const iniciais = (userEmail || "U").slice(0, 2).toUpperCase();
 
   return (
@@ -77,7 +84,6 @@ export function Sidebar({
         collapsed ? "w-[76px]" : "w-64"
       )}
     >
-      {/* Marca */}
       <div className={cn("flex items-center gap-3 px-5 py-5", collapsed && "justify-center px-0")}>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-lg font-bold text-white shadow-lg shadow-brand-900/40">
           S
@@ -94,7 +100,7 @@ export function Sidebar({
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
         {GRUPOS.map((grupo) => {
-          const itens = grupo.itens.filter((i) => !i.adminOnly || role === "admin");
+          const itens = grupo.itens.filter((i) => temPermissao(papel, i.perm));
           if (itens.length === 0) return null;
           return (
             <div key={grupo.titulo}>
@@ -142,7 +148,6 @@ export function Sidebar({
         })}
       </nav>
 
-      {/* Usuário */}
       <div className="border-t border-white/10 p-3">
         {!collapsed && (
           <div className="mb-2 flex items-center gap-3 rounded-lg px-2 py-2">
@@ -152,7 +157,7 @@ export function Sidebar({
             <div className="min-w-0">
               <p className="truncate text-xs font-medium text-slate-200">{userEmail || "Usuário"}</p>
               <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-300">
-                {role === "admin" ? "Administrador" : "Operador"}
+                {PAPEL_LABEL[papel] || papel}
               </span>
             </div>
           </div>

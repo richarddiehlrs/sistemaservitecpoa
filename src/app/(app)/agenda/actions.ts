@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth-guard";
+import { nomeTecnico } from "@/lib/permissoes";
 import { horarioTurno } from "@/lib/turnos";
 
 function str(v: FormDataEntryValue | null): string | null {
@@ -10,6 +12,7 @@ function str(v: FormDataEntryValue | null): string | null {
 }
 
 export async function criarAgendamento(formData: FormData) {
+  await requirePermissao("agenda_criar");
   const supabase = await createClient();
 
   const turno = str(formData.get("turno"));
@@ -35,6 +38,7 @@ export async function criarAgendamento(formData: FormData) {
 }
 
 export async function alterarStatusAgendamento(id: string, status: string) {
+  await requirePermissao("agenda_criar");
   const supabase = await createClient();
   const { error } = await supabase
     .from("agendamentos")
@@ -45,8 +49,62 @@ export async function alterarStatusAgendamento(id: string, status: string) {
 }
 
 export async function excluirAgendamento(id: string) {
+  await requirePermissao("agenda_criar");
   const supabase = await createClient();
   const { error } = await supabase.from("agendamentos").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/agenda");
+}
+
+async function validarAgendamentoTecnico(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  id: string,
+  profile: Awaited<ReturnType<typeof requirePermissao>>
+) {
+  const { data: ag } = await supabase.from("agendamentos").select("tecnico").eq("id", id).single();
+  if (!ag) throw new Error("Agendamento não encontrado.");
+  if (profile.papel === "tecnico") {
+    const nome = nomeTecnico(profile);
+    const atribuido = ag.tecnico?.trim();
+    if (atribuido && !atribuido.toLowerCase().includes(nome.toLowerCase())) {
+      throw new Error("Este atendimento não está atribuído a você.");
+    }
+  }
+}
+
+export async function checkinAgendamento(id: string) {
+  const profile = await requirePermissao("agenda_checkin");
+  const supabase = await createClient();
+  await validarAgendamentoTecnico(supabase, id, profile);
+
+  const { error } = await supabase
+    .from("agendamentos")
+    .update({
+      checkin_at: new Date().toISOString(),
+      checkin_por: profile.id,
+      status: "em_atendimento",
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/agenda");
+  revalidatePath("/campo");
+}
+
+export async function checkoutAgendamento(id: string) {
+  const profile = await requirePermissao("agenda_checkin");
+  const supabase = await createClient();
+  await validarAgendamentoTecnico(supabase, id, profile);
+
+  const { error } = await supabase
+    .from("agendamentos")
+    .update({
+      checkout_at: new Date().toISOString(),
+      status: "realizado",
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/agenda");
+  revalidatePath("/campo");
 }

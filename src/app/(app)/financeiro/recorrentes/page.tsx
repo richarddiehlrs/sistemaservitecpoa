@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, RefreshCw, X, Power } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth-guard";
 import { PageHeader, EmptyState } from "@/components/ui";
 import { RecorrenteForm } from "@/components/recorrente-form";
 import { ConfirmButton } from "@/components/confirm-button";
@@ -10,6 +11,7 @@ import { salvarRecorrente, alternarRecorrente, excluirRecorrente, gerarDespesasD
 export const dynamic = "force-dynamic";
 
 export default async function RecorrentesPage() {
+  await requirePermissao("financeiro_recorrentes");
   const supabase = await createClient();
   const [{ data: recorrentes }, { data: categorias }] = await Promise.all([
     supabase.from("despesas_recorrentes").select("*, categorias_financeiras(nome)").order("descricao"),

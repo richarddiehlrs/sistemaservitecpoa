@@ -26,6 +26,8 @@ type Props = {
   itensIniciais?: OsItem[];
   catalogo?: ServicoCatalogo[];
   modoEdicao?: boolean;
+  tecnicoPadrao?: string;
+  tecnicoFixo?: boolean;
 };
 
 const UFS = [
@@ -41,6 +43,8 @@ export function OrdemForm({
   itensIniciais = [],
   catalogo = [],
   modoEdicao = false,
+  tecnicoPadrao,
+  tecnicoFixo = false,
 }: Props) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -557,7 +561,12 @@ export function OrdemForm({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <div>
               <label className="label">Técnico responsável</label>
-              <input name="tecnico" className="input" defaultValue={ordem?.tecnico || ""} />
+              <input
+                name="tecnico"
+                className="input"
+                defaultValue={ordem?.tecnico || tecnicoPadrao || ""}
+                readOnly={tecnicoFixo}
+              />
             </div>
             <div>
               <label className="label">Prioridade</label>

@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { OrdemForm } from "@/components/ordem-form";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth-guard";
+import { nomeTecnico } from "@/lib/permissoes";
 import { atualizarOrdem } from "../../actions";
 import { formatNumeroOS } from "@/lib/format";
 
@@ -13,7 +15,9 @@ export default async function EditarOrdemPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
+  const ehTecnico = profile.papel === "tecnico";
 
   const { data: os } = await supabase
     .from("ordens_servico")
@@ -48,6 +52,8 @@ export default async function EditarOrdemPage({
         itensIniciais={itens || []}
         catalogo={catalogo || []}
         modoEdicao
+        tecnicoPadrao={ehTecnico ? nomeTecnico(profile) : undefined}
+        tecnicoFixo={ehTecnico}
       />
     </div>
   );

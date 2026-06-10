@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { requireProfile } from "@/lib/auth-guard";
+import { nomeTecnico } from "@/lib/permissoes";
 import { PageHeader, EmptyState, StatusBadge } from "@/components/ui";
 import { ExportCsv } from "@/components/export-csv";
 import { STATUS_OS_LABEL, formatCurrency, formatDate, formatNumeroOS } from "@/lib/format";
@@ -16,6 +18,7 @@ export default async function OrdensPage({
 }) {
   const { status, q, page } = await searchParams;
   const pagina = Math.max(1, parseInt(page || "1", 10) || 1);
+  const profile = await requireProfile();
   const supabase = await createClient();
 
   let query = supabase
@@ -24,6 +27,9 @@ export default async function OrdensPage({
     .order("data_abertura", { ascending: false });
 
   if (status) query = query.eq("status", status);
+  if (profile.papel === "tecnico") {
+    query = query.ilike("tecnico", `%${nomeTecnico(profile)}%`);
+  }
   if (q && q.trim()) {
     const num = parseInt(q.replace(/\D/g, ""), 10);
     if (!Number.isNaN(num) && num > 0) query = query.eq("numero", num);

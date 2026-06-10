@@ -175,6 +175,7 @@ export const TIPO_AGENDAMENTO_COLOR: Record<string, string> = {
 export const STATUS_AGENDAMENTO_LABEL: Record<string, string> = {
   agendado: "Agendado",
   confirmado: "Confirmado",
+  em_atendimento: "Em atendimento",
   realizado: "Realizado",
   cancelado: "Cancelado",
 };

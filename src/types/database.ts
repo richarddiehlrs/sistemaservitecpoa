@@ -177,8 +177,11 @@ export type Agendamento = {
   hora_fim: string | null;
   tecnico: string | null;
   endereco: string | null;
-  status: "agendado" | "confirmado" | "realizado" | "cancelado";
+  status: "agendado" | "confirmado" | "em_atendimento" | "realizado" | "cancelado";
   observacoes: string | null;
+  checkin_at: string | null;
+  checkout_at: string | null;
+  checkin_por: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -208,6 +211,8 @@ export type LancamentoFinanceiro = {
   parcela_total: number | null;
   recorrencia_id: string | null;
   tecnico: string | null;
+  criado_por: string | null;
+  origem: "sistema" | "campo";
   data_competencia: string;
   data_vencimento: string | null;
   data_pagamento: string | null;
