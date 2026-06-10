@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
+import { notificarDespesaCampo } from "@/lib/notificacoes";
 
 function num(v: FormDataEntryValue | null): number {
   if (v == null) return 0;
@@ -51,23 +52,34 @@ export async function lancarDespesaCampo(formData: FormData) {
     .limit(1)
     .maybeSingle();
 
-  const { error } = await supabase.from("lancamentos_financeiros").insert({
-    tipo: "despesa",
-    descricao,
-    categoria_id: cat?.id ?? null,
-    os_id: osId,
-    tecnico,
-    criado_por: profile.id,
-    origem: "campo",
-    valor,
-    valor_pago: 0,
-    data_competencia: hoje,
-    data_vencimento: hoje,
-    status: "pendente",
-    observacoes: obs,
-  });
+  const { data: lanc, error } = await supabase
+    .from("lancamentos_financeiros")
+    .insert({
+      tipo: "despesa",
+      descricao,
+      categoria_id: cat?.id ?? null,
+      os_id: osId,
+      tecnico,
+      criado_por: profile.id,
+      origem: "campo",
+      valor,
+      valor_pago: 0,
+      data_competencia: hoje,
+      data_vencimento: hoje,
+      status: "pendente",
+      observacoes: obs,
+    })
+    .select("id")
+    .single();
 
   if (error) throw new Error(error.message);
+
+  notificarDespesaCampo({
+    lancamentoId: lanc?.id,
+    valor,
+    descricao,
+    tecnicoNome: tecnico,
+  }).catch(() => {});
 
   revalidatePath("/campo");
   revalidatePath("/financeiro");

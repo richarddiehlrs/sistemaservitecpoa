@@ -1,7 +1,5 @@
 import webpush from "web-push";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { formatDate, formatNumeroOS } from "@/lib/format";
-
 function supabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -72,6 +70,7 @@ export async function enviarPushParaUsuario(userId: string, payload: PushPayload
   return { enviados, erros };
 }
 
+/** @deprecated Use notificarOsNova de @/lib/notificacoes */
 export async function notificarTecnicoNovaOs(opts: {
   tecnicoId: string;
   osId: string;
@@ -79,15 +78,6 @@ export async function notificarTecnicoNovaOs(opts: {
   clienteNome?: string | null;
   dataVisita?: string | null;
 }) {
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
-  const url = siteUrl ? `${siteUrl}/ordens/${opts.osId}` : `/ordens/${opts.osId}`;
-  const cliente = opts.clienteNome?.trim() || "Cliente";
-  const quando = opts.dataVisita ? ` — visita ${formatDate(opts.dataVisita)}` : "";
-
-  return enviarPushParaUsuario(opts.tecnicoId, {
-    title: "Novo atendimento atribuído",
-    body: `${formatNumeroOS(opts.numero)} • ${cliente}${quando}`,
-    url,
-    tag: `os-${opts.osId}`,
-  });
+  const { notificarOsNova } = await import("@/lib/notificacoes");
+  return notificarOsNova(opts);
 }

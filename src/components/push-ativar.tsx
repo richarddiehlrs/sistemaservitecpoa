@@ -107,7 +107,7 @@ export function PushAtivar() {
             Notificações no celular
           </p>
           <p className="mt-1 text-sm text-slate-600">
-            Receba aviso quando um novo atendimento for atribuído a você.
+            Receba avisos no celular: nova OS, aprovação de orçamento, cliente ausente e mais.
           </p>
           {erro && <p className="mt-1 text-xs text-red-600">{erro}</p>}
           {!vapidKey && (

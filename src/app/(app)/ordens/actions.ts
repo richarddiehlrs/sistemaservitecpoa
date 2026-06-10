@@ -9,7 +9,11 @@ import { onlyDigits } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import { sincronizarAgendamentoOs, sincronizarAgendaStatusOs } from "@/lib/agenda-os";
 import { limparDadosVinculadosOs } from "@/lib/limpar-os";
-import { notificarTecnicoNovaOs } from "@/lib/push";
+import {
+  notificarOsNova,
+  notificarClienteAusente,
+  notificarMudancaStatusOs,
+} from "@/lib/notificacoes";
 import type { StatusOS, TipoAtendimento } from "@/types/database";
 
 function lerTipoAtendimento(formData: FormData): TipoAtendimento {
@@ -252,14 +256,14 @@ export async function criarOrdem(formData: FormData) {
     });
   }
 
-  if (tipo === "domicilio" && tecnico_id && profile.id !== tecnico_id) {
+  if (tecnico_id && profile.id !== tecnico_id) {
     const { data: cli } = await supabase.from("clientes").select("nome").eq("id", clienteId).single();
-    notificarTecnicoNovaOs({
+    notificarOsNova({
       tecnicoId: tecnico_id,
       osId: os!.id,
       numero: os!.numero,
       clienteNome: cli?.nome,
-      dataVisita,
+      dataVisita: tipo === "domicilio" ? dataVisita : null,
     }).catch(() => {});
   }
 
@@ -348,7 +352,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
         .select("nome")
         .eq("id", osAtual.cliente_id)
         .single();
-      notificarTecnicoNovaOs({
+      notificarOsNova({
         tecnicoId: tecnico_id,
         osId: id,
         numero: osAtual.numero,
@@ -388,6 +392,12 @@ export async function alterarStatusForm(id: string, formData: FormData) {
 export async function alterarStatus(id: string, status: StatusOS, observacao?: string) {
   const supabase = await createClient();
 
+  const { data: osAntes } = await supabase
+    .from("ordens_servico")
+    .select("numero, status, tecnico_id, clientes(nome)")
+    .eq("id", id)
+    .single();
+
   const update: Record<string, unknown> = { status };
   if (status === "concluida") update.data_conclusao = new Date().toISOString();
   if (status === "entregue") update.data_entrega = new Date().toISOString();
@@ -402,6 +412,27 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
   });
 
   await sincronizarAgendaStatusOs(supabase, id, status);
+
+  const notificarStatus = [
+    "aguardando_aprovacao",
+    "aguardando_peca",
+    "aprovada",
+    "em_roteiro",
+    "em_execucao",
+    "concluida",
+    "entregue",
+  ];
+  if (osAntes && osAntes.status !== status && notificarStatus.includes(status)) {
+    // @ts-expect-error relação embutida
+    const clienteNome = osAntes.clientes?.nome as string | undefined;
+    notificarMudancaStatusOs({
+      osId: id,
+      numero: osAntes.numero,
+      status,
+      clienteNome,
+      tecnicoId: osAntes.tecnico_id,
+    }).catch(() => {});
+  }
 
   revalidatePath(`/ordens/${id}`);
   revalidatePath("/ordens");
@@ -572,6 +603,19 @@ export async function registrarClienteAusente(id: string, formData: FormData) {
   });
 
   await sincronizarAgendaStatusOs(supabase, id, "cliente_ausente");
+
+  const [{ data: osInfo }, { data: cli }] = await Promise.all([
+    supabase.from("ordens_servico").select("numero").eq("id", id).single(),
+    supabase.from("ordens_servico").select("clientes(nome)").eq("id", id).single(),
+  ]);
+  // @ts-expect-error relação embutida
+  const clienteNome = cli?.clientes?.nome as string | undefined;
+  notificarClienteAusente({
+    osId: id,
+    numero: osInfo?.numero ?? 0,
+    clienteNome,
+    tecnicoNome: nomeTecnico(profile),
+  }).catch(() => {});
 
   revalidatePath(`/ordens/${id}`);
   revalidatePath("/ordens");

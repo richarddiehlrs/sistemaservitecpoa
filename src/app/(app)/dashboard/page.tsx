@@ -14,7 +14,14 @@ import {
   STATUS_OS_LABEL,
   TIPO_AGENDAMENTO_LABEL,
 } from "@/lib/format";
-import { STATUS_AGENDA_PENDENTE, STATUS_OS_ATRASO } from "@/lib/alertas";
+import {
+  STATUS_AGENDA_PENDENTE,
+  STATUS_OS_ATRASO,
+  STATUS_OFICINA_PARADA,
+  DIAS_OFICINA_PARADA_PADRAO,
+  META_ALERTA_PERCENTUAL,
+  limiteFinanceiroYmd,
+} from "@/lib/alertas";
 import { STATUS_OS_ABERTAS } from "@/lib/os-status";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +52,9 @@ export default async function DashboardPage() {
   inicio6m.setMonth(inicio6m.getMonth() - 5, 1);
   inicio6m.setHours(0, 0, 0, 0);
   const hojeStr = new Date().toISOString().slice(0, 10);
+  const limiteFin = limiteFinanceiroYmd();
+  const limiteOficina = new Date();
+  limiteOficina.setDate(limiteOficina.getDate() - DIAS_OFICINA_PARADA_PADRAO);
 
   const [
     { count: totalClientes },
@@ -58,6 +68,10 @@ export default async function DashboardPage() {
     { count: osAtrasadas },
     { count: osAguardandoAprovacao },
     { count: visitasHoje },
+    { count: oficinaParada },
+    { count: despesasCampo },
+    { count: contasPagar },
+    { count: clienteAusente },
   ] = await Promise.all([
     supabase.from("clientes").select("id", { count: "exact", head: true }),
     supabase
@@ -109,6 +123,29 @@ export default async function DashboardPage() {
       .select("id", { count: "exact", head: true })
       .eq("data", hojeStr)
       .in("status", [...STATUS_AGENDA_PENDENTE]),
+    supabase
+      .from("ordens_servico")
+      .select("id", { count: "exact", head: true })
+      .eq("tipo_atendimento", "oficina")
+      .in("status", [...STATUS_OFICINA_PARADA])
+      .lt("updated_at", limiteOficina.toISOString()),
+    supabase
+      .from("lancamentos_financeiros")
+      .select("id", { count: "exact", head: true })
+      .eq("tipo", "despesa")
+      .eq("origem", "campo")
+      .eq("status", "pendente"),
+    supabase
+      .from("lancamentos_financeiros")
+      .select("id", { count: "exact", head: true })
+      .eq("tipo", "despesa")
+      .in("status", ["pendente", "parcial"])
+      .not("data_vencimento", "is", null)
+      .lte("data_vencimento", limiteFin),
+    supabase
+      .from("ordens_servico")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "cliente_ausente"),
   ]);
 
   const receitaMes = (recebimentos || []).reduce((s, r) => s + Number(r.valor_pago), 0);
@@ -160,17 +197,49 @@ export default async function DashboardPage() {
         <StatCard title="A receber" value={formatCurrency(aReceber)} icon={<AlertCircle className="h-5 w-5" />} tone="amber" />
       </div>
 
-      {(osAtrasadas || osAguardandoAprovacao || visitasHoje) ? (
+      {(osAtrasadas ||
+        osAguardandoAprovacao ||
+        visitasHoje ||
+        oficinaParada ||
+        despesasCampo ||
+        contasPagar ||
+        clienteAusente ||
+        (meta > 0 && receitaMes < meta * (META_ALERTA_PERCENTUAL / 100))) ? (
         <div className="mt-4 flex flex-wrap gap-2">
           {(osAtrasadas ?? 0) > 0 && (
             <Link href="/ordens?status=em_roteiro" className="badge bg-red-100 text-red-700 ring-1 ring-red-200 hover:bg-red-200">
               {osAtrasadas} OS com visita atrasada
             </Link>
           )}
+          {(oficinaParada ?? 0) > 0 && (
+            <Link href="/painel" className="badge bg-orange-100 text-orange-800 ring-1 ring-orange-200 hover:bg-orange-200">
+              {oficinaParada} OS oficina parada
+            </Link>
+          )}
           {(osAguardandoAprovacao ?? 0) > 0 && (
             <Link href="/ordens?status=aguardando_aprovacao" className="badge bg-amber-100 text-amber-800 ring-1 ring-amber-200 hover:bg-amber-200">
               {osAguardandoAprovacao} aguardando aprovação
             </Link>
+          )}
+          {(clienteAusente ?? 0) > 0 && (
+            <Link href="/ordens?status=cliente_ausente" className="badge bg-rose-100 text-rose-800 ring-1 ring-rose-200 hover:bg-rose-200">
+              {clienteAusente} cliente ausente
+            </Link>
+          )}
+          {(despesasCampo ?? 0) > 0 && (
+            <Link href="/financeiro?origem=campo" className="badge bg-violet-100 text-violet-800 ring-1 ring-violet-200 hover:bg-violet-200">
+              {despesasCampo} despesas de campo
+            </Link>
+          )}
+          {(contasPagar ?? 0) > 0 && (
+            <Link href="/financeiro?vencidos=1" className="badge bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100">
+              {contasPagar} contas a pagar
+            </Link>
+          )}
+          {meta > 0 && receitaMes < meta * (META_ALERTA_PERCENTUAL / 100) && (
+            <span className="badge bg-amber-50 text-amber-800 ring-1 ring-amber-200">
+              Meta: {formatCurrency(receitaMes)} de {formatCurrency(meta)}
+            </span>
           )}
           {(visitasHoje ?? 0) > 0 && (
             <Link href="/agenda" className="badge bg-brand-100 text-brand-800 ring-1 ring-brand-200 hover:bg-brand-200">

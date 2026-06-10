@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eraser, Check, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { notificarAprovacaoPortal } from "@/app/os/notificar-actions";
 
 export function OsAprovar({ token }: { token: string }) {
   const router = useRouter();
@@ -64,6 +65,7 @@ export function OsAprovar({ token }: { token: string }) {
       setErro("Não foi possível aprovar. Tente novamente ou entre em contato.");
       return;
     }
+    notificarAprovacaoPortal(token).catch(() => {});
     router.refresh();
   }
 

@@ -56,6 +56,7 @@ export function temPermissao(papel: Papel, perm: Permissao): boolean {
 
 export function podeAcessarRota(papel: Papel, pathname: string): boolean {
   if (pathname.startsWith("/manutencao")) return temPermissao(papel, "ordens_excluir");
+  if (pathname.startsWith("/configuracoes/alertas")) return true;
   if (pathname.startsWith("/configuracoes")) return temPermissao(papel, "configuracoes");
   if (pathname.startsWith("/usuarios")) return temPermissao(papel, "usuarios");
   if (pathname.startsWith("/catalogo")) return temPermissao(papel, "catalogo");

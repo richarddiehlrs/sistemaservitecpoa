@@ -1,8 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, AlertCircle, CalendarClock, DollarSign, UserX, Clock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Bell,
+  AlertCircle,
+  CalendarClock,
+  DollarSign,
+  UserX,
+  Clock,
+  Wrench,
+  Target,
+  Receipt,
+  CheckCheck,
+  Settings,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatDate, formatHora, formatNumeroOS } from "@/lib/format";
 import { saldoEmAberto } from "@/lib/financeiro";
@@ -10,15 +23,23 @@ import { temPermissao, type Papel } from "@/lib/permissoes";
 import {
   STATUS_AGENDA_PENDENTE,
   STATUS_OS_ATRASO,
+  STATUS_OFICINA_PARADA,
+  DIAS_OFICINA_PARADA_PADRAO,
+  META_ALERTA_PERCENTUAL,
   hojeYmd,
   limiteFinanceiroYmd,
 } from "@/lib/alertas";
+import {
+  marcarNotificacaoLida,
+  marcarTodasNotificacoesLidas,
+} from "@/app/(app)/notificacoes/actions";
 
 type OsAlerta = {
   id: string;
   numero: number;
-  data_previsao: string;
+  data_previsao: string | null;
   status?: string;
+  updated_at?: string;
   clientes?: { nome?: string } | null;
 };
 
@@ -31,7 +52,7 @@ type AgendaHoje = {
   tecnico?: string | null;
 };
 
-type ContaVencer = {
+type ContaAlerta = {
   id: string;
   descricao: string;
   valor: number;
@@ -39,6 +60,25 @@ type ContaVencer = {
   juros: number;
   multa: number;
   data_vencimento: string;
+  tipo: "receita" | "despesa";
+};
+
+type NotificacaoRow = {
+  id: string;
+  tipo: string;
+  titulo: string;
+  mensagem: string;
+  url: string | null;
+  prioridade: string;
+  lida: boolean;
+  created_at: string;
+};
+
+type DespesaCampo = {
+  id: string;
+  descricao: string;
+  valor: number;
+  tecnico: string | null;
 };
 
 export function Notifications({
@@ -51,12 +91,24 @@ export function Notifications({
   userNome?: string;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [eventos, setEventos] = useState<NotificacaoRow[]>([]);
   const [atrasadas, setAtrasadas] = useState<OsAlerta[]>([]);
+  const [oficinaParada, setOficinaParada] = useState<OsAlerta[]>([]);
   const [aguardandoAprovacao, setAguardandoAprovacao] = useState<OsAlerta[]>([]);
   const [clienteAusente, setClienteAusente] = useState<OsAlerta[]>([]);
   const [agenda, setAgenda] = useState<AgendaHoje[]>([]);
-  const [contas, setContas] = useState<ContaVencer[]>([]);
+  const [contas, setContas] = useState<ContaAlerta[]>([]);
+  const [despesasCampo, setDespesasCampo] = useState<DespesaCampo[]>([]);
+  const [metaAlerta, setMetaAlerta] = useState<{ meta: number; realizado: number } | null>(null);
+  const [diasOficina, setDiasOficina] = useState(DIAS_OFICINA_PARADA_PADRAO);
+  const [prefs, setPrefs] = useState({
+    oficina_parada: true,
+    financeiro: true,
+    meta_faturamento: true,
+    despesa_campo: true,
+  });
   const ref = useRef<HTMLDivElement>(null);
 
   const ehTecnico = papel === "tecnico";
@@ -71,126 +123,291 @@ export function Notifications({
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
+  const carregarEventos = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("notificacoes")
+      .select("id, tipo, titulo, mensagem, url, prioridade, lida, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    setEventos((data as NotificacaoRow[]) || []);
+  }, [supabase, userId]);
+
   useEffect(() => {
-    let ativo = true;
-
-    async function carregar() {
-      const hoje = hojeYmd();
-      const limiteStr = limiteFinanceiroYmd();
-      const nomeTec = userNome || "";
-
-      let qOsAtraso = supabase
-        .from("ordens_servico")
-        .select("id, numero, data_previsao, status, clientes(nome)")
-        .in("status", [...STATUS_OS_ATRASO])
-        .lt("data_previsao", hoje)
-        .not("data_previsao", "is", null)
-        .order("data_previsao", { ascending: true })
-        .limit(10);
-
-      if (ehTecnico && userId) {
-        qOsAtraso = qOsAtraso.or(`tecnico_id.eq.${userId},tecnico.ilike.%${nomeTec}%`);
+    if (!userId) return;
+    (async () => {
+      const { data: prefData } = await supabase
+        .from("preferencias_alertas")
+        .select("oficina_parada, financeiro, meta_faturamento, despesa_campo, dias_oficina_parada")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (prefData) {
+        setPrefs({
+          oficina_parada: prefData.oficina_parada !== false,
+          financeiro: prefData.financeiro !== false,
+          meta_faturamento: prefData.meta_faturamento !== false,
+          despesa_campo: prefData.despesa_campo !== false,
+        });
+        setDiasOficina(prefData.dias_oficina_parada || DIAS_OFICINA_PARADA_PADRAO);
       }
+    })();
+  }, [userId, supabase]);
 
-      let qAgenda = supabase
-        .from("agendamentos")
-        .select("id, titulo, hora_inicio, status, os_id, tecnico")
-        .eq("data", hoje)
-        .in("status", [...STATUS_AGENDA_PENDENTE])
-        .order("hora_inicio", { ascending: true })
-        .limit(12);
+  const carregarOperacional = useCallback(async () => {
+    const hoje = hojeYmd();
+    const limiteStr = limiteFinanceiroYmd();
+    const nomeTec = userNome || "";
 
-      if (ehTecnico && userId) {
-        qAgenda = qAgenda.or(`tecnico_id.eq.${userId},tecnico.ilike.%${nomeTec}%`);
-      }
+    const limiteOficina = new Date();
+    limiteOficina.setDate(limiteOficina.getDate() - diasOficina);
+    const limiteOficinaStr = limiteOficina.toISOString();
 
-      const promessas: PromiseLike<unknown>[] = [qOsAtraso, qAgenda];
+    let qOsAtraso = supabase
+      .from("ordens_servico")
+      .select("id, numero, data_previsao, status, clientes(nome)")
+      .in("status", [...STATUS_OS_ATRASO])
+      .lt("data_previsao", hoje)
+      .not("data_previsao", "is", null)
+      .order("data_previsao", { ascending: true })
+      .limit(10);
 
-      let qAprovacao: ReturnType<typeof supabase.from> | null = null;
-      let qAusente: ReturnType<typeof supabase.from> | null = null;
-      let qContas: ReturnType<typeof supabase.from> | null = null;
+    if (ehTecnico && userId) {
+      qOsAtraso = qOsAtraso.or(`tecnico_id.eq.${userId},tecnico.ilike.%${nomeTec}%`);
+    }
 
-      if (verTodasOs) {
-        qAprovacao = supabase
+    let qAgenda = supabase
+      .from("agendamentos")
+      .select("id, titulo, hora_inicio, status, os_id, tecnico")
+      .eq("data", hoje)
+      .in("status", [...STATUS_AGENDA_PENDENTE])
+      .order("hora_inicio", { ascending: true })
+      .limit(12);
+
+    if (ehTecnico && userId) {
+      qAgenda = qAgenda.or(`tecnico_id.eq.${userId},tecnico.ilike.%${nomeTec}%`);
+    }
+
+    const promessas: PromiseLike<unknown>[] = [qOsAtraso, qAgenda];
+
+    if (verTodasOs && prefs.oficina_parada) {
+      promessas.push(
+        supabase
+          .from("ordens_servico")
+          .select("id, numero, status, updated_at, clientes(nome)")
+          .eq("tipo_atendimento", "oficina")
+          .in("status", [...STATUS_OFICINA_PARADA])
+          .lt("updated_at", limiteOficinaStr)
+          .order("updated_at", { ascending: true })
+          .limit(8)
+      );
+    }
+
+    if (verTodasOs) {
+      promessas.push(
+        supabase
           .from("ordens_servico")
           .select("id, numero, data_previsao, status, clientes(nome)")
           .eq("status", "aguardando_aprovacao")
           .order("data_abertura", { ascending: false })
-          .limit(8);
-        qAusente = supabase
+          .limit(8),
+        supabase
           .from("ordens_servico")
           .select("id, numero, data_previsao, status, clientes(nome)")
           .eq("status", "cliente_ausente")
           .order("cliente_ausente_registrado_at", { ascending: false })
-          .limit(8);
-        promessas.push(qAprovacao, qAusente);
-      }
+          .limit(8)
+      );
+    }
 
-      if (verFinanceiro) {
-        qContas = supabase
+    if (verFinanceiro && prefs.financeiro) {
+      promessas.push(
+        supabase
           .from("lancamentos_financeiros")
-          .select("id, descricao, valor, valor_pago, juros, multa, data_vencimento")
-          .eq("tipo", "receita")
+          .select("id, descricao, valor, valor_pago, juros, multa, data_vencimento, tipo")
           .in("status", ["pendente", "parcial"])
           .not("data_vencimento", "is", null)
           .lte("data_vencimento", limiteStr)
           .order("data_vencimento", { ascending: true })
-          .limit(10);
-        promessas.push(qContas);
-      }
-
-      const resultados = await Promise.all(promessas);
-      if (!ativo) return;
-
-      const osR = resultados[0] as { data: OsAlerta[] | null };
-      const agR = resultados[1] as { data: AgendaHoje[] | null };
-      let idx = 2;
-
-      setAtrasadas(osR.data || []);
-      setAgenda(agR.data || []);
-
-      if (verTodasOs) {
-        const apR = resultados[idx++] as { data: OsAlerta[] | null };
-        const auR = resultados[idx++] as { data: OsAlerta[] | null };
-        setAguardandoAprovacao(apR.data || []);
-        setClienteAusente(auR.data || []);
-      } else {
-        setAguardandoAprovacao([]);
-        setClienteAusente([]);
-      }
-
-      if (verFinanceiro) {
-        const ctR = resultados[idx] as { data: ContaVencer[] | null };
-        setContas(ctR.data || []);
-      } else {
-        setContas([]);
-      }
+          .limit(12)
+      );
     }
 
-    carregar();
-    const t = setInterval(carregar, 60000);
+    if (verTodasOs && prefs.despesa_campo) {
+      promessas.push(
+        supabase
+          .from("lancamentos_financeiros")
+          .select("id, descricao, valor, tecnico")
+          .eq("tipo", "despesa")
+          .eq("origem", "campo")
+          .eq("status", "pendente")
+          .order("created_at", { ascending: false })
+          .limit(8)
+      );
+    }
+
+    if (verFinanceiro && prefs.meta_faturamento) {
+      const ano = new Date().getFullYear();
+      const mes = new Date().getMonth() + 1;
+      const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+      promessas.push(
+        supabase.from("metas_faturamento").select("valor").eq("ano", ano).eq("mes", mes).maybeSingle(),
+        supabase
+          .from("lancamentos_financeiros")
+          .select("valor_pago")
+          .eq("tipo", "receita")
+          .in("status", ["pago", "parcial"])
+          .gte("data_pagamento", inicioMes)
+      );
+    }
+
+    const resultados = await Promise.all(promessas);
+    let idx = 0;
+
+    const osR = resultados[idx++] as { data: OsAlerta[] | null };
+    const agR = resultados[idx++] as { data: AgendaHoje[] | null };
+    setAtrasadas(osR.data || []);
+    setAgenda(agR.data || []);
+
+    if (verTodasOs && prefs.oficina_parada) {
+      const ofR = resultados[idx++] as { data: OsAlerta[] | null };
+      setOficinaParada(ofR.data || []);
+    } else {
+      setOficinaParada([]);
+    }
+
+    if (verTodasOs) {
+      const apR = resultados[idx++] as { data: OsAlerta[] | null };
+      const auR = resultados[idx++] as { data: OsAlerta[] | null };
+      setAguardandoAprovacao(apR.data || []);
+      setClienteAusente(auR.data || []);
+    } else {
+      setAguardandoAprovacao([]);
+      setClienteAusente([]);
+    }
+
+    if (verFinanceiro && prefs.financeiro) {
+      const ctR = resultados[idx++] as { data: ContaAlerta[] | null };
+      setContas(ctR.data || []);
+    } else {
+      setContas([]);
+    }
+
+    if (verTodasOs && prefs.despesa_campo) {
+      const dcR = resultados[idx++] as { data: DespesaCampo[] | null };
+      setDespesasCampo(dcR.data || []);
+    } else {
+      setDespesasCampo([]);
+    }
+
+    if (verFinanceiro && prefs.meta_faturamento) {
+      const metaR = resultados[idx++] as { data: { valor: number } | null };
+      const recR = resultados[idx++] as { data: { valor_pago: number }[] | null };
+      const meta = Number(metaR?.data?.valor || 0);
+      const realizado = (recR?.data || []).reduce((s, r) => s + Number(r.valor_pago), 0);
+      if (meta > 0 && realizado < meta * (META_ALERTA_PERCENTUAL / 100)) {
+        setMetaAlerta({ meta, realizado });
+      } else {
+        setMetaAlerta(null);
+      }
+    } else {
+      setMetaAlerta(null);
+    }
+  }, [supabase, ehTecnico, userId, userNome, verFinanceiro, verTodasOs, diasOficina, prefs]);
+
+  useEffect(() => {
+    carregarEventos();
+    carregarOperacional();
+    const t = setInterval(() => {
+      carregarEventos();
+      carregarOperacional();
+    }, 60000);
+    return () => clearInterval(t);
+  }, [carregarEventos, carregarOperacional]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`notificacoes-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notificacoes",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          const row = payload.new as NotificacaoRow;
+          setEventos((prev) => [row, ...prev.filter((p) => p.id !== row.id)].slice(0, 25));
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "notificacoes",
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          const row = payload.new as NotificacaoRow;
+          setEventos((prev) => prev.map((p) => (p.id === row.id ? row : p)));
+        }
+      )
+      .subscribe();
+
     return () => {
-      ativo = false;
-      clearInterval(t);
+      supabase.removeChannel(channel);
     };
-  }, [supabase, ehTecnico, userId, userNome, verFinanceiro, verTodasOs]);
+  }, [supabase, userId]);
 
   const hoje = hojeYmd();
+  const contasReceber = contas.filter((c) => c.tipo === "receita");
+  const contasPagar = contas.filter((c) => c.tipo === "despesa");
   const contasVencidas = contas.filter((c) => c.data_vencimento < hoje);
   const visitasPendentes = agenda.filter((a) => a.status === "agendado" || a.status === "confirmado");
+  const eventosNaoLidos = eventos.filter((e) => !e.lida).length;
 
   const criticos =
+    eventosNaoLidos +
     atrasadas.length +
     aguardandoAprovacao.length +
     clienteAusente.length +
-    contasVencidas.length;
+    contasVencidas.length +
+    oficinaParada.length;
 
   const total =
     criticos +
     visitasPendentes.length +
-    contas.filter((c) => c.data_vencimento >= hoje).length;
+    contas.filter((c) => c.data_vencimento >= hoje).length +
+    despesasCampo.length +
+    (metaAlerta ? 1 : 0);
 
   const destinoAgenda = ehTecnico ? "/campo" : "/agenda";
+
+  async function abrirEvento(n: NotificacaoRow) {
+    if (!n.lida) {
+      try {
+        await marcarNotificacaoLida(n.id);
+        setEventos((prev) => prev.map((e) => (e.id === n.id ? { ...e, lida: true } : e)));
+      } catch {
+        /* segue navegação */
+      }
+    }
+    setOpen(false);
+    if (n.url) router.push(n.url);
+  }
+
+  async function marcarTodas() {
+    try {
+      await marcarTodasNotificacoesLidas();
+      setEventos((prev) => prev.map((e) => ({ ...e, lida: true })));
+    } catch {
+      /* silencioso */
+    }
+  }
 
   return (
     <div ref={ref} className="relative">
@@ -213,18 +430,52 @@ export function Notifications({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card-hover">
+        <div className="absolute right-0 top-full z-50 mt-2 w-[22rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card-hover">
           <div className="border-b border-slate-100 px-4 py-3">
-            <p className="text-sm font-bold text-slate-900">Alertas</p>
-            <p className="text-xs text-slate-400">
-              {total === 0
-                ? "Tudo em dia"
-                : criticos > 0
-                  ? `${criticos} urgente(s) · ${total} no total`
-                  : `${total} item(ns) para acompanhar`}
-            </p>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold text-slate-900">Alertas</p>
+                <p className="text-xs text-slate-400">
+                  {total === 0
+                    ? "Tudo em dia"
+                    : criticos > 0
+                      ? `${criticos} urgente(s) · ${total} no total`
+                      : `${total} item(ns) para acompanhar`}
+                </p>
+              </div>
+              {eventosNaoLidos > 0 && (
+                <button
+                  type="button"
+                  onClick={marcarTodas}
+                  className="shrink-0 text-[10px] font-medium text-brand-600 hover:underline"
+                  title="Marcar eventos como lidos"
+                >
+                  <CheckCheck className="inline h-3 w-3" /> Lidas
+                </button>
+              )}
+            </div>
           </div>
-          <div className="max-h-96 overflow-y-auto">
+
+          <div className="max-h-[28rem] overflow-y-auto">
+            {eventos.length > 0 && (
+              <Secao titulo="Eventos recentes" icon={<Bell className="h-4 w-4 text-brand-500" />} count={eventosNaoLidos}>
+                {eventos.map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => abrirEvento(n)}
+                    className={`block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-slate-50 ${
+                      !n.lida ? "bg-brand-50/50" : ""
+                    }`}
+                  >
+                    <span className="font-medium text-slate-800">{n.titulo}</span>
+                    <span className="block truncate text-xs text-slate-500">{n.mensagem}</span>
+                    {!n.lida && <span className="text-[10px] font-medium text-brand-600">Novo</span>}
+                  </button>
+                ))}
+              </Secao>
+            )}
+
             <Secao
               titulo="OS com visita atrasada"
               icon={<AlertCircle className="h-4 w-4 text-red-500" />}
@@ -240,9 +491,26 @@ export function Notifications({
               ))}
             </Secao>
 
+            {verTodasOs && prefs.oficina_parada && (
+              <Secao
+                titulo={`Oficina parada (+${diasOficina}d)`}
+                icon={<Wrench className="h-4 w-4 text-orange-500" />}
+                vazio={oficinaParada.length === 0}
+                count={oficinaParada.length}
+              >
+                {oficinaParada.map((o) => (
+                  <ItemLink key={o.id} href={`/ordens/${o.id}`} onClose={() => setOpen(false)}>
+                    <span className="font-medium text-slate-800">{formatNumeroOS(o.numero)}</span>{" "}
+                    <span className="text-slate-500">{o.clientes?.nome || ""}</span>
+                    <span className="block text-xs text-orange-600">Em {o.status?.replace(/_/g, " ")}</span>
+                  </ItemLink>
+                ))}
+              </Secao>
+            )}
+
             {verTodasOs && (
               <Secao
-                titulo="Aguardando aprovação do cliente"
+                titulo="Aguardando aprovação"
                 icon={<Clock className="h-4 w-4 text-amber-500" />}
                 vazio={aguardandoAprovacao.length === 0}
                 count={aguardandoAprovacao.length}
@@ -251,7 +519,6 @@ export function Notifications({
                   <ItemLink key={o.id} href={`/ordens/${o.id}`} onClose={() => setOpen(false)}>
                     <span className="font-medium text-slate-800">{formatNumeroOS(o.numero)}</span>{" "}
                     <span className="text-slate-500">{o.clientes?.nome || ""}</span>
-                    <span className="block text-xs text-amber-600">Orçamento no portal</span>
                   </ItemLink>
                 ))}
               </Secao>
@@ -259,7 +526,7 @@ export function Notifications({
 
             {verTodasOs && (
               <Secao
-                titulo="Cliente ausente — reagendar"
+                titulo="Cliente ausente"
                 icon={<UserX className="h-4 w-4 text-rose-500" />}
                 vazio={clienteAusente.length === 0}
                 count={clienteAusente.length}
@@ -268,7 +535,24 @@ export function Notifications({
                   <ItemLink key={o.id} href={`/ordens/${o.id}/editar`} onClose={() => setOpen(false)}>
                     <span className="font-medium text-slate-800">{formatNumeroOS(o.numero)}</span>{" "}
                     <span className="text-slate-500">{o.clientes?.nome || ""}</span>
-                    <span className="block text-xs text-rose-600">Nova data na OS</span>
+                  </ItemLink>
+                ))}
+              </Secao>
+            )}
+
+            {verTodasOs && prefs.despesa_campo && (
+              <Secao
+                titulo="Despesas de campo"
+                icon={<Receipt className="h-4 w-4 text-violet-500" />}
+                vazio={despesasCampo.length === 0}
+                count={despesasCampo.length}
+              >
+                {despesasCampo.map((d) => (
+                  <ItemLink key={d.id} href="/financeiro?origem=campo" onClose={() => setOpen(false)}>
+                    <span className="text-slate-700">{d.descricao}</span>
+                    <span className="block text-xs text-violet-600">
+                      {d.tecnico} · {formatCurrency(d.valor)}
+                    </span>
                   </ItemLink>
                 ))}
               </Secao>
@@ -288,36 +572,75 @@ export function Notifications({
                 >
                   <span className="font-medium text-slate-800">{formatHora(a.hora_inicio) || "—"}</span>{" "}
                   <span className="text-slate-500">{a.titulo}</span>
-                  {!ehTecnico && a.tecnico && (
-                    <span className="block text-xs text-slate-400">{a.tecnico}</span>
-                  )}
-                  {a.status === "em_atendimento" && (
-                    <span className="block text-xs text-blue-600">Em atendimento</span>
-                  )}
                 </ItemLink>
               ))}
             </Secao>
 
-            {verFinanceiro && (
-              <Secao
-                titulo="Contas a receber"
-                icon={<DollarSign className="h-4 w-4 text-amber-500" />}
-                vazio={contas.length === 0}
-                count={contas.length}
-              >
-                {contas.map((c) => {
-                  const vencido = c.data_vencimento < hoje;
-                  return (
-                    <ItemLink key={c.id} href="/financeiro?vencidos=1" onClose={() => setOpen(false)}>
-                      <span className="text-slate-700">{c.descricao}</span>
-                      <span className={`block text-xs ${vencido ? "font-medium text-red-600" : "text-amber-600"}`}>
-                        {formatCurrency(saldoEmAberto(c))} • {vencido ? "Vencido" : "Vence"} {formatDate(c.data_vencimento)}
-                      </span>
-                    </ItemLink>
-                  );
-                })}
+            {verFinanceiro && prefs.financeiro && (
+              <>
+                <Secao
+                  titulo="Contas a receber"
+                  icon={<DollarSign className="h-4 w-4 text-emerald-500" />}
+                  vazio={contasReceber.length === 0}
+                  count={contasReceber.length}
+                >
+                  {contasReceber.map((c) => {
+                    const vencido = c.data_vencimento < hoje;
+                    return (
+                      <ItemLink key={c.id} href="/financeiro?vencidos=1" onClose={() => setOpen(false)}>
+                        <span className="text-slate-700">{c.descricao}</span>
+                        <span className={`block text-xs ${vencido ? "font-medium text-red-600" : "text-amber-600"}`}>
+                          {formatCurrency(saldoEmAberto(c))} • {vencido ? "Vencido" : "Vence"}{" "}
+                          {formatDate(c.data_vencimento)}
+                        </span>
+                      </ItemLink>
+                    );
+                  })}
+                </Secao>
+                <Secao
+                  titulo="Contas a pagar"
+                  icon={<DollarSign className="h-4 w-4 text-red-500" />}
+                  vazio={contasPagar.length === 0}
+                  count={contasPagar.length}
+                >
+                  {contasPagar.map((c) => {
+                    const vencido = c.data_vencimento < hoje;
+                    return (
+                      <ItemLink key={c.id} href="/financeiro?vencidos=1" onClose={() => setOpen(false)}>
+                        <span className="text-slate-700">{c.descricao}</span>
+                        <span className={`block text-xs ${vencido ? "font-medium text-red-600" : "text-amber-600"}`}>
+                          {formatCurrency(saldoEmAberto(c))} • {vencido ? "Vencido" : "Vence"}{" "}
+                          {formatDate(c.data_vencimento)}
+                        </span>
+                      </ItemLink>
+                    );
+                  })}
+                </Secao>
+              </>
+            )}
+
+            {metaAlerta && (
+              <Secao titulo="Meta de faturamento" icon={<Target className="h-4 w-4 text-amber-500" />} count={1}>
+                <ItemLink href="/dashboard" onClose={() => setOpen(false)}>
+                  <span className="text-slate-700">
+                    Realizado {formatCurrency(metaAlerta.realizado)} de {formatCurrency(metaAlerta.meta)}
+                  </span>
+                  <span className="block text-xs text-amber-600">
+                    Abaixo de {META_ALERTA_PERCENTUAL}% da meta do mês
+                  </span>
+                </ItemLink>
               </Secao>
             )}
+          </div>
+
+          <div className="border-t border-slate-100 px-3 py-2">
+            <Link
+              href="/configuracoes/alertas"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-600"
+            >
+              <Settings className="h-3.5 w-3.5" /> Configurar alertas
+            </Link>
           </div>
         </div>
       )}
@@ -350,21 +673,24 @@ function Secao({
 }: {
   titulo: string;
   icon: React.ReactNode;
-  vazio: boolean;
+  vazio?: boolean;
   count?: number;
   children: React.ReactNode;
 }) {
+  if (vazio === true) {
+    return null;
+  }
   return (
     <div className="border-b border-slate-50 px-3 py-2 last:border-0">
       <p className="mb-1 flex items-center justify-between gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
         <span className="flex items-center gap-1.5">
           {icon} {titulo}
         </span>
-        {!vazio && count != null && count > 0 && (
+        {count != null && count > 0 && (
           <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{count}</span>
         )}
       </p>
-      {vazio ? <p className="px-2 py-1 text-xs text-slate-300">Nada por aqui.</p> : <div className="space-y-0.5">{children}</div>}
+      <div className="space-y-0.5">{children}</div>
     </div>
   );
 }

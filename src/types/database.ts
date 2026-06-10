@@ -278,6 +278,47 @@ export type MetaFaturamento = {
   updated_at: string;
 };
 
+export type TipoNotificacaoDb =
+  | "os_nova"
+  | "os_aprovada"
+  | "os_status"
+  | "cliente_ausente"
+  | "despesa_campo"
+  | "financeiro"
+  | "oficina_parada"
+  | "meta_faturamento"
+  | "sistema";
+
+export type Notificacao = {
+  id: string;
+  user_id: string;
+  tipo: TipoNotificacaoDb;
+  titulo: string;
+  mensagem: string;
+  url: string | null;
+  prioridade: "baixa" | "normal" | "alta" | "urgente";
+  lida: boolean;
+  lida_em: string | null;
+  ref_tipo: string | null;
+  ref_id: string | null;
+  created_at: string;
+};
+
+export type PreferenciasAlertas = {
+  user_id: string;
+  push_ativo: boolean;
+  os_nova: boolean;
+  os_aprovada: boolean;
+  cliente_ausente: boolean;
+  despesa_campo: boolean;
+  financeiro: boolean;
+  oficina_parada: boolean;
+  meta_faturamento: boolean;
+  email_resumo: boolean;
+  dias_oficina_parada: number;
+  updated_at: string;
+};
+
 type Row<T> = T;
 type Insert<T> = Partial<T>;
 type Update<T> = Partial<T>;
@@ -308,6 +349,8 @@ export type Database = {
       os_anexos: TableDef<OsAnexo>;
       despesas_recorrentes: TableDef<DespesaRecorrente>;
       metas_faturamento: TableDef<MetaFaturamento>;
+      notificacoes: TableDef<Notificacao>;
+      preferencias_alertas: TableDef<PreferenciasAlertas>;
     };
     Views: {
       vw_dre: {

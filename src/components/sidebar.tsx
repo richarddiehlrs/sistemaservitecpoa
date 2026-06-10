@@ -20,6 +20,7 @@ import {
   MapPin,
   LayoutGrid,
   QrCode,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { temPermissao, PAPEL_LABEL, type Papel, type Permissao } from "@/lib/permissoes";
@@ -46,6 +47,7 @@ const GRUPOS: { titulo: string; itens: NavItem[] }[] = [
       { href: "/agenda", label: "Agenda", icon: CalendarDays, perm: "agenda" },
       { href: "/ordens", label: "Ordens de Serviço", icon: Wrench, perm: "ordens" },
       { href: "/clientes", label: "Clientes", icon: Users, perm: "clientes" },
+      { href: "/configuracoes/alertas", label: "Alertas", icon: Bell },
     ],
   },
   {
@@ -108,7 +110,7 @@ export function Sidebar({
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
         {GRUPOS.map((grupo) => {
           const itens = grupo.itens.filter((i) =>
-            i.perms ? i.perms.some((p) => temPermissao(papel, p)) : i.perm ? temPermissao(papel, i.perm) : false
+            i.perms ? i.perms.some((p) => temPermissao(papel, p)) : i.perm ? temPermissao(papel, i.perm) : true
           );
           if (itens.length === 0) return null;
           return (

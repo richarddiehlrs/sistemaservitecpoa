@@ -9,6 +9,14 @@ export const STATUS_AGENDA_PENDENTE = ["agendado", "confirmado", "em_atendimento
 /** Aviso de vencimento financeiro (dias à frente). */
 export const DIAS_AVISO_FINANCEIRO = 3;
 
+/** OS de oficina parada em análise ou aguardando peça (dias). */
+export const DIAS_OFICINA_PARADA_PADRAO = 2;
+
+export const STATUS_OFICINA_PARADA = ["em_analise", "aguardando_peca"] as const;
+
+/** Meta de faturamento: alerta se realizado < X% da meta no mês. */
+export const META_ALERTA_PERCENTUAL = 70;
+
 export function hojeYmd(): string {
   return new Date().toISOString().slice(0, 10);
 }
