@@ -2,10 +2,12 @@ import Link from "next/link";
 import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth-guard";
-import { nomeTecnico } from "@/lib/permissoes";
+import { nomeTecnico, temPermissao } from "@/lib/permissoes";
 import { PageHeader, EmptyState, StatusBadge } from "@/components/ui";
 import { ExportCsv } from "@/components/export-csv";
+import { ExcluirOrdemButton } from "@/components/excluir-ordem-button";
 import { STATUS_OS_LABEL, formatCurrency, formatDate, formatNumeroOS } from "@/lib/format";
+import { excluirOrdem } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,7 @@ export default async function OrdensPage({
   const { status, q, page } = await searchParams;
   const pagina = Math.max(1, parseInt(page || "1", 10) || 1);
   const profile = await requireProfile();
+  const podeExcluirOs = temPermissao(profile.papel, "ordens_excluir");
   const supabase = await createClient();
 
   let query = supabase
@@ -133,6 +136,7 @@ export default async function OrdensPage({
                   <th>Abertura</th>
                   <th>Status</th>
                   <th className="text-right">Total</th>
+                  {podeExcluirOs && <th className="w-10" />}
                 </tr>
               </thead>
               <tbody>
@@ -149,6 +153,11 @@ export default async function OrdensPage({
                     <td>{formatDate(os.data_abertura)}</td>
                     <td><StatusBadge status={os.status} /></td>
                     <td className="text-right font-medium">{formatCurrency(os.valor_total)}</td>
+                    {podeExcluirOs && (
+                      <td className="text-right">
+                        <ExcluirOrdemButton action={excluirOrdem.bind(null, os.id)} />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
