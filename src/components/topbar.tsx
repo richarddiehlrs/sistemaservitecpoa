@@ -1,0 +1,40 @@
+"use client";
+
+import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { GlobalSearch } from "./global-search";
+import { Notifications } from "./notifications";
+
+export function Topbar({
+  collapsed,
+  onToggleSidebar,
+  onOpenMobile,
+}: {
+  collapsed: boolean;
+  onToggleSidebar: () => void;
+  onOpenMobile: () => void;
+}) {
+  return (
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white/80 px-3 backdrop-blur sm:px-5">
+      <button
+        onClick={onOpenMobile}
+        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
+        title="Menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+      <button
+        onClick={onToggleSidebar}
+        className="hidden rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:inline-flex"
+        title={collapsed ? "Expandir menu" : "Recolher menu"}
+      >
+        {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+      </button>
+
+      <GlobalSearch />
+
+      <div className="ml-auto flex items-center gap-1">
+        <Notifications />
+      </div>
+    </header>
+  );
+}

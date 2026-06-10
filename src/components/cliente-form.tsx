@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Loader2, Search } from "lucide-react";
 import type { Cliente } from "@/types/database";
 import { buscarCep } from "@/lib/cep";
-import { formatCep, formatCpfCnpj, formatTelefone } from "@/lib/format";
+import { formatCep, formatCpfCnpj, formatTelefone, maskCpfCnpj, maskTelefone, maskCep, onlyDigits } from "@/lib/format";
+import { validarCpfCnpj } from "@/lib/validators";
 
 type Props = {
   cliente?: Cliente;
@@ -22,6 +23,12 @@ export function ClienteForm({ cliente, action }: Props) {
   const [pending, startTransition] = useTransition();
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [cepErro, setCepErro] = useState<string | null>(null);
+
+  const [doc, setDoc] = useState(cliente?.cpf_cnpj ? formatCpfCnpj(cliente.cpf_cnpj) : "");
+  const [tel, setTel] = useState(cliente?.telefone ? formatTelefone(cliente.telefone) : "");
+  const [tel2, setTel2] = useState(cliente?.telefone2 ? formatTelefone(cliente.telefone2) : "");
+  const docDigits = onlyDigits(doc);
+  const docInvalido = docDigits.length > 0 && (docDigits.length === 11 || docDigits.length === 14) && !validarCpfCnpj(doc);
 
   const [endereco, setEndereco] = useState({
     cep: cliente?.cep ? formatCep(cliente.cep) : "",
@@ -82,10 +89,13 @@ export function ClienteForm({ cliente, action }: Props) {
             <label className="label">CPF / CNPJ</label>
             <input
               name="cpf_cnpj"
-              defaultValue={cliente?.cpf_cnpj ? formatCpfCnpj(cliente.cpf_cnpj) : ""}
-              className="input"
+              value={doc}
+              onChange={(e) => setDoc(maskCpfCnpj(e.target.value))}
+              className={`input ${docInvalido ? "border-red-400 focus:border-red-500 focus:ring-red-200" : ""}`}
               placeholder="000.000.000-00"
+              inputMode="numeric"
             />
+            {docInvalido && <p className="mt-1 text-xs text-red-600">CPF/CNPJ inválido. Confira os números.</p>}
           </div>
           <div className="sm:col-span-3">
             <label className="label">RG / Inscrição estadual</label>
@@ -96,17 +106,22 @@ export function ClienteForm({ cliente, action }: Props) {
             <label className="label">Telefone / WhatsApp</label>
             <input
               name="telefone"
-              defaultValue={cliente?.telefone ? formatTelefone(cliente.telefone) : ""}
+              value={tel}
+              onChange={(e) => setTel(maskTelefone(e.target.value))}
               className="input"
               placeholder="(51) 99999-9999"
+              inputMode="numeric"
             />
           </div>
           <div className="sm:col-span-3">
             <label className="label">Telefone 2</label>
             <input
               name="telefone2"
-              defaultValue={cliente?.telefone2 ? formatTelefone(cliente.telefone2) : ""}
+              value={tel2}
+              onChange={(e) => setTel2(maskTelefone(e.target.value))}
               className="input"
+              placeholder="(51) 3000-0000"
+              inputMode="numeric"
             />
           </div>
 
@@ -129,10 +144,11 @@ export function ClienteForm({ cliente, action }: Props) {
               <input
                 name="cep"
                 value={endereco.cep}
-                onChange={(e) => setEndereco({ ...endereco, cep: e.target.value })}
+                onChange={(e) => setEndereco({ ...endereco, cep: maskCep(e.target.value) })}
                 onBlur={() => endereco.cep && handleBuscarCep()}
                 className="input"
                 placeholder="00000-000"
+                inputMode="numeric"
               />
               <button
                 type="button"

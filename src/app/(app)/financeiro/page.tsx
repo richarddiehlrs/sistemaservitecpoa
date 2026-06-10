@@ -2,6 +2,7 @@ import { Check, X, TrendingUp, TrendingDown, Wallet, Clock } from "lucide-react"
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard, EmptyState } from "@/components/ui";
 import { LancamentoForm } from "@/components/lancamento-form";
+import { ConfirmButton } from "@/components/confirm-button";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   criarLancamento,
@@ -137,11 +138,15 @@ export default async function FinanceiroPage({
                         </form>
                       )}
                       {l.status !== "cancelado" && (
-                        <form action={cancelarLancamento.bind(null, l.id)}>
-                          <button className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Cancelar">
-                            <X className="h-4 w-4" />
-                          </button>
-                        </form>
+                        <ConfirmButton
+                          action={cancelarLancamento.bind(null, l.id)}
+                          className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          title="Cancelar lançamento"
+                          message="Deseja realmente cancelar este lançamento financeiro?"
+                          confirmLabel="Cancelar lançamento"
+                        >
+                          <X className="h-4 w-4" />
+                        </ConfirmButton>
                       )}
                     </div>
                   </td>

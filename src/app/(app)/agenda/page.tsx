@@ -11,6 +11,7 @@ import {
   formatTelefone,
 } from "@/lib/format";
 import { TURNOS } from "@/lib/turnos";
+import { ConfirmButton } from "@/components/confirm-button";
 import { criarAgendamento, alterarStatusAgendamento, excluirAgendamento } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -168,11 +169,15 @@ function CardAgendamento({ a }: { a: any }) {
               <Check className="h-3 w-3" />
             </button>
           </form>
-          <form action={excluirAgendamento.bind(null, a.id)}>
-            <button className="rounded bg-white/70 p-1 text-red-500 hover:bg-white" title="Excluir">
-              <X className="h-3 w-3" />
-            </button>
-          </form>
+          <ConfirmButton
+            action={excluirAgendamento.bind(null, a.id)}
+            className="rounded bg-white/70 p-1 text-red-500 hover:bg-white"
+            title="Excluir agendamento"
+            message="Deseja excluir este agendamento da agenda?"
+            confirmLabel="Excluir"
+          >
+            <X className="h-3 w-3" />
+          </ConfirmButton>
         </div>
       )}
     </div>
