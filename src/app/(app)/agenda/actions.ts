@@ -82,16 +82,7 @@ export async function criarAgendamento(formData: FormData) {
   });
   if (error) throw new Error(error.message);
 
-  if (osId) {
-    await supabase
-      .from("ordens_servico")
-      .update({ tecnico_id, tecnico, data_previsao: str(formData.get("data")), turno: (turno as never) })
-      .eq("id", osId);
-  }
-
   revalidatePath("/agenda");
-  revalidatePath("/ordens");
-  if (osId) revalidatePath(`/ordens/${osId}`);
 }
 
 export async function alterarStatusAgendamento(id: string, status: string) {

@@ -539,33 +539,34 @@ export function OrdemForm({
         </div>
       </div>
 
-      {/* ====================== AGENDAMENTO ====================== */}
-      <div className="card p-5">
-        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Agendamento da visita
+      {/* ====================== AGENDAMENTO (automático na agenda) ====================== */}
+      <div className="card border-brand-100 bg-brand-50/30 p-5">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Visita na agenda do técnico
         </h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <p className="mb-4 text-xs text-slate-500">
+          Ao salvar a OS, a visita entra automaticamente na agenda do técnico selecionado.
+          {modoEdicao && " Alterar data, turno ou técnico atualiza a agenda."}
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="label">Data da visita</label>
-            <input type="date" name="data_previsao" className="input"
-              defaultValue={ordem?.data_previsao || new Date().toISOString().slice(0, 10)} />
+            <label className="label">Data da visita *</label>
+            <input
+              type="date"
+              name="data_previsao"
+              className="input"
+              required
+              defaultValue={ordem?.data_previsao || new Date().toISOString().slice(0, 10)}
+            />
           </div>
           <div>
-            <label className="label">Turno</label>
-            <select name="turno" className="input" defaultValue={ordem?.turno || "manha"}>
+            <label className="label">Turno *</label>
+            <select name="turno" className="input" defaultValue={ordem?.turno || "manha"} required>
               <option value="manha">Manhã (09:00–12:00)</option>
               <option value="tarde">Tarde (13:00–17:30)</option>
               <option value="dia">Dia inteiro</option>
             </select>
           </div>
-          {!modoEdicao && (
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
-                <input type="checkbox" name="agendar" defaultChecked />
-                Criar na agenda automaticamente
-              </label>
-            </div>
-          )}
         </div>
       </div>
 

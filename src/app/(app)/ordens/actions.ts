@@ -7,7 +7,7 @@ import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
-import { horarioTurno } from "@/lib/turnos";
+import { sincronizarAgendamentoOs, sincronizarAgendaStatusOs } from "@/lib/agenda-os";
 import type { StatusOS } from "@/types/database";
 
 type ItemInput = {
@@ -134,49 +134,6 @@ async function resolverEquipamento(
   return data!.id;
 }
 
-// Cria automaticamente o agendamento da visita na agenda (turno).
-async function criarAgendamentoVisita(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  opts: {
-    osId: string;
-    clienteId: string;
-    numero: number;
-    data: string;
-    turno: string;
-    tecnico: string | null;
-    tecnico_id: string | null;
-  }
-) {
-  const { data: cli } = await supabase
-    .from("clientes")
-    .select("nome, logradouro, numero, complemento, bairro, cidade, uf")
-    .eq("id", opts.clienteId)
-    .single();
-
-  const endereco = cli
-    ? [cli.logradouro, cli.numero, cli.complemento, cli.bairro, cli.cidade && `${cli.cidade}/${cli.uf ?? ""}`]
-        .filter(Boolean)
-        .join(", ")
-    : null;
-
-  const { inicio, fim } = horarioTurno(opts.turno);
-
-  await supabase.from("agendamentos").insert({
-    os_id: opts.osId,
-    cliente_id: opts.clienteId,
-    titulo: `Visita OS-${String(opts.numero).padStart(5, "0")}${cli?.nome ? ` - ${cli.nome}` : ""}`,
-    tipo: "visita",
-    turno: (opts.turno as never) || null,
-    data: opts.data,
-    hora_inicio: inicio,
-    hora_fim: fim,
-    tecnico: opts.tecnico,
-    tecnico_id: opts.tecnico_id,
-    endereco,
-    status: "agendado",
-  });
-}
-
 export async function criarOrdem(formData: FormData) {
   const profile = await requirePermissao("ordens_criar");
   const supabase = await createClient();
@@ -195,6 +152,8 @@ export async function criarOrdem(formData: FormData) {
   const turno = str(formData.get("turno"));
   const dataVisita = str(formData.get("data_previsao"));
   const { tecnico_id, tecnico } = await resolverTecnico(supabase, formData, profile);
+
+  if (!dataVisita) throw new Error("Informe a data da visita — ela entra automaticamente na agenda do técnico.");
 
   const { data: os, error } = await supabase
     .from("ordens_servico")
@@ -248,21 +207,19 @@ export async function criarOrdem(formData: FormData) {
     observacao: "Ordem de serviço aberta",
   });
 
-  // Agendamento automático da visita (se marcado e com data)
-  if (formData.get("agendar") === "on" && dataVisita) {
-    await criarAgendamentoVisita(supabase, {
-      osId: os!.id,
-      clienteId,
-      numero: os!.numero,
-      data: dataVisita,
-      turno: turno || "dia",
-      tecnico,
-      tecnico_id,
-    });
-  }
+  await sincronizarAgendamentoOs(supabase, {
+    osId: os!.id,
+    clienteId,
+    numero: os!.numero,
+    data: dataVisita,
+    turno: turno || "dia",
+    tecnico,
+    tecnico_id,
+  });
 
   revalidatePath("/ordens");
   revalidatePath("/agenda");
+  revalidatePath("/campo");
   redirect(`/ordens/${os!.id}`);
 }
 
@@ -277,6 +234,16 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   const acrescimo = num(formData.get("acrescimo"));
   const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
   const { tecnico_id, tecnico } = await resolverTecnico(supabase, formData, profile);
+  const dataVisita = str(formData.get("data_previsao"));
+  const turno = str(formData.get("turno"));
+
+  if (!dataVisita) throw new Error("Informe a data da visita — ela entra automaticamente na agenda do técnico.");
+
+  const { data: osAtual } = await supabase
+    .from("ordens_servico")
+    .select("numero, cliente_id")
+    .eq("id", id)
+    .single();
 
   const { error } = await supabase
     .from("ordens_servico")
@@ -289,8 +256,8 @@ export async function atualizarOrdem(id: string, formData: FormData) {
       tecnico_id,
       tecnico,
       prioridade: (str(formData.get("prioridade")) as never) || "normal",
-      data_previsao: str(formData.get("data_previsao")),
-      turno: (str(formData.get("turno")) as never),
+      data_previsao: dataVisita,
+      turno: (turno as never),
       valor_visita: valorVisita,
       abater_visita: abaterVisita,
       desconto,
@@ -306,11 +273,17 @@ export async function atualizarOrdem(id: string, formData: FormData) {
 
   if (error) throw new Error(error.message);
 
-  await supabase
-    .from("agendamentos")
-    .update({ tecnico, tecnico_id })
-    .eq("os_id", id)
-    .in("status", ["agendado", "confirmado"]);
+  if (osAtual) {
+    await sincronizarAgendamentoOs(supabase, {
+      osId: id,
+      clienteId: osAtual.cliente_id,
+      numero: osAtual.numero,
+      data: dataVisita,
+      turno: turno || "dia",
+      tecnico,
+      tecnico_id,
+    });
+  }
 
   await supabase.from("os_itens").delete().eq("os_id", id);
   if (itens.length > 0) {
@@ -327,6 +300,8 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   }
 
   revalidatePath(`/ordens/${id}`);
+  revalidatePath("/agenda");
+  revalidatePath("/campo");
   redirect(`/ordens/${id}`);
 }
 
@@ -352,8 +327,12 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
     observacao: observacao || null,
   });
 
+  await sincronizarAgendaStatusOs(supabase, id, status);
+
   revalidatePath(`/ordens/${id}`);
   revalidatePath("/ordens");
+  revalidatePath("/agenda");
+  revalidatePath("/campo");
 }
 
 // Lança a OS no financeiro: receita (valor total) + custo (despesa) = lucro automático.
@@ -516,6 +495,8 @@ export async function registrarClienteAusente(id: string, formData: FormData) {
     status: "cliente_ausente",
     observacao: observacao || `Cliente ausente — registrado por ${nomeTecnico(profile)}`,
   });
+
+  await sincronizarAgendaStatusOs(supabase, id, "cliente_ausente");
 
   revalidatePath(`/ordens/${id}`);
   revalidatePath("/ordens");

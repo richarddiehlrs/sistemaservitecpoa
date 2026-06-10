@@ -328,19 +328,17 @@ export default async function OrdemDetalhePage({
             <OsAssinatura osId={id} assinaturaAtual={os.assinatura_cliente} />
           </div>
 
-          {/* Agenda vinculada */}
+          {/* Agenda vinculada (automática) */}
           <div className="card p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700">Agenda vinculada</h3>
-              <Link href="/agenda" className="text-xs text-brand-600 hover:underline">
-                {profile.papel !== "tecnico" ? "Agendar visita" : "Ver agenda"}
-              </Link>
+              <h3 className="text-sm font-semibold text-slate-700">Agenda do técnico</h3>
+              <Link href="/agenda" className="text-xs text-brand-600 hover:underline">Ver agenda completa</Link>
             </div>
             {(agendamentos || []).length === 0 ? (
               <p className="text-sm text-slate-400">
                 {profile.papel !== "tecnico"
-                  ? "Nenhuma visita agendada. Use Agenda → Novo agendamento e vincule esta OS."
-                  : "Nenhuma visita agendada para esta ordem."}
+                  ? "Salve a OS com data da visita e técnico — a agenda é criada automaticamente."
+                  : "Visita ainda não na agenda. Peça para atualizar data/técnico na OS."}
               </p>
             ) : (
               <ul className="space-y-2 text-sm">

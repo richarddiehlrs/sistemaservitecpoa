@@ -1,32 +1,16 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Check, X, MapPin, Clock, Phone, Sun, Sunset, Wrench } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Clock, Phone, Sun, Sunset, Wrench, CalendarCheck, UserCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { PageHeader } from "@/components/ui";
-import { AgendaForm } from "@/components/agenda-form";
+import { PageHeader, StatCard } from "@/components/ui";
 import { mapTecnicos } from "@/lib/tecnicos";
-import { STATUS_OS_ABERTAS } from "@/lib/os-status";
-import { formatNumeroOS } from "@/lib/format";
-import { CheckinButtons } from "@/components/checkin-buttons";
-import {
-  TIPO_AGENDAMENTO_LABEL,
-  TIPO_AGENDAMENTO_COLOR,
-  STATUS_AGENDAMENTO_LABEL,
-  formatHora,
-  formatTelefone,
-} from "@/lib/format";
+import { formatHora, formatNumeroOS, formatTelefone, STATUS_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_COLOR } from "@/lib/format";
 import { TURNOS } from "@/lib/turnos";
-import { ConfirmButton } from "@/components/confirm-button";
+import { CheckinButtons } from "@/components/checkin-buttons";
 import { TecnicosMapa, LinkMapaCheckin } from "@/components/tecnicos-mapa";
 import { requireProfile } from "@/lib/auth-guard";
 import { nomeTecnico, temPermissao } from "@/lib/permissoes";
-import {
-  criarAgendamento,
-  alterarStatusAgendamento,
-  excluirAgendamento,
-  checkinAgendamento,
-  checkoutAgendamento,
-} from "./actions";
+import { checkinAgendamento, checkoutAgendamento } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +29,7 @@ function addDias(d: Date, n: number) {
   x.setDate(x.getDate() + n);
   return x;
 }
-function turnoDe(a: any): "manha" | "tarde" {
+function turnoDe(a: { turno?: string | null; hora_inicio?: string | null }): "manha" | "tarde" {
   if (a.turno === "tarde") return "tarde";
   if (a.turno === "manha" || a.turno === "dia") return "manha";
   if (a.hora_inicio && a.hora_inicio >= "13:00") return "tarde";
@@ -69,16 +53,14 @@ export default async function AgendaPage({
   const supabase = await createClient();
   let queryAgenda = supabase
     .from("agendamentos")
-    .select("*, clientes(nome, telefone)")
+    .select("*, clientes(nome, telefone), ordens_servico(numero, status)")
     .gte("data", ymd(segunda))
     .lte("data", ymd(domingo))
     .order("hora_inicio", { ascending: true });
 
   if (profile.papel === "tecnico") {
     const nome = nomeTecnico(profile);
-    queryAgenda = queryAgenda.or(
-      `tecnico_id.eq.${profile.id},tecnico.ilike.%${nome}%,tecnico.is.null`
-    );
+    queryAgenda = queryAgenda.or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${nome}%`);
   } else if (filtroTecnico) {
     queryAgenda = queryAgenda.eq("tecnico_id", filtroTecnico);
   }
@@ -87,12 +69,7 @@ export default async function AgendaPage({
   const verGps = profile.papel !== "tecnico";
   const ehAdminOuAtendente = profile.papel === "admin" || profile.papel === "atendente";
 
-  const [
-    { data: agendamentos },
-    { data: posicoes },
-    { data: perfisTecnicos },
-    { data: osAbertas },
-  ] = await Promise.all([
+  const [{ data: agendamentos }, { data: posicoes }, { data: perfisTecnicos }] = await Promise.all([
     queryAgenda,
     verGps
       ? supabase
@@ -104,39 +81,18 @@ export default async function AgendaPage({
     ehAdminOuAtendente
       ? supabase.from("profiles").select("*").eq("papel", "tecnico").eq("ativo", true).order("nome")
       : Promise.resolve({ data: [] as never[] }),
-    ehAdminOuAtendente
-      ? supabase
-          .from("ordens_servico")
-          .select("id, numero, tecnico_id, tecnico, cliente_id, clientes(nome, logradouro, numero, bairro, cidade)")
-          .in("status", [...STATUS_OS_ABERTAS])
-          .order("data_abertura", { ascending: false })
-          .limit(50)
-      : Promise.resolve({ data: [] as never[] }),
   ]);
 
   const tecnicos = mapTecnicos(perfisTecnicos || []);
-  const osOpcoes = (osAbertas || []).map((o) => {
-    // @ts-expect-error relação
-    const c = o.clientes;
-    const endereco = c
-      ? [c.logradouro, c.numero, c.bairro, c.cidade].filter(Boolean).join(", ")
-      : "";
-    return {
-      id: o.id,
-      label: `${formatNumeroOS(o.numero)} — ${c?.nome || "Sem cliente"}`,
-      cliente_id: o.cliente_id,
-      tecnico_id: o.tecnico_id,
-      tecnico: o.tecnico,
-      endereco,
-    };
-  });
-
-  const podeCriar = temPermissao(profile.papel, "agenda_criar");
   const podeCheckin = temPermissao(profile.papel, "agenda_checkin");
 
   const semanaAnterior = ymd(addDias(segunda, -7));
   const proximaSemana = ymd(addDias(segunda, 7));
   const todos = agendamentos || [];
+
+  const pendentes = todos.filter((a) => ["agendado", "confirmado"].includes(a.status));
+  const emAtendimento = todos.filter((a) => a.status === "em_atendimento");
+  const realizados = todos.filter((a) => a.status === "realizado");
 
   const periodoLabel = `${segunda.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} a ${domingo.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}`;
 
@@ -144,22 +100,26 @@ export default async function AgendaPage({
     <div>
       <PageHeader
         title="Agenda de atendimentos"
-        subtitle={`Semana de ${periodoLabel} • Manhã ${TURNOS.manha.inicio}–${TURNOS.manha.fim} · Tarde ${TURNOS.tarde.inicio}–${TURNOS.tarde.fim}`}
+        subtitle={`Semana de ${periodoLabel} — visitas criadas automaticamente ao abrir a OS • Manhã ${TURNOS.manha.inicio}–${TURNOS.manha.fim} · Tarde ${TURNOS.tarde.inicio}–${TURNOS.tarde.fim}`}
         action={
-          podeCriar ? (
-            <AgendaForm
-              action={criarAgendamento}
-              dataPadrao={hojeStr}
-              tecnicos={tecnicos}
-              osOpcoes={osOpcoes}
-            />
+          ehAdminOuAtendente ? (
+            <Link href="/ordens/nova" className="btn-primary">
+              Nova OS (gera agenda)
+            </Link>
           ) : undefined
         }
       />
 
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard title="Pendentes" value={String(pendentes.length)} icon={<CalendarCheck className="h-5 w-5" />} tone="amber" />
+        <StatCard title="Em atendimento" value={String(emAtendimento.length)} tone="blue" />
+        <StatCard title="Realizados" value={String(realizados.length)} icon={<UserCheck className="h-5 w-5" />} tone="green" />
+        <StatCard title="Total na semana" value={String(todos.length)} />
+      </div>
+
       {ehAdminOuAtendente && tecnicos.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="text-sm text-slate-500">Filtrar por técnico:</span>
+          <span className="text-sm text-slate-500">Técnico:</span>
           <Link
             href={`/agenda?inicio=${ymd(segunda)}`}
             className={`badge ${!filtroTecnico ? "bg-brand-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
@@ -181,11 +141,11 @@ export default async function AgendaPage({
       {verGps && <TecnicosMapa posicoes={(posicoes || []) as never[]} />}
 
       <div className="mb-4 flex items-center gap-2">
-        <Link href={`/agenda?inicio=${semanaAnterior}`} className="btn-secondary">
+        <Link href={`/agenda?inicio=${semanaAnterior}${filtroTecnico ? `&tecnico=${filtroTecnico}` : ""}`} className="btn-secondary">
           <ChevronLeft className="h-4 w-4" /> Anterior
         </Link>
-        <Link href="/agenda" className="btn-secondary">Hoje</Link>
-        <Link href={`/agenda?inicio=${proximaSemana}`} className="btn-secondary">
+        <Link href={`/agenda${filtroTecnico ? `?tecnico=${filtroTecnico}` : ""}`} className="btn-secondary">Hoje</Link>
+        <Link href={`/agenda?inicio=${proximaSemana}${filtroTecnico ? `&tecnico=${filtroTecnico}` : ""}`} className="btn-secondary">
           Próxima <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
@@ -206,9 +166,9 @@ export default async function AgendaPage({
                 <p className="text-sm">{dia.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>
               </div>
 
-              <TurnoBloco titulo="Manhã" icone={<Sun className="h-3.5 w-3.5" />} itens={manha} podeCriar={podeCriar} podeCheckin={podeCheckin} />
+              <TurnoBloco titulo="Manhã" icone={<Sun className="h-3.5 w-3.5" />} itens={manha} podeCheckin={podeCheckin} />
               <div className="border-t border-slate-100" />
-              <TurnoBloco titulo="Tarde" icone={<Sunset className="h-3.5 w-3.5" />} itens={tarde} podeCriar={podeCriar} podeCheckin={podeCheckin} />
+              <TurnoBloco titulo="Tarde" icone={<Sunset className="h-3.5 w-3.5" />} itens={tarde} podeCheckin={podeCheckin} />
             </div>
           );
         })}
@@ -221,13 +181,11 @@ function TurnoBloco({
   titulo,
   icone,
   itens,
-  podeCriar,
   podeCheckin,
 }: {
   titulo: string;
   icone: ReactNode;
-  itens: any[];
-  podeCriar: boolean;
+  itens: Array<Record<string, unknown>>;
   podeCheckin: boolean;
 }) {
   return (
@@ -238,7 +196,7 @@ function TurnoBloco({
       <div className="space-y-2">
         {itens.length === 0 && <p className="px-1 py-1 text-center text-[11px] text-slate-300">—</p>}
         {itens.map((a) => (
-          <CardAgendamento key={a.id} a={a} podeCriar={podeCriar} podeCheckin={podeCheckin} />
+          <CardAgendamento key={a.id as string} a={a} podeCheckin={podeCheckin} />
         ))}
       </div>
     </div>
@@ -247,86 +205,82 @@ function TurnoBloco({
 
 function CardAgendamento({
   a,
-  podeCriar,
   podeCheckin,
 }: {
-  a: any;
-  podeCriar: boolean;
+  a: Record<string, unknown>;
   podeCheckin: boolean;
 }) {
-  const cli = a.clientes;
+  const cli = a.clientes as { nome?: string; telefone?: string } | null;
+  const os = a.ordens_servico as { numero?: number; status?: string } | null;
   const cancelado = a.status === "cancelado";
   const realizado = a.status === "realizado";
   const emAtendimento = a.status === "em_atendimento";
+  const pendente = a.status === "agendado" || a.status === "confirmado";
+  const vinculadoOs = Boolean(a.os_id);
+
   return (
-    <div className={`rounded-lg border-l-4 p-2 text-xs ${TIPO_AGENDAMENTO_COLOR[a.tipo] || ""} ${cancelado ? "opacity-50 line-through" : ""}`}>
-      <div className="flex items-center justify-between">
-        <span className="font-semibold">{TIPO_AGENDAMENTO_LABEL[a.tipo]}</span>
-        {(a.hora_inicio || a.hora_fim) && (
-          <span className="flex items-center gap-0.5 text-[10px]">
-            <Clock className="h-3 w-3" />
-            {formatHora(a.hora_inicio)}{a.hora_fim ? `-${formatHora(a.hora_fim)}` : ""}
-          </span>
-        )}
+    <div className={`rounded-lg border-l-4 p-2 text-xs ${TIPO_AGENDAMENTO_COLOR[a.tipo as string] || ""} ${cancelado ? "opacity-50" : ""}`}>
+      <div className="flex items-center justify-between gap-1">
+        <span className="font-semibold">{TIPO_AGENDAMENTO_LABEL[a.tipo as string] || String(a.tipo)}</span>
+        <span className={`badge text-[9px] ${
+          realizado ? "bg-green-100 text-green-700" :
+          emAtendimento ? "bg-blue-100 text-blue-700" :
+          pendente ? "bg-amber-100 text-amber-700" :
+          cancelado ? "bg-red-100 text-red-600" :
+          "bg-slate-100 text-slate-600"
+        }`}>
+          {STATUS_AGENDAMENTO_LABEL[a.status as string] || String(a.status)}
+        </span>
       </div>
-      <p className="mt-0.5 font-medium text-slate-800">{a.titulo}</p>
+
+      {os?.numero && (
+        <p className="mt-0.5 font-bold text-brand-700">{formatNumeroOS(os.numero)}</p>
+      )}
+      <p className="mt-0.5 font-medium text-slate-800">{String(a.titulo)}</p>
       {cli?.nome && <p className="text-slate-600">{cli.nome}</p>}
       {cli?.telefone && (
         <p className="flex items-center gap-0.5 text-slate-500">
           <Phone className="h-3 w-3" /> {formatTelefone(cli.telefone)}
         </p>
       )}
+      {(a.hora_inicio || a.hora_fim) && (
+        <p className="flex items-center gap-0.5 text-slate-500">
+          <Clock className="h-3 w-3" />
+          {formatHora(a.hora_inicio as string)}{a.hora_fim ? `–${formatHora(a.hora_fim as string)}` : ""}
+        </p>
+      )}
       {a.endereco && (
         <p className="flex items-start gap-0.5 text-slate-500">
-          <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {a.endereco}
+          <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {String(a.endereco)}
         </p>
       )}
-      {a.tecnico ? (
-        <p className="text-slate-400">Téc.: {a.tecnico}</p>
-      ) : (
-        <p className="font-medium text-amber-600">Sem técnico atribuído</p>
-      )}
-      {a.os_id && (
-        <Link href={`/ordens/${a.os_id}`} className="mt-1 flex items-center gap-0.5 font-medium text-brand-600 hover:underline">
-          <Wrench className="h-3 w-3" /> Ver ordem de serviço
-        </Link>
-      )}
-      {emAtendimento && <p className="mt-1 font-semibold text-brand-700">{STATUS_AGENDAMENTO_LABEL.em_atendimento}</p>}
-      {realizado && <p className="mt-1 font-semibold text-green-700">✓ Realizado</p>}
+      {a.tecnico && <p className="text-slate-400">Téc.: {String(a.tecnico)}</p>}
+
       {a.checkin_at && !realizado && (
         <p className="mt-0.5 text-[10px] text-green-600">
-          Check-in {new Date(a.checkin_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-          <LinkMapaCheckin lat={a.checkin_lat} lng={a.checkin_lng} />
+          Check-in {new Date(a.checkin_at as string).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+          <LinkMapaCheckin lat={a.checkin_lat as number | null} lng={a.checkin_lng as number | null} />
         </p>
+      )}
+
+      {a.os_id && (
+        <Link href={`/ordens/${a.os_id}`} className="mt-1 flex items-center gap-0.5 font-medium text-brand-600 hover:underline">
+          <Wrench className="h-3 w-3" /> Abrir ordem de serviço
+        </Link>
       )}
 
       {podeCheckin && !cancelado && !realizado && (
         <div className="mt-1">
           <CheckinButtons
-            agendamento={a}
-            checkinAction={checkinAgendamento.bind(null, a.id)}
-            checkoutAction={checkoutAgendamento.bind(null, a.id)}
+            agendamento={a as never}
+            checkinAction={checkinAgendamento.bind(null, a.id as string)}
+            checkoutAction={checkoutAgendamento.bind(null, a.id as string)}
           />
         </div>
       )}
 
-      {podeCriar && !cancelado && !realizado && (
-        <div className="mt-1 flex gap-1">
-          <form action={alterarStatusAgendamento.bind(null, a.id, "realizado")}>
-            <button className="rounded bg-white/70 p-1 text-green-600 hover:bg-white" title="Marcar realizado">
-              <Check className="h-3 w-3" />
-            </button>
-          </form>
-          <ConfirmButton
-            action={excluirAgendamento.bind(null, a.id)}
-            className="rounded bg-white/70 p-1 text-red-500 hover:bg-white"
-            title="Excluir agendamento"
-            message="Deseja excluir este agendamento da agenda?"
-            confirmLabel="Excluir"
-          >
-            <X className="h-3 w-3" />
-          </ConfirmButton>
-        </div>
+      {vinculadoOs && pendente && (
+        <p className="mt-1 text-[10px] text-slate-400">Gerado pela OS — edite data/técnico na ordem de serviço</p>
       )}
     </div>
   );
