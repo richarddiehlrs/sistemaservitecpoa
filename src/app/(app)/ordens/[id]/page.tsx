@@ -4,6 +4,7 @@ import { Pencil, Printer, DollarSign } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { OsStatusControl } from "@/components/os-status-control";
+import { OsShare } from "@/components/os-share";
 import {
   formatCurrency,
   formatDate,
@@ -183,6 +184,23 @@ export default async function OrdemDetalhePage({
               <StatusBadge status={os.status} />
             </div>
             <OsStatusControl statusAtual={os.status} action={statusAction} />
+          </div>
+
+          {/* Enviar ao cliente */}
+          <div className="card p-5">
+            <h3 className="mb-3 text-sm font-semibold text-slate-700">Enviar ao cliente</h3>
+            <OsShare
+              numero={os.numero}
+              status={os.status}
+              clienteNome={cliente?.nome}
+              clienteTelefone={cliente?.telefone}
+              clienteEmail={cliente?.email}
+              equipamento={equip ? `${equip.tipo} ${equip.marca ?? ""} ${equip.modelo ?? ""}`.trim() : null}
+              defeito={os.defeito_relatado}
+              valorTotal={os.valor_total}
+              garantiaDias={os.garantia_dias}
+              previsao={os.data_previsao}
+            />
           </div>
 
           {/* Financeiro */}

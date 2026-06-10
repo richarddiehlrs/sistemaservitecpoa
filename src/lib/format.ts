@@ -71,6 +71,36 @@ export const STATUS_OS_LABEL: Record<string, string> = {
   garantia: "Garantia",
 };
 
+export function formatHora(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.slice(0, 5);
+}
+
+export const TIPO_AGENDAMENTO_LABEL: Record<string, string> = {
+  visita: "Visita técnica",
+  coleta: "Coleta",
+  entrega: "Entrega",
+  retorno: "Retorno",
+  orcamento: "Orçamento",
+  outro: "Outro",
+};
+
+export const TIPO_AGENDAMENTO_COLOR: Record<string, string> = {
+  visita: "bg-brand-100 text-brand-700 border-brand-300",
+  coleta: "bg-purple-100 text-purple-700 border-purple-300",
+  entrega: "bg-emerald-100 text-emerald-700 border-emerald-300",
+  retorno: "bg-orange-100 text-orange-700 border-orange-300",
+  orcamento: "bg-amber-100 text-amber-700 border-amber-300",
+  outro: "bg-slate-100 text-slate-700 border-slate-300",
+};
+
+export const STATUS_AGENDAMENTO_LABEL: Record<string, string> = {
+  agendado: "Agendado",
+  confirmado: "Confirmado",
+  realizado: "Realizado",
+  cancelado: "Cancelado",
+};
+
 export const STATUS_OS_COLOR: Record<string, string> = {
   aberta: "bg-blue-100 text-blue-700",
   em_analise: "bg-indigo-100 text-indigo-700",

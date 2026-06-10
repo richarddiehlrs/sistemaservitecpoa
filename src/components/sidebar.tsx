@@ -8,16 +8,20 @@ import {
   Wrench,
   DollarSign,
   BarChart3,
+  CalendarDays,
+  PieChart,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/ordens", label: "Ordens de Serviço", icon: Wrench },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/financeiro", label: "Financeiro", icon: DollarSign },
-  { href: "/dre", label: "DRE / Relatórios", icon: BarChart3 },
+  { href: "/relatorios", label: "Relatórios", icon: PieChart },
+  { href: "/dre", label: "DRE", icon: BarChart3 },
 ];
 
 export function Sidebar({ userEmail }: { userEmail?: string | null }) {

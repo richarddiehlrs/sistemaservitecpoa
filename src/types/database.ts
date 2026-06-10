@@ -101,6 +101,31 @@ export type OsStatusHistorico = {
   created_at: string;
 };
 
+export type TipoAgendamento =
+  | "visita"
+  | "coleta"
+  | "entrega"
+  | "retorno"
+  | "orcamento"
+  | "outro";
+
+export type Agendamento = {
+  id: string;
+  os_id: string | null;
+  cliente_id: string | null;
+  titulo: string;
+  tipo: TipoAgendamento;
+  data: string;
+  hora_inicio: string | null;
+  hora_fim: string | null;
+  tecnico: string | null;
+  endereco: string | null;
+  status: "agendado" | "confirmado" | "realizado" | "cancelado";
+  observacoes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CategoriaFinanceira = {
   id: string;
   nome: string;
@@ -148,6 +173,7 @@ export type Database = {
       os_status_historico: TableDef<OsStatusHistorico>;
       categorias_financeiras: TableDef<CategoriaFinanceira>;
       lancamentos_financeiros: TableDef<LancamentoFinanceiro>;
+      agendamentos: TableDef<Agendamento>;
     };
     Views: {
       vw_dre: {
