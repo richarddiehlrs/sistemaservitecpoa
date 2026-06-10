@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits } from "@/lib/format";
+import { calcValorTotalCliente } from "@/lib/os-valores";
 import { horarioTurno } from "@/lib/turnos";
 import type { StatusOS } from "@/types/database";
 
@@ -44,8 +45,7 @@ function calcTotais(
     (s, i) => s + Number(i.quantidade) * Number(i.custo_unitario || 0),
     0
   );
-  let total = valorItens + acrescimo - desconto - (abaterVisita ? valorVisita : 0);
-  if (total < 0) total = 0;
+  const total = calcValorTotalCliente(valorItens, valorVisita, abaterVisita, desconto, acrescimo);
   return { valorItens, custoItens, total };
 }
 
@@ -332,10 +332,20 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
 
   const { data: os } = await supabase
     .from("ordens_servico")
-    .select("id, numero, cliente_id, valor_total, custo_total, forma_pagamento")
+    .select(
+      "id, numero, cliente_id, valor_itens, valor_visita, abater_visita, desconto, acrescimo, valor_total, custo_total, forma_pagamento"
+    )
     .eq("id", id)
     .single();
   if (!os) throw new Error("OS não encontrada.");
+
+  const valorReceita = calcValorTotalCliente(
+    Number(os.valor_itens),
+    Number(os.valor_visita),
+    os.abater_visita,
+    Number(os.desconto),
+    Number(os.acrescimo)
+  );
 
   const status = String(formData.get("status_pagamento") || "pendente");
   const dataVencimento = str(formData.get("data_vencimento"));
@@ -355,7 +365,7 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
       categoria_id: catReceita?.id ?? null,
       os_id: os.id,
       cliente_id: os.cliente_id,
-      valor: os.valor_total,
+      valor: valorReceita,
       data_competencia: hoje,
       data_vencimento: dataVencimento || hoje,
       data_pagamento: status === "pago" ? hoje : null,
@@ -363,6 +373,10 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
       forma_pagamento: formaPagamento,
     },
   ];
+
+  if (valorReceita !== Number(os.valor_total)) {
+    await supabase.from("ordens_servico").update({ valor_total: valorReceita }).eq("id", id);
+  }
 
   // Custo da OS -> despesa (gera o lucro líquido automaticamente no financeiro/DRE)
   if (Number(os.custo_total) > 0) {

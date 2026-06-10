@@ -18,6 +18,7 @@ import {
   formatNumeroOS,
   formatTelefone,
 } from "@/lib/format";
+import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 import { alterarStatusForm, lancarFinanceiro } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,15 @@ export default async function OrdemDetalhePage({
   const cliente = os.clientes;
   // @ts-expect-error relação embutida
   const equip = os.equipamentos;
+
+  const valorTotal = calcValorTotalCliente(
+    Number(os.valor_itens),
+    Number(os.valor_visita),
+    os.abater_visita,
+    Number(os.desconto),
+    Number(os.acrescimo)
+  );
+  const visitaLinha = linhaVisitaValor(Number(os.valor_visita), os.abater_visita);
 
   const statusAction = alterarStatusForm.bind(null, id);
   const financeiroAction = lancarFinanceiro.bind(null, id);
@@ -173,22 +183,24 @@ export default async function OrdemDetalhePage({
               <Linha titulo="Serviços + peças" valor={formatCurrency(os.valor_itens)} />
               {os.acrescimo > 0 && <Linha titulo="Acréscimo" valor={`+ ${formatCurrency(os.acrescimo)}`} />}
               {os.desconto > 0 && <Linha titulo="Desconto" valor={`- ${formatCurrency(os.desconto)}`} />}
-              <Linha
-                titulo={`Visita técnica${os.abater_visita ? " (abatida)" : ""}`}
-                valor={`${os.abater_visita ? "- " : ""}${formatCurrency(os.valor_visita)}`}
-              />
+              {visitaLinha.valor > 0 && (
+                <Linha
+                  titulo={`Visita técnica${os.abater_visita ? " (abatida)" : ""}`}
+                  valor={`${visitaLinha.prefixo}${formatCurrency(visitaLinha.valor)}`}
+                />
+              )}
               <div className="flex items-center justify-between border-t border-slate-200 pt-2">
                 <span className="text-base font-semibold">Total (cliente)</span>
                 <span className="text-xl font-bold text-brand-700">
-                  {formatCurrency(os.valor_total)}
+                  {formatCurrency(valorTotal)}
                 </span>
               </div>
               <div className="mt-2 space-y-1 rounded-lg bg-slate-50 p-3 text-xs">
                 <Linha titulo="Custo total (peças/serviços)" valor={formatCurrency(os.custo_total || 0)} />
                 <div className="flex items-center justify-between font-semibold">
                   <span className="text-slate-700">Lucro líquido</span>
-                  <span className={(os.valor_total - (os.custo_total || 0)) >= 0 ? "text-green-600" : "text-red-600"}>
-                    {formatCurrency(os.valor_total - (os.custo_total || 0))}
+                  <span className={(valorTotal - (os.custo_total || 0)) >= 0 ? "text-green-600" : "text-red-600"}>
+                    {formatCurrency(valorTotal - (os.custo_total || 0))}
                   </span>
                 </div>
               </div>
@@ -217,7 +229,7 @@ export default async function OrdemDetalhePage({
               clienteEmail={cliente?.email}
               equipamento={equip ? `${equip.tipo} ${equip.marca ?? ""} ${equip.modelo ?? ""}`.trim() : null}
               defeito={os.defeito_relatado}
-              valorTotal={os.valor_total}
+              valorTotal={valorTotal}
               garantiaDias={os.garantia_dias}
               previsao={os.data_previsao}
               msgTemplate={config.msg_whatsapp}
@@ -276,7 +288,7 @@ export default async function OrdemDetalhePage({
                 <li className="flex items-center justify-between border-t border-slate-200 px-3 pt-2 font-semibold">
                   <span>Lucro líquido</span>
                   <span className="text-green-700">
-                    {formatCurrency(os.valor_total - (os.custo_total || 0))}
+                    {formatCurrency(valorTotal - (os.custo_total || 0))}
                   </span>
                 </li>
               </ul>
@@ -288,7 +300,7 @@ export default async function OrdemDetalhePage({
                 </select>
                 <input type="date" name="data_vencimento" className="input" />
                 <button className="btn-primary w-full">
-                  Lançar receita {formatCurrency(os.valor_total)}
+                  Lançar receita {formatCurrency(valorTotal)}
                   {os.custo_total > 0 ? ` + custo ${formatCurrency(os.custo_total)}` : ""}
                 </button>
               </form>

@@ -6,6 +6,7 @@ import { Loader2, Plus, Search, Trash2, UserCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { buscarCep } from "@/lib/cep";
 import { formatCurrency, formatTelefone } from "@/lib/format";
+import { calcValorTotalCliente } from "@/lib/os-valores";
 import type { Equipamento, OrdemServico, OsItem, ServicoCatalogo } from "@/types/database";
 
 type ClienteLite = { id: string; nome: string; telefone: string | null };
@@ -102,10 +103,7 @@ export function OrdemForm({
     (s, i) => s + (Number(i.quantidade) || 0) * (Number(i.custo_unitario) || 0),
     0
   );
-  const totalGeral = Math.max(
-    0,
-    valorItens + acrescimo - desconto - (abaterVisita ? valorVisita : 0)
-  );
+  const totalGeral = calcValorTotalCliente(valorItens, valorVisita, abaterVisita, desconto, acrescimo);
   const lucro = totalGeral - custoItens;
 
   // Busca de clientes (debounce simples)
@@ -655,10 +653,10 @@ export function OrdemForm({
               </div>
             </div>
 
-            {abaterVisita && valorVisita > 0 && (
-              <div className="flex items-center justify-between text-xs text-amber-600">
-                <span>Visita abatida</span>
-                <span>- {formatCurrency(valorVisita)}</span>
+            {valorVisita > 0 && (
+              <div className={`flex items-center justify-between text-xs ${abaterVisita ? "text-amber-600" : "text-slate-600"}`}>
+                <span>{abaterVisita ? "Visita abatida" : "Visita cobrada no total"}</span>
+                <span>{abaterVisita ? "- " : "+ "}{formatCurrency(valorVisita)}</span>
               </div>
             )}
 

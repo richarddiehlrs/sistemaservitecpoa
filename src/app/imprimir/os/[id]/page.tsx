@@ -10,6 +10,7 @@ import {
   formatNumeroOS,
   formatTelefone,
 } from "@/lib/format";
+import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,15 @@ function ViaOS({
   publicUrl: string;
   via: string;
 }) {
+  const valorTotal = calcValorTotalCliente(
+    Number(os.valor_itens),
+    Number(os.valor_visita),
+    os.abater_visita,
+    Number(os.desconto),
+    Number(os.acrescimo)
+  );
+  const visitaLinha = linhaVisitaValor(Number(os.valor_visita), os.abater_visita);
+
   return (
     <div className="via-os" style={{ fontSize: 11, color: "#0f172a", lineHeight: 1.35 }}>
       {/* Cabeçalho */}
@@ -164,14 +174,16 @@ function ViaOS({
             <LinhaTotal titulo="Serviços + peças" valor={formatCurrency(os.valor_itens)} />
             {os.acrescimo > 0 && <LinhaTotal titulo="Acréscimo" valor={`+ ${formatCurrency(os.acrescimo)}`} />}
             {os.desconto > 0 && <LinhaTotal titulo="Desconto" valor={`- ${formatCurrency(os.desconto)}`} />}
-            <LinhaTotal
-              titulo={`Visita técnica${os.abater_visita ? " (abatida)" : ""}`}
-              valor={`${os.abater_visita ? "- " : ""}${formatCurrency(os.valor_visita)}`}
-            />
+            {visitaLinha.valor > 0 && (
+              <LinhaTotal
+                titulo={`Visita técnica${os.abater_visita ? " (abatida)" : ""}`}
+                valor={`${visitaLinha.prefixo}${formatCurrency(visitaLinha.valor)}`}
+              />
+            )}
             <tr>
               <td style={{ fontWeight: 700, borderTop: "1px solid #1d4ed8", paddingTop: 3 }}>TOTAL</td>
               <td style={{ fontWeight: 700, textAlign: "right", borderTop: "1px solid #1d4ed8", paddingTop: 3, color: "#1d4ed8" }}>
-                {formatCurrency(os.valor_total)}
+                {formatCurrency(valorTotal)}
               </td>
             </tr>
           </tbody>

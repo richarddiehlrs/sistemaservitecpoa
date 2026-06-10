@@ -9,6 +9,7 @@ import {
   formatNumeroOS,
   STATUS_OS_LABEL,
 } from "@/lib/format";
+import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,14 @@ export default async function PortalOsPage({
   const empresa = os.empresa || {};
   const itens: any[] = os.itens || [];
   const podeAprovar = !os.aprovado && os.status !== "cancelada";
+  const valorTotal = calcValorTotalCliente(
+    Number(os.valor_itens),
+    Number(os.valor_visita),
+    os.abater_visita,
+    Number(os.desconto),
+    Number(os.acrescimo)
+  );
+  const visitaLinha = linhaVisitaValor(Number(os.valor_visita), os.abater_visita);
 
   return (
     <div className="min-h-screen bg-slate-100 py-8">
@@ -112,13 +121,15 @@ export default async function PortalOsPage({
             <Linha titulo="Serviços + peças" valor={formatCurrency(os.valor_itens)} />
             {os.acrescimo > 0 && <Linha titulo="Acréscimo" valor={`+ ${formatCurrency(os.acrescimo)}`} />}
             {os.desconto > 0 && <Linha titulo="Desconto" valor={`- ${formatCurrency(os.desconto)}`} />}
-            <Linha
-              titulo={`Visita técnica${os.abater_visita ? " (abatida)" : ""}`}
-              valor={`${os.abater_visita ? "- " : ""}${formatCurrency(os.valor_visita)}`}
-            />
+            {visitaLinha.valor > 0 && (
+              <Linha
+                titulo={`Visita técnica${os.abater_visita ? " (abatida)" : ""}`}
+                valor={`${visitaLinha.prefixo}${formatCurrency(visitaLinha.valor)}`}
+              />
+            )}
             <div className="flex items-center justify-between border-t border-slate-200 pt-2">
               <span className="text-base font-semibold">Total</span>
-              <span className="text-xl font-bold text-brand-700">{formatCurrency(os.valor_total)}</span>
+              <span className="text-xl font-bold text-brand-700">{formatCurrency(valorTotal)}</span>
             </div>
           </div>
         </div>
