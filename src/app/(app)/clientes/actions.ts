@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth-guard";
 import { onlyDigits } from "@/lib/format";
 
 function parseCliente(formData: FormData) {
@@ -64,9 +65,23 @@ export async function atualizarCliente(id: string, formData: FormData) {
 }
 
 export async function excluirCliente(id: string) {
+  await requirePermissao("clientes_criar");
   const supabase = await createClient();
+
+  const { count } = await supabase
+    .from("ordens_servico")
+    .select("*", { count: "exact", head: true })
+    .eq("cliente_id", id);
+
+  if (count && count > 0) {
+    throw new Error(
+      `Este cliente possui ${count} ordem(ns) de serviço. Exclua as OS antes de remover o cliente.`
+    );
+  }
+
   const { error } = await supabase.from("clientes").delete().eq("id", id);
   if (error) throw new Error(error.message);
+
   revalidatePath("/clientes");
   redirect("/clientes");
 }

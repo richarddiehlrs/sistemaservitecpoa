@@ -15,6 +15,7 @@ import {
   BookText,
   Settings,
   UserCog,
+  Trash2,
   LogOut,
   MapPin,
 } from "lucide-react";
@@ -57,6 +58,7 @@ const GRUPOS: { titulo: string; itens: NavItem[] }[] = [
     titulo: "Administração",
     itens: [
       { href: "/catalogo", label: "Catálogo", icon: BookText, perm: "catalogo" },
+      { href: "/manutencao", label: "Manutenção", icon: Trash2, perm: "ordens_excluir" },
       { href: "/usuarios", label: "Usuários", icon: UserCog, perm: "usuarios" },
       { href: "/configuracoes", label: "Configurações", icon: Settings, perm: "configuracoes" },
     ],

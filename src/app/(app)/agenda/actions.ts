@@ -102,6 +102,8 @@ export async function excluirAgendamento(id: string) {
   const { error } = await supabase.from("agendamentos").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/agenda");
+  revalidatePath("/campo");
+  revalidatePath("/manutencao");
 }
 
 async function validarAgendamentoTecnico(

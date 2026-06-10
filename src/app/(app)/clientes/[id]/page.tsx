@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil, Plus, Phone, Mail, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { ClienteAcoes } from "@/components/cliente-acoes";
 import { PageHeader, StatusBadge } from "@/components/ui";
+import { excluirCliente } from "../actions";
 import {
   formatCpfCnpj,
   formatTelefone,
@@ -60,10 +62,16 @@ export default async function ClienteDetalhePage({
         title={cliente.nome}
         subtitle={cliente.tipo === "PF" ? "Pessoa Física" : "Pessoa Jurídica"}
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link href={`/clientes/${id}/editar`} className="btn-secondary">
               <Pencil className="h-4 w-4" /> Editar
             </Link>
+            <ClienteAcoes
+              clienteId={id}
+              excluirAction={excluirCliente.bind(null, id)}
+              compact={false}
+              somenteExcluir
+            />
             <Link href={`/ordens/nova?cliente=${id}`} className="btn-primary">
               <Plus className="h-4 w-4" /> Nova OS
             </Link>

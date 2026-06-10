@@ -2,8 +2,10 @@ import Link from "next/link";
 import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, EmptyState } from "@/components/ui";
+import { ClienteAcoes } from "@/components/cliente-acoes";
 import { ExportCsv } from "@/components/export-csv";
 import { formatCpfCnpj, formatTelefone } from "@/lib/format";
+import { excluirCliente } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +100,7 @@ export default async function ClientesPage({
                   <th>CPF / CNPJ</th>
                   <th>Telefone</th>
                   <th>Cidade</th>
+                  <th className="w-24 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -111,6 +114,9 @@ export default async function ClientesPage({
                     <td>{c.cpf_cnpj ? formatCpfCnpj(c.cpf_cnpj) : "-"}</td>
                     <td>{c.telefone ? formatTelefone(c.telefone) : "-"}</td>
                     <td>{c.cidade ? `${c.cidade}/${c.uf ?? ""}` : "-"}</td>
+                    <td>
+                      <ClienteAcoes clienteId={c.id} excluirAction={excluirCliente.bind(null, c.id)} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

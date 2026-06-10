@@ -7,10 +7,11 @@ import { mapTecnicos } from "@/lib/tecnicos";
 import { formatHora, formatNumeroOS, formatTelefone, STATUS_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_COLOR } from "@/lib/format";
 import { TURNOS } from "@/lib/turnos";
 import { CheckinButtons } from "@/components/checkin-buttons";
+import { ExcluirAgendamentoButton } from "@/components/excluir-agendamento-button";
 import { TecnicosMapa, LinkMapaCheckin } from "@/components/tecnicos-mapa";
 import { requireProfile } from "@/lib/auth-guard";
 import { nomeTecnico, temPermissao } from "@/lib/permissoes";
-import { checkinAgendamento, checkoutAgendamento } from "./actions";
+import { checkinAgendamento, checkoutAgendamento, excluirAgendamento } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -103,9 +104,14 @@ export default async function AgendaPage({
         subtitle={`Semana de ${periodoLabel} — visitas criadas automaticamente ao abrir a OS • Manhã ${TURNOS.manha.inicio}–${TURNOS.manha.fim} · Tarde ${TURNOS.tarde.inicio}–${TURNOS.tarde.fim}`}
         action={
           ehAdminOuAtendente ? (
-            <Link href="/ordens/nova" className="btn-primary">
-              Nova OS (gera agenda)
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/manutencao" className="btn-secondary">
+                Limpar órfãos
+              </Link>
+              <Link href="/ordens/nova" className="btn-primary">
+                Nova OS (gera agenda)
+              </Link>
+            </div>
           ) : undefined
         }
       />
@@ -166,9 +172,9 @@ export default async function AgendaPage({
                 <p className="text-sm">{dia.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>
               </div>
 
-              <TurnoBloco titulo="Manhã" icone={<Sun className="h-3.5 w-3.5" />} itens={manha} podeCheckin={podeCheckin} />
+              <TurnoBloco titulo="Manhã" icone={<Sun className="h-3.5 w-3.5" />} itens={manha} podeCheckin={podeCheckin} podeExcluir={ehAdminOuAtendente} />
               <div className="border-t border-slate-100" />
-              <TurnoBloco titulo="Tarde" icone={<Sunset className="h-3.5 w-3.5" />} itens={tarde} podeCheckin={podeCheckin} />
+              <TurnoBloco titulo="Tarde" icone={<Sunset className="h-3.5 w-3.5" />} itens={tarde} podeCheckin={podeCheckin} podeExcluir={ehAdminOuAtendente} />
             </div>
           );
         })}
@@ -182,11 +188,13 @@ function TurnoBloco({
   icone,
   itens,
   podeCheckin,
+  podeExcluir,
 }: {
   titulo: string;
   icone: ReactNode;
   itens: Array<Record<string, unknown>>;
   podeCheckin: boolean;
+  podeExcluir: boolean;
 }) {
   return (
     <div className="flex-1 p-2">
@@ -196,7 +204,7 @@ function TurnoBloco({
       <div className="space-y-2">
         {itens.length === 0 && <p className="px-1 py-1 text-center text-[11px] text-slate-300">—</p>}
         {itens.map((a) => (
-          <CardAgendamento key={a.id as string} a={a} podeCheckin={podeCheckin} />
+          <CardAgendamento key={a.id as string} a={a} podeCheckin={podeCheckin} podeExcluir={podeExcluir} />
         ))}
       </div>
     </div>
@@ -206,9 +214,11 @@ function TurnoBloco({
 function CardAgendamento({
   a,
   podeCheckin,
+  podeExcluir,
 }: {
   a: Record<string, unknown>;
   podeCheckin: boolean;
+  podeExcluir: boolean;
 }) {
   const cli = a.clientes as { nome?: string; telefone?: string } | null;
   const os = a.ordens_servico as { numero?: number; status?: string } | null;
@@ -281,6 +291,10 @@ function CardAgendamento({
 
       {vinculadoOs && pendente && (
         <p className="mt-1 text-[10px] text-slate-400">Gerado pela OS — edite data/técnico na ordem de serviço</p>
+      )}
+
+      {podeExcluir && (
+        <ExcluirAgendamentoButton action={excluirAgendamento.bind(null, a.id as string)} />
       )}
     </div>
   );

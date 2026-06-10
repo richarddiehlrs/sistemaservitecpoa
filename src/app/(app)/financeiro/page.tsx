@@ -95,6 +95,9 @@ export default async function FinanceiroPage({
             <Link href="/financeiro/recorrentes" className="btn-secondary">
               <CalendarCog className="h-4 w-4" /> Despesas fixas
             </Link>
+            <Link href="/manutencao" className="btn-secondary">
+              Limpar órfãos
+            </Link>
             <LancamentoForm categorias={categorias || []} action={criarLancamento} />
           </>
         }
