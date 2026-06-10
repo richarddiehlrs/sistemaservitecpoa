@@ -9,7 +9,9 @@ import { formatCurrency, formatTelefone } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import { TecnicoCargaTrabalho } from "@/components/tecnico-carga-trabalho";
 import type { TecnicoOpcao } from "@/lib/tecnicos";
-import type { Equipamento, OrdemServico, OsItem, ServicoCatalogo } from "@/types/database";
+import type { Equipamento, OrdemServico, OsItem, ServicoCatalogo, TipoAtendimento } from "@/types/database";
+import { TIPO_ATENDIMENTO_LABEL } from "@/lib/painel-atendimento";
+import { Home, Wrench } from "lucide-react";
 
 type ClienteLite = { id: string; nome: string; telefone: string | null };
 
@@ -33,6 +35,7 @@ type Props = {
   tecnicoIdPadrao?: string;
   tecnicoFixo?: boolean;
   tecnicos?: TecnicoOpcao[];
+  tipoInicial?: TipoAtendimento;
 };
 
 const UFS = [
@@ -52,6 +55,7 @@ export function OrdemForm({
   tecnicoIdPadrao,
   tecnicoFixo = false,
   tecnicos = [],
+  tipoInicial = "domicilio",
 }: Props) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -69,6 +73,10 @@ export function OrdemForm({
   }, [ordem, tecnicos, tecnicoIdPadrao]);
 
   const [tecnicoSelecionado, setTecnicoSelecionado] = useState(tecnicoIdInicial);
+  const [tipoAtendimento, setTipoAtendimento] = useState<TipoAtendimento>(
+    ordem?.tipo_atendimento || tipoInicial
+  );
+  const ehDomicilio = tipoAtendimento === "domicilio";
 
   // ---- Cliente ----
   const [modoCliente, setModoCliente] = useState<"existente" | "novo">(
@@ -221,6 +229,7 @@ export function OrdemForm({
       formData.set("equip_cor", novoEquip.cor);
     }
 
+    formData.set("tipo_atendimento", tipoAtendimento);
     formData.set("itens_json", JSON.stringify(itens));
     if (abaterVisita) formData.set("abater_visita", "on");
     else formData.delete("abater_visita");
@@ -232,6 +241,43 @@ export function OrdemForm({
 
   return (
     <form action={handleSubmit} className="space-y-6">
+      <input type="hidden" name="tipo_atendimento" value={tipoAtendimento} />
+
+      {/* ====================== TIPO DE ATENDIMENTO ====================== */}
+      <div className="card p-5">
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Tipo de atendimento
+        </h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setTipoAtendimento("domicilio")}
+            className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition ${
+              ehDomicilio ? "border-brand-500 bg-brand-50" : "border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            <Home className={`h-8 w-8 ${ehDomicilio ? "text-brand-600" : "text-slate-400"}`} />
+            <div>
+              <p className="font-semibold text-slate-900">{TIPO_ATENDIMENTO_LABEL.domicilio}</p>
+              <p className="text-xs text-slate-500">Visita no cliente — agenda e técnico obrigatórios</p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTipoAtendimento("oficina")}
+            className={`flex items-center gap-3 rounded-xl border-2 p-4 text-left transition ${
+              !ehDomicilio ? "border-slate-600 bg-slate-100" : "border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            <Wrench className={`h-8 w-8 ${!ehDomicilio ? "text-slate-700" : "text-slate-400"}`} />
+            <div>
+              <p className="font-semibold text-slate-900">{TIPO_ATENDIMENTO_LABEL.oficina}</p>
+              <p className="text-xs text-slate-500">Equipamento na bancada — aparece no painel da oficina</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
       {/* ====================== CLIENTE ====================== */}
       <div className="card p-5">
         <div className="mb-4 flex items-center justify-between">
@@ -539,36 +585,37 @@ export function OrdemForm({
         </div>
       </div>
 
-      {/* ====================== AGENDAMENTO (automático na agenda) ====================== */}
-      <div className="card border-brand-100 bg-brand-50/30 p-5">
-        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Visita na agenda do técnico
-        </h3>
-        <p className="mb-4 text-xs text-slate-500">
-          Ao salvar a OS, a visita entra automaticamente na agenda do técnico selecionado.
-          {modoEdicao && " Alterar data, turno ou técnico atualiza a agenda."}
-        </p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label">Data da visita *</label>
-            <input
-              type="date"
-              name="data_previsao"
-              className="input"
-              required
-              defaultValue={ordem?.data_previsao || new Date().toISOString().slice(0, 10)}
-            />
-          </div>
-          <div>
-            <label className="label">Turno *</label>
-            <select name="turno" className="input" defaultValue={ordem?.turno || "manha"} required>
-              <option value="manha">Manhã (09:00–12:00)</option>
-              <option value="tarde">Tarde (13:00–17:30)</option>
-              <option value="dia">Dia inteiro</option>
-            </select>
+      {ehDomicilio && (
+        <div className="card border-brand-100 bg-brand-50/30 p-5">
+          <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Visita na agenda do técnico
+          </h3>
+          <p className="mb-4 text-xs text-slate-500">
+            Ao salvar a OS, a visita entra automaticamente na agenda do técnico selecionado.
+            {modoEdicao && " Alterar data, turno ou técnico atualiza a agenda."}
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label">Data da visita *</label>
+              <input
+                type="date"
+                name="data_previsao"
+                className="input"
+                required={ehDomicilio}
+                defaultValue={ordem?.data_previsao || new Date().toISOString().slice(0, 10)}
+              />
+            </div>
+            <div>
+              <label className="label">Turno *</label>
+              <select name="turno" className="input" defaultValue={ordem?.turno || "manha"} required={ehDomicilio}>
+                <option value="manha">Manhã (09:00–12:00)</option>
+                <option value="tarde">Tarde (13:00–17:30)</option>
+                <option value="dia">Dia inteiro</option>
+              </select>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ====================== VALORES / FECHAMENTO ====================== */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -584,11 +631,13 @@ export function OrdemForm({
               </>
             ) : (
               <div className="sm:col-span-4">
-                <label className="label">Técnico responsável *</label>
+                <label className="label">
+                  {ehDomicilio ? "Técnico responsável *" : "Responsável na oficina (opcional)"}
+                </label>
                 <select
                   name="tecnico_id"
                   className="input"
-                  required
+                  required={ehDomicilio}
                   value={tecnicoSelecionado}
                   onChange={(e) => setTecnicoSelecionado(e.target.value)}
                 >
@@ -604,7 +653,7 @@ export function OrdemForm({
                     Nenhum técnico cadastrado. Crie em Usuários com papel Técnico.
                   </p>
                 )}
-                <TecnicoCargaTrabalho tecnicoId={tecnicoSelecionado} />
+                {ehDomicilio && <TecnicoCargaTrabalho tecnicoId={tecnicoSelecionado} />}
               </div>
             )}
             <div>
@@ -661,10 +710,10 @@ export function OrdemForm({
               <span className="font-medium">{formatCurrency(valorItens)}</span>
             </div>
 
-            <div>
+            <div className={ehDomicilio ? "" : "hidden"}>
               <label className="label">Visita técnica (R$)</label>
               <input type="number" name="valor_visita" min="0" step="0.01" className="input"
-                value={valorVisita} onChange={(e) => setValorVisita(Number(e.target.value))} />
+                value={ehDomicilio ? valorVisita : 0} onChange={(e) => setValorVisita(Number(e.target.value))} />
               <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                 <input type="checkbox" checked={abaterVisita}
                   onChange={(e) => setAbaterVisita(e.target.checked)} />

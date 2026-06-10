@@ -2,6 +2,8 @@
 // Para regenerar automaticamente:
 //   npx supabase gen types typescript --project-id SEU_ID > src/types/database.ts
 
+export type TipoAtendimento = "domicilio" | "oficina";
+
 export type StatusOS =
   | "aberta"
   | "em_analise"
@@ -60,6 +62,7 @@ export type OrdemServico = {
   cliente_id: string;
   equipamento_id: string | null;
   status: StatusOS;
+  tipo_atendimento: TipoAtendimento;
   defeito_relatado: string | null;
   diagnostico: string | null;
   servico_executado: string | null;

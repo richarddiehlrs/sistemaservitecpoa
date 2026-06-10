@@ -11,9 +11,10 @@ export const dynamic = "force-dynamic";
 export default async function NovaOrdemPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cliente?: string }>;
+  searchParams: Promise<{ cliente?: string; tipo?: string }>;
 }) {
-  const { cliente: clienteId } = await searchParams;
+  const { cliente: clienteId, tipo } = await searchParams;
+  const tipoInicial = tipo === "oficina" ? "oficina" as const : "domicilio" as const;
   const profile = await requirePermissao("ordens_criar");
   const supabase = await createClient();
   const ehTecnico = profile.papel === "tecnico";
@@ -59,6 +60,7 @@ export default async function NovaOrdemPage({
         tecnicoIdPadrao={ehTecnico ? profile.id : undefined}
         tecnicoFixo={ehTecnico}
         tecnicos={tecnicos}
+        tipoInicial={tipoInicial}
       />
     </div>
   );

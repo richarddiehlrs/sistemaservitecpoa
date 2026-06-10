@@ -10,7 +10,34 @@ import { calcValorTotalCliente } from "@/lib/os-valores";
 import { sincronizarAgendamentoOs, sincronizarAgendaStatusOs } from "@/lib/agenda-os";
 import { limparDadosVinculadosOs } from "@/lib/limpar-os";
 import { notificarTecnicoNovaOs } from "@/lib/push";
-import type { StatusOS } from "@/types/database";
+import type { StatusOS, TipoAtendimento } from "@/types/database";
+
+function lerTipoAtendimento(formData: FormData): TipoAtendimento {
+  const t = str(formData.get("tipo_atendimento"));
+  return t === "oficina" ? "oficina" : "domicilio";
+}
+
+async function resolverTecnicoParaOs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  formData: FormData,
+  profile: Awaited<ReturnType<typeof requirePermissao>>,
+  tipo: TipoAtendimento
+): Promise<{ tecnico_id: string | null; tecnico: string | null }> {
+  if (tipo === "oficina") {
+    const tecnico_id = str(formData.get("tecnico_id"));
+    if (!tecnico_id) return { tecnico_id: null, tecnico: null };
+    const { data: t } = await supabase
+      .from("profiles")
+      .select("id, nome, email, papel, ativo")
+      .eq("id", tecnico_id)
+      .single();
+    if (!t || t.papel !== "tecnico" || !t.ativo) {
+      throw new Error("Técnico inválido ou inativo.");
+    }
+    return { tecnico_id: t.id, tecnico: nomeTecnico(t) };
+  }
+  return resolverTecnico(supabase, formData, profile);
+}
 
 type ItemInput = {
   tipo: "servico" | "peca";
@@ -144,24 +171,28 @@ export async function criarOrdem(formData: FormData) {
   const equipamentoId = await resolverEquipamento(supabase, formData, clienteId);
 
   const itens = lerItens(formData);
-  const valorVisita = num(formData.get("valor_visita"));
-  const abaterVisita = formData.get("abater_visita") === "on";
+  const tipo = lerTipoAtendimento(formData);
+  const valorVisita = tipo === "domicilio" ? num(formData.get("valor_visita")) : 0;
+  const abaterVisita = tipo === "domicilio" && formData.get("abater_visita") === "on";
   const desconto = num(formData.get("desconto"));
   const acrescimo = num(formData.get("acrescimo"));
   const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
 
-  const status = (str(formData.get("status")) as StatusOS) || "aberta";
+  const status = (str(formData.get("status")) as StatusOS) || (tipo === "oficina" ? "em_analise" : "aberta");
   const turno = str(formData.get("turno"));
   const dataVisita = str(formData.get("data_previsao"));
-  const { tecnico_id, tecnico } = await resolverTecnico(supabase, formData, profile);
+  const { tecnico_id, tecnico } = await resolverTecnicoParaOs(supabase, formData, profile, tipo);
 
-  if (!dataVisita) throw new Error("Informe a data da visita — ela entra automaticamente na agenda do técnico.");
+  if (tipo === "domicilio" && !dataVisita) {
+    throw new Error("Informe a data da visita — ela entra automaticamente na agenda do técnico.");
+  }
 
   const { data: os, error } = await supabase
     .from("ordens_servico")
     .insert({
       cliente_id: clienteId,
       equipamento_id: equipamentoId,
+      tipo_atendimento: tipo,
       status,
       defeito_relatado: str(formData.get("defeito_relatado")),
       diagnostico: str(formData.get("diagnostico")),
@@ -171,8 +202,8 @@ export async function criarOrdem(formData: FormData) {
       tecnico_id,
       tecnico,
       prioridade: (str(formData.get("prioridade")) as never) || "normal",
-      data_previsao: dataVisita,
-      turno: (turno as never),
+      data_previsao: tipo === "domicilio" ? dataVisita : null,
+      turno: tipo === "domicilio" ? (turno as never) : null,
       valor_visita: valorVisita,
       abater_visita: abaterVisita,
       desconto,
@@ -209,17 +240,19 @@ export async function criarOrdem(formData: FormData) {
     observacao: "Ordem de serviço aberta",
   });
 
-  await sincronizarAgendamentoOs(supabase, {
-    osId: os!.id,
-    clienteId,
-    numero: os!.numero,
-    data: dataVisita,
-    turno: turno || "dia",
-    tecnico,
-    tecnico_id,
-  });
+  if (tipo === "domicilio" && dataVisita && tecnico_id) {
+    await sincronizarAgendamentoOs(supabase, {
+      osId: os!.id,
+      clienteId,
+      numero: os!.numero,
+      data: dataVisita,
+      turno: turno || "dia",
+      tecnico,
+      tecnico_id,
+    });
+  }
 
-  if (tecnico_id && profile.id !== tecnico_id) {
+  if (tipo === "domicilio" && tecnico_id && profile.id !== tecnico_id) {
     const { data: cli } = await supabase.from("clientes").select("nome").eq("id", clienteId).single();
     notificarTecnicoNovaOs({
       tecnicoId: tecnico_id,
@@ -233,6 +266,7 @@ export async function criarOrdem(formData: FormData) {
   revalidatePath("/ordens");
   revalidatePath("/agenda");
   revalidatePath("/campo");
+  revalidatePath("/painel");
   redirect(`/ordens/${os!.id}`);
 }
 
@@ -241,16 +275,19 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   const supabase = await createClient();
 
   const itens = lerItens(formData);
-  const valorVisita = num(formData.get("valor_visita"));
-  const abaterVisita = formData.get("abater_visita") === "on";
+  const tipo = lerTipoAtendimento(formData);
+  const valorVisita = tipo === "domicilio" ? num(formData.get("valor_visita")) : 0;
+  const abaterVisita = tipo === "domicilio" && formData.get("abater_visita") === "on";
   const desconto = num(formData.get("desconto"));
   const acrescimo = num(formData.get("acrescimo"));
   const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
-  const { tecnico_id, tecnico } = await resolverTecnico(supabase, formData, profile);
+  const { tecnico_id, tecnico } = await resolverTecnicoParaOs(supabase, formData, profile, tipo);
   const dataVisita = str(formData.get("data_previsao"));
   const turno = str(formData.get("turno"));
 
-  if (!dataVisita) throw new Error("Informe a data da visita — ela entra automaticamente na agenda do técnico.");
+  if (tipo === "domicilio" && !dataVisita) {
+    throw new Error("Informe a data da visita — ela entra automaticamente na agenda do técnico.");
+  }
 
   const { data: osAtual } = await supabase
     .from("ordens_servico")
@@ -261,6 +298,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   const { error } = await supabase
     .from("ordens_servico")
     .update({
+      tipo_atendimento: tipo,
       defeito_relatado: str(formData.get("defeito_relatado")),
       diagnostico: str(formData.get("diagnostico")),
       servico_executado: str(formData.get("servico_executado")),
@@ -269,8 +307,8 @@ export async function atualizarOrdem(id: string, formData: FormData) {
       tecnico_id,
       tecnico,
       prioridade: (str(formData.get("prioridade")) as never) || "normal",
-      data_previsao: dataVisita,
-      turno: (turno as never),
+      data_previsao: tipo === "domicilio" ? dataVisita : null,
+      turno: tipo === "domicilio" ? (turno as never) : null,
       valor_visita: valorVisita,
       abater_visita: abaterVisita,
       desconto,
@@ -287,17 +325,21 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   if (error) throw new Error(error.message);
 
   if (osAtual) {
-    await sincronizarAgendamentoOs(supabase, {
-      osId: id,
-      clienteId: osAtual.cliente_id,
-      numero: osAtual.numero,
-      data: dataVisita,
-      turno: turno || "dia",
-      tecnico,
-      tecnico_id,
-    });
+    if (tipo === "domicilio" && dataVisita && tecnico_id) {
+      await sincronizarAgendamentoOs(supabase, {
+        osId: id,
+        clienteId: osAtual.cliente_id,
+        numero: osAtual.numero,
+        data: dataVisita,
+        turno: turno || "dia",
+        tecnico,
+        tecnico_id,
+      });
+    } else if (tipo === "oficina") {
+      await supabase.from("agendamentos").delete().eq("os_id", id);
+    }
 
-    if (tecnico_id && tecnico_id !== osAtual.tecnico_id) {
+    if (tipo === "domicilio" && tecnico_id && tecnico_id !== osAtual.tecnico_id) {
       const { data: cli } = await supabase
         .from("clientes")
         .select("nome")
@@ -330,6 +372,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   revalidatePath(`/ordens/${id}`);
   revalidatePath("/agenda");
   revalidatePath("/campo");
+  revalidatePath("/painel");
   redirect(`/ordens/${id}`);
 }
 
@@ -361,6 +404,7 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
   revalidatePath("/ordens");
   revalidatePath("/agenda");
   revalidatePath("/campo");
+  revalidatePath("/painel");
 }
 
 // Lança a OS no financeiro: receita (valor total) + custo (despesa) = lucro automático.
@@ -553,5 +597,6 @@ export async function excluirOrdem(id: string) {
   revalidatePath("/agenda");
   revalidatePath("/campo");
   revalidatePath("/dashboard");
+  revalidatePath("/painel");
   redirect("/ordens");
 }
