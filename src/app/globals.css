@@ -91,26 +91,49 @@ body {
 /* ====================== IMPRESSÃO DA OS (A4, 2 vias) ====================== */
 @page {
   size: A4 portrait;
-  margin: 8mm;
+  margin: 6mm;
 }
 
 .folha-a4 {
   width: 210mm;
   margin: 0 auto;
   background: #fff;
+  box-sizing: border-box;
+}
+
+.folha-a4-duas-vias {
+  height: 285mm;
+  max-height: 285mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+.folha-a4-duas-vias .via-os {
+  flex: 0 0 48%;
+  max-height: 48%;
+  overflow: hidden;
+}
+
+.folha-a4-uma-via {
+  min-height: 285mm;
+  padding: 4mm;
 }
 
 .via-os {
   box-sizing: border-box;
-  padding: 4mm 2mm;
+  padding: 2mm 1mm;
 }
 
 .linha-corte {
   border-top: 1px dashed #94a3b8;
   text-align: center;
-  font-size: 9px;
+  font-size: 8px;
   color: #94a3b8;
-  margin: 2mm 0;
+  margin: 1mm 0;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 @media screen {
@@ -120,8 +143,10 @@ body {
   }
   .folha-a4 {
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+    padding: 6mm;
+  }
+  .folha-a4-duas-vias {
     min-height: 297mm;
-    padding: 8mm;
   }
 }
 
@@ -129,12 +154,24 @@ body {
   .no-print {
     display: none !important;
   }
+  html,
   body {
     background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   .folha-a4 {
     box-shadow: none;
     width: 100%;
     padding: 0;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+  }
+  .folha-a4-duas-vias {
+    height: 285mm;
+    max-height: 285mm;
+  }
+  .folha-a4-duas-vias .via-os {
+    page-break-inside: avoid;
   }
 }

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { CheckCircle2, Clock, UserX } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { OsAprovar } from "@/components/os-aprovar";
+import { PortalQrCodes } from "@/components/portal-qr-codes";
 import { PortalTimeline, PortalVisitaStatus } from "@/components/portal-visita";
 import { PrintButton } from "@/components/print-button";
 import {
@@ -46,7 +47,7 @@ export default async function PortalOsPage({
 
   return (
     <div className="min-h-screen bg-slate-100 py-8">
-      <PrintButton />
+      <PrintButton href={`/imprimir/portal/${token}`} />
       <div className="mx-auto max-w-2xl px-4">
         {/* Cabeçalho da empresa */}
         <div className="card mb-4 flex items-center gap-3 p-5">
@@ -188,6 +189,11 @@ export default async function PortalOsPage({
             </div>
           </div>
         </div>
+
+        <PortalQrCodes
+          empresaNome={empresa.nome || "Assistência Técnica"}
+          valorTotal={valorTotal}
+        />
 
         {/* Aprovação */}
         {podeAprovar ? (
