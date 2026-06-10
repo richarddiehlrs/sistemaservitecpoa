@@ -27,6 +27,11 @@ export default async function ImprimirPortalOsPage({
     subtotal: number;
   }[];
   const anexosAusente = (os.anexos_ausente || []) as { url: string }[];
+  const historico = (os.historico || []) as {
+    status: string;
+    observacao?: string | null;
+    created_at: string;
+  }[];
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
   const publicUrl = siteUrl ? `${siteUrl}/os/${token}` : "";
@@ -40,6 +45,9 @@ export default async function ImprimirPortalOsPage({
             numero: os.numero as number,
             status: os.status as string,
             data_abertura: os.data_abertura as string,
+            data_previsao: os.data_previsao as string | null,
+            turno: os.turno as string | null,
+            data_aprovacao: os.data_aprovacao as string | null,
             tecnico: os.tecnico as string | null,
             defeito_relatado: os.defeito as string | null,
             diagnostico: os.diagnostico as string | null,
@@ -59,6 +67,7 @@ export default async function ImprimirPortalOsPage({
           equipamentoTexto={os.equipamento as string}
           itens={itens}
           anexosAusente={anexosAusente}
+          historico={historico}
           config={{
             nome: empresa.nome || "Assistência Técnica",
             telefone: empresa.telefone || undefined,
@@ -68,7 +77,7 @@ export default async function ImprimirPortalOsPage({
           }}
           publicUrl={publicUrl}
           via="Via do Cliente"
-          compact={false}
+          layout="pagina-inteira"
           showGoogleQr
         />
       </div>

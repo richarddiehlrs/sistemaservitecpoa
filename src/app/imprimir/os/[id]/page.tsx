@@ -44,7 +44,7 @@ export default async function ImprimirOsPage({
     anexosAusente: anexos || [],
     config,
     publicUrl,
-    compact: true,
+    layout: "meia-pagina" as const,
   };
 
   return (

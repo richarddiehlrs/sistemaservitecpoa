@@ -11,15 +11,16 @@ import {
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 import { pixCopiaCola, PIX_CHAVE_CNPJ, GOOGLE_REVIEW_URL, formatPixCnpj } from "@/lib/pix";
 import { qrImageUrl } from "@/lib/qrcode";
-
-const MAX_ITENS = 5;
-const MAX_TEXTO = 120;
+import { TURNO_LABEL } from "@/lib/turnos";
 
 export type OsViaPrintData = {
   os: {
     numero: number;
     status: string;
     data_abertura: string;
+    data_previsao?: string | null;
+    turno?: string | null;
+    data_aprovacao?: string | null;
     tecnico?: string | null;
     defeito_relatado?: string | null;
     acompanhia?: string | null;
@@ -63,6 +64,7 @@ export type OsViaPrintData = {
   equipamentoTexto?: string;
   itens: { id?: string; descricao: string; tipo?: string; quantidade: number; valor_unitario: number; subtotal: number }[];
   anexosAusente?: { url: string }[];
+  historico?: { status: string; observacao?: string | null; created_at: string }[];
   config: {
     nome: string;
     cnpj?: string;
@@ -76,14 +78,28 @@ export type OsViaPrintData = {
   };
   publicUrl?: string;
   via: string;
-  compact?: boolean;
+  /** meia-pagina = 2 vias na mesma folha A4 | pagina-inteira = portal / impressão completa */
+  layout?: "meia-pagina" | "pagina-inteira";
   showGoogleQr?: boolean;
 };
 
 export function OsViaPrint(props: OsViaPrintData) {
-  const { os, cliente, equip, itens, anexosAusente = [], config, publicUrl, via, compact = false, showGoogleQr = false } = props;
+  const {
+    os,
+    cliente,
+    equip,
+    itens,
+    anexosAusente = [],
+    historico = [],
+    config,
+    publicUrl,
+    via,
+    layout = "meia-pagina",
+    showGoogleQr = false,
+  } = props;
+
+  const inteira = layout === "pagina-inteira";
   const clienteNome = props.clienteNome || cliente?.nome;
-  const fs = compact ? 8 : 9;
 
   const valorTotal = calcValorTotalCliente(
     Number(os.valor_itens),
@@ -93,8 +109,6 @@ export function OsViaPrint(props: OsViaPrintData) {
     Number(os.acrescimo)
   );
   const visitaLinha = linhaVisitaValor(Number(os.valor_visita), os.abater_visita);
-  const itensVisiveis = itens.slice(0, MAX_ITENS);
-  const itensExtras = itens.length - itensVisiveis.length;
 
   const pixPayload = pixCopiaCola({
     nome: config.nome,
@@ -102,184 +116,224 @@ export function OsViaPrint(props: OsViaPrintData) {
     valor: valorTotal > 0 ? valorTotal : undefined,
   });
 
+  const qrSize = inteira ? 90 : 68;
+  const logoH = inteira ? 52 : 42;
+
   return (
-    <div className="via-os" style={{ fontSize: fs, color: "#0f172a", lineHeight: 1.22 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "2px solid #1d4ed8", paddingBottom: 4 }}>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", minWidth: 0, flex: 1 }}>
+    <div className={`via-os via-os--${layout}`}>
+      {/* Cabeçalho */}
+      <header className="via-cabecalho">
+        <div className="via-empresa">
           {config.logo_url && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={config.logo_url} alt="logo" style={{ height: compact ? 32 : 38, width: "auto", objectFit: "contain", flexShrink: 0 }} />
+            <img src={config.logo_url} alt="logo" className="via-logo" style={{ height: logoH }} />
           )}
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: compact ? 11 : 12, fontWeight: 700, color: "#1d4ed8" }}>{config.nome}</div>
-            <div style={{ fontSize: 7, color: "#475569" }}>
-              {config.cnpj && `CNPJ: ${config.cnpj} • `}{config.endereco}
+          <div>
+            <div className="via-empresa-nome">{config.nome}</div>
+            <div className="via-empresa-detalhe">
+              {config.cnpj && <>CNPJ: {config.cnpj} • </>}{config.endereco}
             </div>
-            <div style={{ fontSize: 7, color: "#475569" }}>
-              {config.telefone && `Fone: ${config.telefone} • `}{config.email}
+            <div className="via-empresa-detalhe">
+              {config.telefone && <>Fone: {config.telefone} • </>}{config.email}
             </div>
           </div>
         </div>
-        <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
-          <div style={{ fontSize: compact ? 11 : 12, fontWeight: 700 }}>{formatNumeroOS(os.numero)}</div>
-          <div style={{ fontSize: 7 }}>Abertura: {formatDate(os.data_abertura)}</div>
-          {os.tecnico && <div style={{ fontSize: 7 }}>Técnico: {os.tecnico}</div>}
-          <div style={{ fontSize: 7, color: "#64748b" }}>{STATUS_OS_LABEL[os.status] || os.status}</div>
-          <div style={{ fontSize: 7, fontWeight: 700, color: "#1d4ed8" }}>{via}</div>
+        <div className="via-os-info">
+          <div className="via-os-numero">{formatNumeroOS(os.numero)}</div>
+          <div className="via-os-meta">Abertura: {formatDate(os.data_abertura)}</div>
+          {os.data_previsao && (
+            <div className="via-os-meta">
+              Visita: {formatDate(os.data_previsao)}
+              {os.turno && TURNO_LABEL[os.turno] ? ` — ${TURNO_LABEL[os.turno]}` : ""}
+            </div>
+          )}
+          {os.tecnico && <div className="via-os-meta">Técnico: {os.tecnico}</div>}
+          <div className="via-os-meta">Garantia: {os.garantia_dias} dias</div>
+          <div className="via-os-status">{STATUS_OS_LABEL[os.status] || os.status}</div>
+          {os.aprovado && os.data_aprovacao && (
+            <div className="via-os-meta">Aprovado em {formatDate(os.data_aprovacao)}</div>
+          )}
+          <div className="via-os-via">{via}</div>
         </div>
-      </div>
+      </header>
 
-      <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-        <Bloco titulo="CLIENTE" style={{ flex: 1 }}>
-          <strong>{clienteNome}</strong><br />
-          {cliente?.cpf_cnpj && <>CPF/CNPJ: {formatCpfCnpj(cliente.cpf_cnpj)}<br /></>}
-          {cliente?.telefone && <>Fone: {formatTelefone(cliente.telefone)}<br /></>}
+      {/* Cliente / Equipamento */}
+      <div className="via-grid-2">
+        <Bloco titulo="CLIENTE">
+          <strong>{clienteNome}</strong>
+          {cliente?.cpf_cnpj && <div>CPF/CNPJ: {formatCpfCnpj(cliente.cpf_cnpj)}</div>}
+          {cliente?.telefone && <div>Fone: {formatTelefone(cliente.telefone)}</div>}
           {cliente ? (
             <>
-              {[cliente.logradouro, cliente.numero, cliente.complemento].filter(Boolean).join(", ")}<br />
-              {[cliente.bairro, cliente.cidade && `${cliente.cidade}/${cliente.uf ?? ""}`].filter(Boolean).join(" - ")}
-              {cliente.cep && <> • CEP {formatCep(cliente.cep)}</>}
+              <div>{[cliente.logradouro, cliente.numero, cliente.complemento].filter(Boolean).join(", ")}</div>
+              <div>
+                {[cliente.bairro, cliente.cidade && `${cliente.cidade}/${cliente.uf ?? ""}`].filter(Boolean).join(" - ")}
+                {cliente.cep && <> • CEP {formatCep(cliente.cep)}</>}
+              </div>
             </>
           ) : null}
         </Bloco>
-        <Bloco titulo="EQUIPAMENTO" style={{ flex: 1 }}>
+        <Bloco titulo="EQUIPAMENTO">
           {equip ? (
             <>
-              <strong>{equip.tipo} {equip.marca}</strong> {equip.modelo}<br />
-              {equip.numero_serie && <>Série: {equip.numero_serie}<br /></>}
-              {equip.voltagem && <>Voltagem: {equip.voltagem} </>}
-              {equip.cor && <>• Cor: {equip.cor}</>}
+              <div><strong>{equip.tipo} {equip.marca}</strong> {equip.modelo}</div>
+              {equip.numero_serie && <div>Série: {equip.numero_serie}</div>}
+              <div>
+                {equip.voltagem && <>Voltagem: {equip.voltagem} </>}
+                {equip.cor && <>• Cor: {equip.cor}</>}
+              </div>
             </>
           ) : props.equipamentoTexto ? (
-            props.equipamentoTexto
+            <div>{props.equipamentoTexto}</div>
           ) : (
             "—"
           )}
         </Bloco>
       </div>
 
-      <div style={{ marginTop: 4 }}>
-        {os.defeito_relatado && <CampoLinha titulo="Defeito" valor={os.defeito_relatado} />}
+      {/* Defeito / diagnóstico */}
+      <div className="via-campos">
+        {os.defeito_relatado && <CampoLinha titulo="Defeito relatado" valor={os.defeito_relatado} />}
         {(os.acompanha || os.acompanhia) && <CampoLinha titulo="Acompanha" valor={(os.acompanha || os.acompanhia)!} />}
-        {os.estado_aparelho && <CampoLinha titulo="Estado" valor={os.estado_aparelho} />}
+        {os.estado_aparelho && <CampoLinha titulo="Estado do aparelho" valor={os.estado_aparelho} />}
         {os.diagnostico && <CampoLinha titulo="Diagnóstico" valor={os.diagnostico} />}
-        {os.servico_executado && <CampoLinha titulo="Serviço" valor={os.servico_executado} />}
+        {os.servico_executado && <CampoLinha titulo="Serviço executado" valor={os.servico_executado} />}
       </div>
 
-      {itensVisiveis.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4, fontSize: 7 }}>
+      {/* Itens */}
+      {itens.length > 0 && (
+        <table className="via-tabela">
           <thead>
-            <tr style={{ background: "#eff6ff" }}>
-              <th style={thStyle}>Descrição</th>
-              <th style={{ ...thStyle, textAlign: "center", width: 28 }}>Qtd</th>
-              <th style={{ ...thStyle, textAlign: "right", width: 52 }}>Unit.</th>
-              <th style={{ ...thStyle, textAlign: "right", width: 52 }}>Subtotal</th>
+            <tr>
+              <th>Descrição</th>
+              <th className="via-td-center">Qtd</th>
+              <th className="via-td-right">Unit.</th>
+              <th className="via-td-right">Subtotal</th>
             </tr>
           </thead>
           <tbody>
-            {itensVisiveis.map((it, i) => (
+            {itens.map((it, i) => (
               <tr key={it.id || i}>
-                <td style={tdStyle}>{it.descricao}{it.tipo ? <em style={{ color: "#94a3b8" }}> ({it.tipo})</em> : null}</td>
-                <td style={{ ...tdStyle, textAlign: "center" }}>{it.quantidade}</td>
-                <td style={{ ...tdStyle, textAlign: "right" }}>{formatCurrency(it.valor_unitario)}</td>
-                <td style={{ ...tdStyle, textAlign: "right" }}>{formatCurrency(it.subtotal)}</td>
+                <td>
+                  {it.descricao}
+                  {it.tipo ? <em className="via-tipo-item"> ({it.tipo})</em> : null}
+                </td>
+                <td className="via-td-center">{it.quantidade}</td>
+                <td className="via-td-right">{formatCurrency(it.valor_unitario)}</td>
+                <td className="via-td-right">{formatCurrency(it.subtotal)}</td>
               </tr>
             ))}
-            {itensExtras > 0 && (
-              <tr>
-                <td colSpan={4} style={{ ...tdStyle, fontStyle: "italic", color: "#64748b" }}>
-                  + {itensExtras} item(ns) não exibido(s)
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, gap: 8, alignItems: "flex-start" }}>
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-          {publicUrl && <QrBox img={qrImageUrl(publicUrl, 64)} titulo="Portal OS" sub="Acompanhe" />}
-          <QrBox img={qrImageUrl(pixPayload, 64)} titulo="PIX" sub={formatPixCnpj(PIX_CHAVE_CNPJ)} />
-          {showGoogleQr && <QrBox img={qrImageUrl(GOOGLE_REVIEW_URL, 64)} titulo="Avalie" sub="Google" />}
+      {/* Totais + QR */}
+      <div className="via-rodape-financeiro">
+        <div className="via-qrs">
+          {publicUrl && <QrBox img={qrImageUrl(publicUrl, qrSize)} titulo="Portal OS" sub="Acompanhe sua OS" />}
+          <QrBox img={qrImageUrl(pixPayload, qrSize)} titulo="PIX" sub={`CNPJ ${formatPixCnpj(PIX_CHAVE_CNPJ)}`} />
+          {showGoogleQr && <QrBox img={qrImageUrl(GOOGLE_REVIEW_URL, qrSize)} titulo="Avalie" sub="Google Reviews" />}
         </div>
-        <table style={{ fontSize: 7, minWidth: 160, flexShrink: 0 }}>
+        <table className="via-totais">
           <tbody>
             <LinhaTotal titulo="Serviços + peças" valor={formatCurrency(os.valor_itens)} />
             {os.acrescimo > 0 && <LinhaTotal titulo="Acréscimo" valor={`+ ${formatCurrency(os.acrescimo)}`} />}
             {os.desconto > 0 && <LinhaTotal titulo="Desconto" valor={`- ${formatCurrency(os.desconto)}`} />}
             {visitaLinha.valor > 0 && (
               <LinhaTotal
-                titulo={`Visita${os.abater_visita ? " (abatida)" : ""}`}
+                titulo={`Visita técnica${os.abater_visita ? " (abatida)" : ""}`}
                 valor={`${visitaLinha.prefixo}${formatCurrency(visitaLinha.valor)}`}
               />
             )}
-            <tr>
-              <td style={{ fontWeight: 700, borderTop: "1px solid #1d4ed8", paddingTop: 2 }}>TOTAL</td>
-              <td style={{ fontWeight: 700, textAlign: "right", borderTop: "1px solid #1d4ed8", paddingTop: 2, color: "#1d4ed8" }}>
-                {formatCurrency(valorTotal)}
-              </td>
+            <tr className="via-total-final">
+              <td>TOTAL</td>
+              <td>{formatCurrency(valorTotal)}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
+      {/* Cliente ausente */}
       {os.status === "cliente_ausente" && (
-        <div style={{ marginTop: 4, border: "1px solid #fecdd3", borderRadius: 3, padding: 4, background: "#fff1f2", fontSize: 7 }}>
-          <strong style={{ color: "#be123c" }}>CLIENTE AUSENTE</strong>
-          {os.cliente_ausente_registrado_at && <> — {formatDateTime(os.cliente_ausente_registrado_at)}</>}
-          {os.observacao_cliente_ausente && <> • {truncar(os.observacao_cliente_ausente, 80)}</>}
-          {!compact && anexosAusente.length > 0 && <span> • {anexosAusente.length} foto(s)</span>}
+        <div className="via-ausente">
+          <strong>CLIENTE AUSENTE — visita não realizada</strong>
+          {os.cliente_ausente_registrado_at && (
+            <div>Registrado em {formatDateTime(os.cliente_ausente_registrado_at)}</div>
+          )}
+          {os.observacao_cliente_ausente && <div>{os.observacao_cliente_ausente}</div>}
+          {anexosAusente.length > 0 && (
+            <div className="via-ausente-fotos">
+              {anexosAusente.map((a, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={i} src={a.url} alt="Comprovante" />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "flex-start" }}>
-        <div style={{ flex: 1, fontSize: 6.5, color: "#475569" }}>
-          {config.termo_garantia ? (
-            <p style={{ margin: 0 }}><strong>Garantia:</strong> {truncar(config.termo_garantia, 100)}</p>
-          ) : (
-            <p style={{ margin: 0 }}>Garantia: <strong>{os.garantia_dias} dias</strong>.</p>
-          )}
-          {config.politica_os && <p style={{ margin: "1px 0 0" }}>{truncar(config.politica_os, 80)}</p>}
+      {/* Histórico (só página inteira / portal) */}
+      {inteira && historico.length > 0 && (
+        <div className="via-historico">
+          <div className="via-bloco-titulo">ACOMPANHAMENTO</div>
+          <ul>
+            {historico.map((h, i) => (
+              <li key={i}>
+                <span className="via-hist-data">{formatDateTime(h.created_at)}</span>
+                {" — "}
+                <strong>{STATUS_OS_LABEL[h.status] || h.status}</strong>
+                {h.observacao ? ` — ${h.observacao}` : ""}
+              </li>
+            ))}
+          </ul>
         </div>
+      )}
+
+      {/* Garantia */}
+      <div className="via-garantia">
+        {config.termo_garantia ? (
+          <p><strong>Garantia:</strong> {config.termo_garantia}</p>
+        ) : (
+          <p>Garantia do serviço: <strong>{os.garantia_dias} dias</strong>.</p>
+        )}
+        {config.politica_os && <p>{config.politica_os}</p>}
       </div>
 
-      <div style={{ display: "flex", gap: 16, marginTop: 6, alignItems: "flex-end" }}>
+      {/* Assinaturas */}
+      <div className="via-assinaturas">
         {os.assinatura_cliente ? (
-          <AssinaturaImg src={os.assinatura_cliente} label={`Cliente${os.aprovado ? " (aprovado)" : ""}`} />
+          <AssinaturaImg src={os.assinatura_cliente} label={`Assinatura do cliente${os.aprovado ? " (aprovado)" : ""}`} inteira={inteira} />
         ) : (
           <Assinatura label="Assinatura do cliente" />
         )}
         {os.assinatura_tecnico ? (
-          <AssinaturaImg src={os.assinatura_tecnico} label={`Técnico${os.tecnico ? ` — ${os.tecnico}` : ""}`} />
+          <AssinaturaImg
+            src={os.assinatura_tecnico}
+            label={`Responsável técnico${os.tecnico ? ` — ${os.tecnico}` : ""}`}
+            inteira={inteira}
+          />
         ) : (
-          <Assinatura label={`Técnico${os.tecnico ? ` — ${os.tecnico}` : ""}`} />
+          <Assinatura label={`Responsável técnico${os.tecnico ? ` — ${os.tecnico}` : ""}`} />
         )}
       </div>
     </div>
   );
 }
 
-const thStyle: React.CSSProperties = { border: "1px solid #cbd5e1", padding: "2px 4px", textAlign: "left", fontSize: 7 };
-const tdStyle: React.CSSProperties = { border: "1px solid #e2e8f0", padding: "2px 4px" };
-
-function truncar(s: string, max: number) {
-  return s.length <= max ? s : s.slice(0, max - 1) + "…";
-}
-
-function Bloco({ titulo, children, style }: { titulo: string; children: React.ReactNode; style?: React.CSSProperties }) {
+function Bloco({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <div style={{ border: "1px solid #cbd5e1", borderRadius: 3, padding: 4, ...style }}>
-      <div style={{ fontSize: 7, fontWeight: 700, color: "#1d4ed8", marginBottom: 1 }}>{titulo}</div>
-      <div style={{ fontSize: 8 }}>{children}</div>
+    <div className="via-bloco">
+      <div className="via-bloco-titulo">{titulo}</div>
+      <div className="via-bloco-conteudo">{children}</div>
     </div>
   );
 }
 
 function CampoLinha({ titulo, valor }: { titulo: string; valor: string }) {
   return (
-    <div style={{ marginBottom: 1 }}>
-      <span style={{ fontWeight: 700, fontSize: 7, color: "#475569" }}>{titulo}: </span>
-      <span style={{ fontSize: 8 }}>{truncar(valor, MAX_TEXTO)}</span>
+    <div className="via-campo-linha">
+      <span className="via-campo-titulo">{titulo}: </span>
+      <span className="via-campo-valor">{valor}</span>
     </div>
   );
 }
@@ -287,37 +341,37 @@ function CampoLinha({ titulo, valor }: { titulo: string; valor: string }) {
 function LinhaTotal({ titulo, valor }: { titulo: string; valor: string }) {
   return (
     <tr>
-      <td style={{ color: "#475569", paddingRight: 10 }}>{titulo}</td>
-      <td style={{ textAlign: "right" }}>{valor}</td>
+      <td>{titulo}</td>
+      <td>{valor}</td>
     </tr>
   );
 }
 
 function QrBox({ img, titulo, sub }: { img: string; titulo: string; sub: string }) {
   return (
-    <div style={{ textAlign: "center" }}>
+    <div className="via-qr">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={img} alt={titulo} style={{ width: 48, height: 48 }} />
-      <div style={{ fontSize: 6, fontWeight: 700, color: "#1d4ed8" }}>{titulo}</div>
-      <div style={{ fontSize: 5.5, color: "#64748b", maxWidth: 54, lineHeight: 1.1 }}>{sub}</div>
+      <img src={img} alt={titulo} />
+      <div className="via-qr-titulo">{titulo}</div>
+      <div className="via-qr-sub">{sub}</div>
     </div>
   );
 }
 
 function Assinatura({ label }: { label: string }) {
   return (
-    <div style={{ flex: 1, textAlign: "center" }}>
-      <div style={{ borderTop: "1px solid #0f172a", marginTop: 4, paddingTop: 2, fontSize: 7 }}>{label}</div>
+    <div className="via-assinatura">
+      <div className="via-assinatura-linha">{label}</div>
     </div>
   );
 }
 
-function AssinaturaImg({ src, label }: { src: string; label: string }) {
+function AssinaturaImg({ src, label, inteira }: { src: string; label: string; inteira?: boolean }) {
   return (
-    <div style={{ flex: 1, textAlign: "center" }}>
+    <div className="via-assinatura">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="assinatura" style={{ height: 28, objectFit: "contain" }} />
-      <div style={{ borderTop: "1px solid #0f172a", paddingTop: 2, fontSize: 7 }}>{label}</div>
+      <img src={src} alt="assinatura" className={inteira ? "via-assinatura-img--grande" : undefined} />
+      <div className="via-assinatura-linha">{label}</div>
     </div>
   );
 }
