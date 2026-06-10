@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Printer, DollarSign } from "lucide-react";
+import { Pencil, Printer, DollarSign, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { ImageIcon, PenLine, Link2 } from "lucide-react";
@@ -9,7 +9,11 @@ import { OsShare } from "@/components/os-share";
 import { OsFotos } from "@/components/os-fotos";
 import { OsAssinatura } from "@/components/os-assinatura";
 import { CopyLink } from "@/components/copy-link";
+import { ConfirmButton } from "@/components/confirm-button";
+import { LancamentoAcoes } from "@/components/lancamento-acoes";
 import { getConfig } from "@/lib/config";
+import { requireProfile } from "@/lib/auth-guard";
+import { temPermissao } from "@/lib/permissoes";
 import { TURNO_LABEL } from "@/lib/turnos";
 import {
   formatCurrency,
@@ -19,7 +23,8 @@ import {
   formatTelefone,
 } from "@/lib/format";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
-import { alterarStatusForm, lancarFinanceiro } from "../actions";
+import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
+import { alterarStatusForm, excluirOrdem, lancarFinanceiro } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +34,9 @@ export default async function OrdemDetalhePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const profile = await requireProfile();
+  const podeExcluirOs = temPermissao(profile.papel, "ordens_excluir");
+  const podeFinanceiro = temPermissao(profile.papel, "financeiro");
   const supabase = await createClient();
 
   const { data: os } = await supabase
@@ -39,7 +47,7 @@ export default async function OrdemDetalhePage({
 
   if (!os) notFound();
 
-  const [{ data: itens }, { data: historico }, { data: lancamentos }, { data: anexos }, config] =
+  const [{ data: itens }, { data: historico }, { data: lancamentos }, { data: anexos }, { data: categorias }, config] =
     await Promise.all([
       supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),
       supabase
@@ -53,6 +61,7 @@ export default async function OrdemDetalhePage({
         .eq("os_id", id)
         .order("created_at", { ascending: false }),
       supabase.from("os_anexos").select("*").eq("os_id", id).order("created_at"),
+      supabase.from("categorias_financeiras").select("*").order("nome"),
       getConfig(),
     ]);
 
@@ -89,6 +98,18 @@ export default async function OrdemDetalhePage({
             <Link href={`/ordens/${id}/editar`} className="btn-primary">
               <Pencil className="h-4 w-4" /> Editar
             </Link>
+            {podeExcluirOs && (
+              <ConfirmButton
+                action={excluirOrdem.bind(null, id)}
+                className="btn-danger"
+                title="Excluir ordem de serviço"
+                message="Deseja excluir esta ordem de serviço permanentemente? Lançamentos financeiros vinculados também serão removidos."
+                confirmLabel="Excluir OS"
+                successMsg="Ordem excluída."
+              >
+                <Trash2 className="h-4 w-4" /> Excluir
+              </ConfirmButton>
+            )}
           </div>
         }
       />
@@ -276,13 +297,26 @@ export default async function OrdemDetalhePage({
             {lancamentos && lancamentos.length > 0 ? (
               <ul className="space-y-2 text-sm">
                 {lancamentos.map((l) => (
-                  <li key={l.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                    <span className={l.tipo === "despesa" ? "text-red-600" : l.status === "pago" ? "text-green-600" : "text-amber-600"}>
-                      {l.tipo === "despesa" ? "Custo" : l.status === "pago" ? "Recebido" : "A receber"}
-                    </span>
-                    <span className="font-medium">
-                      {l.tipo === "despesa" ? "- " : ""}{formatCurrency(l.valor)}
-                    </span>
+                  <li key={l.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                    <div className="min-w-0">
+                      <span className={l.tipo === "despesa" ? "text-red-600" : l.status === "pago" ? "text-green-600" : "text-amber-600"}>
+                        {l.tipo === "despesa" ? "Custo" : l.status === "pago" ? "Recebido" : "A receber"}
+                      </span>
+                      <p className="truncate text-xs text-slate-400">{l.descricao}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="font-medium">
+                        {l.tipo === "despesa" ? "- " : ""}{formatCurrency(l.valor)}
+                      </span>
+                      {podeFinanceiro && (
+                        <LancamentoAcoes
+                          lancamento={l}
+                          categorias={categorias || []}
+                          editarAction={atualizarLancamento.bind(null, l.id)}
+                          excluirAction={excluirLancamento.bind(null, l.id)}
+                        />
+                      )}
+                    </div>
                   </li>
                 ))}
                 <li className="flex items-center justify-between border-t border-slate-200 px-3 pt-2 font-semibold">

@@ -414,9 +414,17 @@ export async function salvarAssinatura(id: string, dataUrl: string) {
 }
 
 export async function excluirOrdem(id: string) {
+  await requirePermissao("ordens_excluir");
   const supabase = await createClient();
+
+  await supabase.from("lancamentos_financeiros").delete().eq("os_id", id);
+  await supabase.from("agendamentos").update({ os_id: null }).eq("os_id", id);
+
   const { error } = await supabase.from("ordens_servico").delete().eq("id", id);
   if (error) throw new Error(error.message);
+
   revalidatePath("/ordens");
+  revalidatePath("/financeiro");
+  revalidatePath("/agenda");
   redirect("/ordens");
 }

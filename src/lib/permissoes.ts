@@ -8,6 +8,7 @@ export type Permissao =
   | "ordens"
   | "ordens_criar"
   | "ordens_editar"
+  | "ordens_excluir"
   | "clientes"
   | "clientes_criar"
   | "financeiro"
@@ -23,14 +24,14 @@ export type Permissao =
 const MATRIZ: Record<Papel, Permissao[]> = {
   admin: [
     "dashboard", "agenda", "agenda_criar", "agenda_checkin",
-    "ordens", "ordens_criar", "ordens_editar",
+    "ordens", "ordens_criar", "ordens_editar", "ordens_excluir",
     "clientes", "clientes_criar",
     "financeiro", "financeiro_fluxo", "financeiro_recorrentes", "despesas_campo",
     "relatorios", "dre", "catalogo", "usuarios", "configuracoes",
   ],
   atendente: [
     "dashboard", "agenda", "agenda_criar", "agenda_checkin",
-    "ordens", "ordens_criar", "ordens_editar",
+    "ordens", "ordens_criar", "ordens_editar", "ordens_excluir",
     "clientes", "clientes_criar",
     "financeiro", "financeiro_fluxo", "financeiro_recorrentes",
     "relatorios", "dre", "catalogo",

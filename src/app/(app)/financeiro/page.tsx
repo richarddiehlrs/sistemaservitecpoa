@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Wallet, Clock, Receipt, CalendarCog, LineChart, RefreshCw, X } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Clock, Receipt, CalendarCog, LineChart, RefreshCw, X, Ban } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getConfig } from "@/lib/config";
 import { requirePermissao } from "@/lib/auth-guard";
@@ -8,12 +8,15 @@ import { LancamentoForm } from "@/components/lancamento-form";
 import { RegistrarPagamento } from "@/components/registrar-pagamento";
 import { CobrancaWhatsApp } from "@/components/cobranca-whatsapp";
 import { ConfirmButton } from "@/components/confirm-button";
+import { LancamentoAcoes } from "@/components/lancamento-acoes";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
 import {
   criarLancamento,
   registrarPagamento,
+  atualizarLancamento,
   cancelarLancamento,
+  excluirLancamento,
   gerarDespesasDoMes,
 } from "./actions";
 
@@ -267,15 +270,22 @@ export default async function FinanceiroPage({
                             <Receipt className="h-4 w-4" />
                           </Link>
                         )}
+                        <LancamentoAcoes
+                          lancamento={l}
+                          categorias={categorias || []}
+                          editarAction={atualizarLancamento.bind(null, l.id)}
+                          excluirAction={excluirLancamento.bind(null, l.id)}
+                        />
                         {l.status !== "cancelado" && (
                           <ConfirmButton
                             action={cancelarLancamento.bind(null, l.id)}
-                            className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            className="rounded p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-700"
                             title="Cancelar lançamento"
-                            message="Deseja cancelar este lançamento financeiro?"
-                            confirmLabel="Cancelar lançamento"
+                            message="Deseja cancelar este lançamento? Ele ficará marcado como cancelado (não entra nos totais)."
+                            confirmLabel="Cancelar"
+                            successMsg="Lançamento cancelado."
                           >
-                            <X className="h-4 w-4" />
+                            <Ban className="h-4 w-4" />
                           </ConfirmButton>
                         )}
                       </div>

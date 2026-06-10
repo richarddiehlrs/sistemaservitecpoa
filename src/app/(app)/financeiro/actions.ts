@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth-guard";
 
 function num(v: FormDataEntryValue | null): number {
   if (v == null) return 0;
@@ -34,6 +35,7 @@ function addMeses(dataISO: string, n: number): string {
 }
 
 export async function criarLancamento(formData: FormData) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -86,6 +88,7 @@ export async function criarLancamento(formData: FormData) {
 
 // Registra pagamento total ou parcial, com juros/multa.
 export async function registrarPagamento(id: string, formData: FormData) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -143,7 +146,71 @@ export async function marcarPago(id: string) {
   revalidarFinanceiro();
 }
 
+export async function atualizarLancamento(id: string, formData: FormData) {
+  await requirePermissao("financeiro");
+  const supabase = await createClient();
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  const { data: atual } = await supabase
+    .from("lancamentos_financeiros")
+    .select("valor_pago, juros, multa, os_id")
+    .eq("id", id)
+    .single();
+  if (!atual) throw new Error("Lançamento não encontrado.");
+
+  const valor = num(formData.get("valor"));
+  const juros = num(formData.get("juros"));
+  const multa = num(formData.get("multa"));
+  const status = String(formData.get("status") || "pendente");
+  const devido = valor + juros + multa;
+
+  let valorPago = Number(atual.valor_pago);
+  let dataPagamento: string | null = str(formData.get("data_pagamento"));
+  if (status === "pago") {
+    valorPago = devido;
+    dataPagamento = dataPagamento || hoje;
+  } else if (status === "pendente") {
+    valorPago = 0;
+    dataPagamento = null;
+  } else if (status === "parcial") {
+    valorPago = Math.min(devido, num(formData.get("valor_pago")));
+    dataPagamento = valorPago > 0 ? dataPagamento || hoje : null;
+  }
+
+  const statusFinal =
+    status === "pago" || (status === "parcial" && valorPago + 0.001 >= devido)
+      ? "pago"
+      : status === "parcial" && valorPago > 0
+        ? "parcial"
+        : "pendente";
+
+  const { error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({
+      tipo: (String(formData.get("tipo") || "despesa") as "receita" | "despesa"),
+      descricao: String(formData.get("descricao") || "").trim() || "Lançamento",
+      categoria_id: str(formData.get("categoria_id")),
+      tecnico: str(formData.get("tecnico")),
+      valor,
+      juros,
+      multa,
+      valor_pago: Math.round(valorPago * 100) / 100,
+      data_competencia: str(formData.get("data_competencia")) || hoje,
+      data_vencimento: str(formData.get("data_vencimento")),
+      data_pagamento: dataPagamento,
+      status: statusFinal,
+      forma_pagamento: str(formData.get("forma_pagamento")),
+      observacoes: str(formData.get("observacoes")),
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+
+  if (atual.os_id) revalidatePath(`/ordens/${atual.os_id}`);
+  revalidarFinanceiro();
+}
+
 export async function cancelarLancamento(id: string) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
   const { error } = await supabase
     .from("lancamentos_financeiros")
@@ -154,9 +221,19 @@ export async function cancelarLancamento(id: string) {
 }
 
 export async function excluirLancamento(id: string) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
+
+  const { data: l } = await supabase
+    .from("lancamentos_financeiros")
+    .select("os_id")
+    .eq("id", id)
+    .single();
+
   const { error } = await supabase.from("lancamentos_financeiros").delete().eq("id", id);
   if (error) throw new Error(error.message);
+
+  if (l?.os_id) revalidatePath(`/ordens/${l.os_id}`);
   revalidarFinanceiro();
 }
 
