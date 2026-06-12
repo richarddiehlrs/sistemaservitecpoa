@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 const PADRAO: PreferenciasAlertas = {
   push_ativo: true,
   os_nova: true,
+  os_status: true,
   os_aprovada: true,
   cliente_ausente: true,
   despesa_campo: true,

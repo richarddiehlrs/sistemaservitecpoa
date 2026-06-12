@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { horarioTurno } from "@/lib/turnos";
+import { registrarHistoricoOs, transicionarStatusOs } from "@/lib/transicao-os";
 
 function str(v: FormDataEntryValue | null): string | null {
   const s = v == null ? "" : String(v).trim();
@@ -163,12 +164,18 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
   if (error) throw new Error(error.message);
 
   if (ag.os_id) {
-    const osUpdate: Record<string, string> = { status: "em_execucao" };
+    const extras: Record<string, string> = {};
     if (assumir || profile.papel === "tecnico") {
-      osUpdate.tecnico = nome;
-      osUpdate.tecnico_id = profile.id;
+      extras.tecnico = nome;
+      extras.tecnico_id = profile.id;
     }
-    await supabase.from("ordens_servico").update(osUpdate).eq("id", ag.os_id);
+    await transicionarStatusOs(supabase, {
+      osId: ag.os_id,
+      status: "em_execucao",
+      observacao: "Check-in do técnico na visita",
+      origem: "check-in",
+      extras,
+    });
   }
 
   if (lat != null && lng != null) {
@@ -178,6 +185,7 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
   revalidatePath("/agenda");
   revalidatePath("/campo");
   revalidatePath("/ordens");
+  if (ag.os_id) revalidatePath(`/ordens/${ag.os_id}`);
 }
 
 export async function checkoutAgendamento(id: string, formData?: FormData) {
@@ -196,8 +204,30 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
     checkout_lng: lng,
   };
 
+  const { data: ag } = await supabase
+    .from("agendamentos")
+    .select("os_id")
+    .eq("id", id)
+    .single();
+
   const { error } = await supabase.from("agendamentos").update(updates).eq("id", id);
   if (error) throw new Error(error.message);
+
+  if (ag?.os_id) {
+    const { data: os } = await supabase
+      .from("ordens_servico")
+      .select("status")
+      .eq("id", ag.os_id)
+      .single();
+    if (os?.status) {
+      await registrarHistoricoOs(
+        supabase,
+        ag.os_id,
+        os.status,
+        "Check-out da visita realizado pelo técnico"
+      );
+    }
+  }
 
   if (lat != null && lng != null) {
     await salvarPosicaoTecnico(supabase, profile, lat, lng, precisao, false, null);
@@ -205,4 +235,5 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
 
   revalidatePath("/agenda");
   revalidatePath("/campo");
+  if (ag?.os_id) revalidatePath(`/ordens/${ag.os_id}`);
 }

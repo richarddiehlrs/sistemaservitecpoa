@@ -1,0 +1,98 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { sincronizarAgendaStatusOs } from "@/lib/agenda-os";
+import { criarReceitaPendenteOs } from "@/lib/os-financeiro";
+import { notificarMudancaStatusOs } from "@/lib/notificacoes";
+import type { Database, StatusOS } from "@/types/database";
+
+type Db = SupabaseClient<Database>;
+
+const NOTIFICAR_STATUS: StatusOS[] = [
+  "aguardando_aprovacao",
+  "aguardando_peca",
+  "aprovada",
+  "em_roteiro",
+  "em_execucao",
+  "concluida",
+  "entregue",
+];
+
+export type TransicaoOsOpts = {
+  osId: string;
+  status: StatusOS;
+  observacao?: string | null;
+  origem?: string;
+  skipNotificacao?: boolean;
+  skipFinanceiro?: boolean;
+  extras?: Record<string, unknown>;
+};
+
+/** Único ponto de mudança de status — histórico, agenda, financeiro e notificações. */
+export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) {
+  const { data: osAntes } = await supabase
+    .from("ordens_servico")
+    .select("numero, status, tecnico_id, clientes(nome)")
+    .eq("id", opts.osId)
+    .single();
+
+  if (!osAntes) throw new Error("OS não encontrada.");
+  if (osAntes.status === opts.status) return { mudou: false as const };
+
+  const update: Record<string, unknown> = { status: opts.status, ...opts.extras };
+
+  if (opts.status === "concluida") update.data_conclusao = new Date().toISOString();
+  if (opts.status === "entregue") update.data_entrega = new Date().toISOString();
+  if (opts.status === "aprovada") {
+    update.aprovado = true;
+    update.data_aprovacao = new Date().toISOString();
+  }
+
+  const { error } = await supabase.from("ordens_servico").update(update).eq("id", opts.osId);
+  if (error) throw new Error(error.message);
+
+  const obsHistorico =
+    opts.observacao ||
+    (opts.origem ? `Atualizado via ${opts.origem}` : null);
+
+  await supabase.from("os_status_historico").insert({
+    os_id: opts.osId,
+    status: opts.status,
+    observacao: obsHistorico,
+  });
+
+  await sincronizarAgendaStatusOs(supabase, opts.osId, opts.status);
+
+  if (opts.status === "aprovada" && !opts.skipFinanceiro) {
+    await criarReceitaPendenteOs(supabase, opts.osId);
+  }
+
+  if (
+    !opts.skipNotificacao &&
+    NOTIFICAR_STATUS.includes(opts.status)
+  ) {
+    // @ts-expect-error relação embutida
+    const clienteNome = osAntes.clientes?.nome as string | undefined;
+    notificarMudancaStatusOs({
+      osId: opts.osId,
+      numero: osAntes.numero,
+      status: opts.status,
+      clienteNome,
+      tecnicoId: osAntes.tecnico_id,
+    }).catch(() => {});
+  }
+
+  return { mudou: true as const, anterior: osAntes.status };
+}
+
+/** Registra observação no histórico sem mudar o status. */
+export async function registrarHistoricoOs(
+  supabase: Db,
+  osId: string,
+  statusAtual: StatusOS,
+  observacao: string
+) {
+  await supabase.from("os_status_historico").insert({
+    os_id: osId,
+    status: statusAtual,
+    observacao,
+  });
+}

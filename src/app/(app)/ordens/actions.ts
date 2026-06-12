@@ -8,16 +8,15 @@ import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import {
-  criarReceitaPendenteOs,
   sincronizarFinanceiroOs,
   temLancamentoAtivoOs,
 } from "@/lib/os-financeiro";
+import { transicionarStatusOs } from "@/lib/transicao-os";
 import { sincronizarAgendamentoOs, sincronizarAgendaStatusOs } from "@/lib/agenda-os";
 import { limparDadosVinculadosOs } from "@/lib/limpar-os";
 import {
   notificarOsNova,
   notificarClienteAusente,
-  notificarMudancaStatusOs,
 } from "@/lib/notificacoes";
 import type { StatusOS, TipoAtendimento } from "@/types/database";
 
@@ -404,56 +403,16 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
   await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
-  const { data: osAntes } = await supabase
-    .from("ordens_servico")
-    .select("numero, status, tecnico_id, clientes(nome)")
-    .eq("id", id)
-    .single();
-
-  const update: Record<string, unknown> = { status };
-  if (status === "concluida") update.data_conclusao = new Date().toISOString();
-  if (status === "entregue") update.data_entrega = new Date().toISOString();
-  if (status === "aprovada") {
-    update.aprovado = true;
-    update.data_aprovacao = new Date().toISOString();
-  }
-
-  const { error } = await supabase.from("ordens_servico").update(update).eq("id", id);
-  if (error) throw new Error(error.message);
-
-  await supabase.from("os_status_historico").insert({
-    os_id: id,
+  const result = await transicionarStatusOs(supabase, {
+    osId: id,
     status,
-    observacao: observacao || null,
+    observacao,
+    origem: "erp",
   });
 
-  await sincronizarAgendaStatusOs(supabase, id, status);
-
-  if (status === "aprovada") {
-    await criarReceitaPendenteOs(supabase, id);
+  if (result.mudou && status === "aprovada") {
     revalidatePath("/financeiro");
     revalidatePath("/dashboard");
-  }
-
-  const notificarStatus = [
-    "aguardando_aprovacao",
-    "aguardando_peca",
-    "aprovada",
-    "em_roteiro",
-    "em_execucao",
-    "concluida",
-    "entregue",
-  ];
-  if (osAntes && osAntes.status !== status && notificarStatus.includes(status)) {
-    // @ts-expect-error relação embutida
-    const clienteNome = osAntes.clientes?.nome as string | undefined;
-    notificarMudancaStatusOs({
-      osId: id,
-      numero: osAntes.numero,
-      status,
-      clienteNome,
-      tecnicoId: osAntes.tecnico_id,
-    }).catch(() => {});
   }
 
   revalidatePath(`/ordens/${id}`);

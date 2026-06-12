@@ -12,6 +12,7 @@ export async function salvarPreferenciasAlertas(formData: FormData) {
     user_id: profile.id,
     push_ativo: formData.get("push_ativo") === "on",
     os_nova: formData.get("os_nova") === "on",
+    os_status: formData.get("os_status") === "on",
     os_aprovada: formData.get("os_aprovada") === "on",
     cliente_ausente: formData.get("cliente_ausente") === "on",
     despesa_campo: formData.get("despesa_campo") === "on",

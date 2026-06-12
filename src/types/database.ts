@@ -308,6 +308,7 @@ export type PreferenciasAlertas = {
   user_id: string;
   push_ativo: boolean;
   os_nova: boolean;
+  os_status: boolean;
   os_aprovada: boolean;
   cliente_ausente: boolean;
   despesa_campo: boolean;

@@ -9,6 +9,7 @@ import { PushAtivar } from "@/components/push-ativar";
 export type PreferenciasAlertas = {
   push_ativo: boolean;
   os_nova: boolean;
+  os_status: boolean;
   os_aprovada: boolean;
   cliente_ausente: boolean;
   despesa_campo: boolean;
@@ -79,6 +80,12 @@ export function PreferenciasAlertasForm({ prefs }: { prefs: PreferenciasAlertas 
           label="Nova OS atribuída"
           desc="Quando uma ordem de serviço for atribuída a você."
           defaultChecked={prefs.os_nova}
+        />
+        <Toggle
+          name="os_status"
+          label="Mudança de status da OS"
+          desc="Quando uma OS muda de etapa (roteiro, execução, conclusão, etc.)."
+          defaultChecked={prefs.os_status ?? true}
         />
         <Toggle
           name="os_aprovada"

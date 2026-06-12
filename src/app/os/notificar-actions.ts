@@ -22,7 +22,7 @@ export async function notificarAprovacaoPortal(token: string) {
 
   const { data: os } = await supabase
     .from("ordens_servico")
-    .select("id, numero, aprovado, clientes(nome)")
+    .select("id, numero, aprovado, tecnico_id, clientes(nome)")
     .eq("aprovacao_token", token)
     .maybeSingle();
 
@@ -37,5 +37,6 @@ export async function notificarAprovacaoPortal(token: string) {
     osId: os.id,
     numero: os.numero,
     clienteNome,
+    tecnicoId: os.tecnico_id,
   });
 }

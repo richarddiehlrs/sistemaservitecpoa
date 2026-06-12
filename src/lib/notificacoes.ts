@@ -29,6 +29,7 @@ export type PayloadNotificacao = {
 type Preferencias = {
   push_ativo: boolean;
   os_nova: boolean;
+  os_status: boolean;
   os_aprovada: boolean;
   cliente_ausente: boolean;
   despesa_campo: boolean;
@@ -40,7 +41,7 @@ type Preferencias = {
 const PREF_POR_TIPO: Record<TipoNotificacao, keyof Preferencias | null> = {
   os_nova: "os_nova",
   os_aprovada: "os_aprovada",
-  os_status: "os_nova",
+  os_status: "os_status",
   cliente_ausente: "cliente_ausente",
   despesa_campo: "despesa_campo",
   financeiro: "financeiro",
@@ -61,6 +62,7 @@ async function buscarPreferencias(userId: string): Promise<Preferencias> {
   const padrao: Preferencias = {
     push_ativo: true,
     os_nova: true,
+    os_status: true,
     os_aprovada: true,
     cliente_ausente: true,
     despesa_campo: true,
@@ -73,7 +75,7 @@ async function buscarPreferencias(userId: string): Promise<Preferencias> {
   const { data } = await supabase
     .from("preferencias_alertas")
     .select(
-      "push_ativo, os_nova, os_aprovada, cliente_ausente, despesa_campo, financeiro, oficina_parada, meta_faturamento"
+      "push_ativo, os_nova, os_status, os_aprovada, cliente_ausente, despesa_campo, financeiro, oficina_parada, meta_faturamento"
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -161,19 +163,31 @@ export async function notificarOsAprovada(opts: {
   osId: string;
   numero: number;
   clienteNome?: string | null;
+  tecnicoId?: string | null;
 }) {
   const { formatNumeroOS } = await import("@/lib/format");
   const cliente = opts.clienteNome?.trim() || "Cliente";
+  const numeroFmt = formatNumeroOS(opts.numero);
 
-  await notificarAdminsAtendentes({
+  const payload: PayloadNotificacao = {
     tipo: "os_aprovada",
     titulo: "Orçamento aprovado pelo cliente",
-    mensagem: `${formatNumeroOS(opts.numero)} • ${cliente} aprovou no portal`,
+    mensagem: `${numeroFmt} • ${cliente} aprovou — pode executar`,
     url: `/ordens/${opts.osId}`,
     prioridade: "alta",
     ref_tipo: "os",
     ref_id: opts.osId,
-  });
+  };
+
+  await notificarAdminsAtendentes(payload);
+
+  if (opts.tecnicoId) {
+    await criarNotificacaoUsuario(opts.tecnicoId, {
+      ...payload,
+      titulo: "Orçamento aprovado — execute o serviço",
+      mensagem: `${numeroFmt} • ${cliente}`,
+    });
+  }
 }
 
 export async function notificarClienteAusente(opts: {

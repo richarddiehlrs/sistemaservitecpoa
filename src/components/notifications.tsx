@@ -72,6 +72,7 @@ type NotificacaoRow = {
   prioridade: string;
   lida: boolean;
   created_at: string;
+  ref_id?: string | null;
 };
 
 type DespesaCampo = {
@@ -98,6 +99,7 @@ export function Notifications({
   const [oficinaParada, setOficinaParada] = useState<OsAlerta[]>([]);
   const [aguardandoAprovacao, setAguardandoAprovacao] = useState<OsAlerta[]>([]);
   const [clienteAusente, setClienteAusente] = useState<OsAlerta[]>([]);
+  const [aprovadasExecucao, setAprovadasExecucao] = useState<OsAlerta[]>([]);
   const [agenda, setAgenda] = useState<AgendaHoje[]>([]);
   const [contas, setContas] = useState<ContaAlerta[]>([]);
   const [despesasCampo, setDespesasCampo] = useState<DespesaCampo[]>([]);
@@ -127,7 +129,7 @@ export function Notifications({
     if (!userId) return;
     const { data } = await supabase
       .from("notificacoes")
-      .select("id, tipo, titulo, mensagem, url, prioridade, lida, created_at")
+      .select("id, tipo, titulo, mensagem, url, prioridade, lida, created_at, ref_id")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(25);
@@ -216,6 +218,12 @@ export function Notifications({
           .select("id, numero, data_previsao, status, clientes(nome)")
           .eq("status", "cliente_ausente")
           .order("cliente_ausente_registrado_at", { ascending: false })
+          .limit(8),
+        supabase
+          .from("ordens_servico")
+          .select("id, numero, data_previsao, status, clientes(nome)")
+          .eq("status", "aprovada")
+          .order("data_aprovacao", { ascending: false })
           .limit(8)
       );
     }
@@ -279,11 +287,14 @@ export function Notifications({
     if (verTodasOs) {
       const apR = resultados[idx++] as { data: OsAlerta[] | null };
       const auR = resultados[idx++] as { data: OsAlerta[] | null };
+      const axR = resultados[idx++] as { data: OsAlerta[] | null };
       setAguardandoAprovacao(apR.data || []);
       setClienteAusente(auR.data || []);
+      setAprovadasExecucao(axR.data || []);
     } else {
       setAguardandoAprovacao([]);
       setClienteAusente([]);
+      setAprovadasExecucao([]);
     }
 
     if (verFinanceiro && prefs.financeiro) {
@@ -370,11 +381,19 @@ export function Notifications({
   const visitasPendentes = agenda.filter((a) => a.status === "agendado" || a.status === "confirmado");
   const eventosNaoLidos = eventos.filter((e) => !e.lida).length;
 
+  function jaTemEvento(tipo: string, refId: string) {
+    return eventos.some((e) => !e.lida && e.ref_id === refId && e.tipo === tipo);
+  }
+
+  const clienteAusenteFiltrado = clienteAusente.filter((o) => !jaTemEvento("cliente_ausente", o.id));
+  const despesasCampoFiltradas = despesasCampo.filter((d) => !jaTemEvento("despesa_campo", d.id));
+
   const criticos =
     eventosNaoLidos +
     atrasadas.length +
     aguardandoAprovacao.length +
-    clienteAusente.length +
+    clienteAusenteFiltrado.length +
+    aprovadasExecucao.length +
     contasVencidas.length +
     oficinaParada.length;
 
@@ -382,7 +401,7 @@ export function Notifications({
     criticos +
     visitasPendentes.length +
     contas.filter((c) => c.data_vencimento >= hoje).length +
-    despesasCampo.length +
+    despesasCampoFiltradas.length +
     (metaAlerta ? 1 : 0);
 
   const destinoAgenda = ehTecnico ? "/campo" : "/agenda";
@@ -508,6 +527,22 @@ export function Notifications({
               </Secao>
             )}
 
+            {verTodasOs && aprovadasExecucao.length > 0 && (
+              <Secao
+                titulo="Aprovadas — aguardando execução"
+                icon={<Wrench className="h-4 w-4 text-green-500" />}
+                count={aprovadasExecucao.length}
+              >
+                {aprovadasExecucao.map((o) => (
+                  <ItemLink key={o.id} href={`/ordens/${o.id}`} onClose={() => setOpen(false)}>
+                    <span className="font-medium text-slate-800">{formatNumeroOS(o.numero)}</span>{" "}
+                    <span className="text-slate-500">{o.clientes?.nome || ""}</span>
+                    <span className="block text-xs text-green-600">Orçamento aprovado — iniciar serviço</span>
+                  </ItemLink>
+                ))}
+              </Secao>
+            )}
+
             {verTodasOs && (
               <Secao
                 titulo="Aguardando aprovação"
@@ -528,10 +563,10 @@ export function Notifications({
               <Secao
                 titulo="Cliente ausente"
                 icon={<UserX className="h-4 w-4 text-rose-500" />}
-                vazio={clienteAusente.length === 0}
-                count={clienteAusente.length}
+                vazio={clienteAusenteFiltrado.length === 0}
+                count={clienteAusenteFiltrado.length}
               >
-                {clienteAusente.map((o) => (
+                {clienteAusenteFiltrado.map((o) => (
                   <ItemLink key={o.id} href={`/ordens/${o.id}/editar`} onClose={() => setOpen(false)}>
                     <span className="font-medium text-slate-800">{formatNumeroOS(o.numero)}</span>{" "}
                     <span className="text-slate-500">{o.clientes?.nome || ""}</span>
@@ -544,10 +579,10 @@ export function Notifications({
               <Secao
                 titulo="Despesas de campo"
                 icon={<Receipt className="h-4 w-4 text-violet-500" />}
-                vazio={despesasCampo.length === 0}
-                count={despesasCampo.length}
+                vazio={despesasCampoFiltradas.length === 0}
+                count={despesasCampoFiltradas.length}
               >
-                {despesasCampo.map((d) => (
+                {despesasCampoFiltradas.map((d) => (
                   <ItemLink key={d.id} href="/financeiro?origem=campo" onClose={() => setOpen(false)}>
                     <span className="text-slate-700">{d.descricao}</span>
                     <span className="block text-xs text-violet-600">
