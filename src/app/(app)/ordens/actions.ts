@@ -7,6 +7,11 @@ import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
+import {
+  criarReceitaPendenteOs,
+  sincronizarFinanceiroOs,
+  temLancamentoAtivoOs,
+} from "@/lib/os-financeiro";
 import { sincronizarAgendamentoOs, sincronizarAgendaStatusOs } from "@/lib/agenda-os";
 import { limparDadosVinculadosOs } from "@/lib/limpar-os";
 import {
@@ -376,7 +381,13 @@ export async function atualizarOrdem(id: string, formData: FormData) {
     );
   }
 
+  await sincronizarFinanceiroOs(supabase, id, total, custoItens);
+
   revalidatePath(`/ordens/${id}`);
+  revalidatePath("/financeiro");
+  revalidatePath("/dashboard");
+  revalidatePath("/relatorios");
+  revalidatePath("/dre");
   revalidatePath("/agenda");
   revalidatePath("/campo");
   revalidatePath("/painel");
@@ -390,6 +401,7 @@ export async function alterarStatusForm(id: string, formData: FormData) {
 }
 
 export async function alterarStatus(id: string, status: StatusOS, observacao?: string) {
+  await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
   const { data: osAntes } = await supabase
@@ -401,6 +413,10 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
   const update: Record<string, unknown> = { status };
   if (status === "concluida") update.data_conclusao = new Date().toISOString();
   if (status === "entregue") update.data_entrega = new Date().toISOString();
+  if (status === "aprovada") {
+    update.aprovado = true;
+    update.data_aprovacao = new Date().toISOString();
+  }
 
   const { error } = await supabase.from("ordens_servico").update(update).eq("id", id);
   if (error) throw new Error(error.message);
@@ -412,6 +428,12 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
   });
 
   await sincronizarAgendaStatusOs(supabase, id, status);
+
+  if (status === "aprovada") {
+    await criarReceitaPendenteOs(supabase, id);
+    revalidatePath("/financeiro");
+    revalidatePath("/dashboard");
+  }
 
   const notificarStatus = [
     "aguardando_aprovacao",
@@ -441,18 +463,24 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
   revalidatePath("/painel");
 }
 
-// Lança a OS no financeiro: receita (valor total) + custo (despesa) = lucro automático.
+// Lança a OS no financeiro: receita (valor total) + custo (despesa pendente).
 export async function lancarFinanceiro(id: string, formData: FormData) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
 
   const { data: os } = await supabase
     .from("ordens_servico")
     .select(
-      "id, numero, cliente_id, valor_itens, valor_visita, abater_visita, desconto, acrescimo, valor_total, custo_total, forma_pagamento"
+      "id, numero, cliente_id, status, aprovado, valor_itens, valor_visita, abater_visita, desconto, acrescimo, valor_total, custo_total, forma_pagamento"
     )
     .eq("id", id)
     .single();
   if (!os) throw new Error("OS não encontrada.");
+  if (os.status === "cancelada") throw new Error("Não é possível lançar financeiro de OS cancelada.");
+
+  if (await temLancamentoAtivoOs(supabase, id)) {
+    throw new Error("Esta OS já possui lançamento financeiro. Edite os valores na OS para sincronizar.");
+  }
 
   const valorReceita = calcValorTotalCliente(
     Number(os.valor_itens),
@@ -492,11 +520,13 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
     },
   ];
 
+  if (valorReceita <= 0) throw new Error("Valor da receita deve ser maior que zero.");
+
   if (valorReceita !== Number(os.valor_total)) {
     await supabase.from("ordens_servico").update({ valor_total: valorReceita }).eq("id", id);
   }
 
-  // Custo da OS -> despesa (gera o lucro líquido automaticamente no financeiro/DRE)
+  // Custo da OS -> despesa sempre pendente (cliente pagar ≠ fornecedor pago)
   if (Number(os.custo_total) > 0) {
     const custo = Number(os.custo_total);
     lancamentos.push({
@@ -506,13 +536,12 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
       os_id: os.id,
       cliente_id: os.cliente_id,
       valor: custo,
-      valor_pago: jaPago ? custo : 0,
-      valor_liquido: jaPago ? custo : null,
+      valor_pago: 0,
       data_competencia: hoje,
       data_vencimento: hoje,
-      data_pagamento: jaPago ? hoje : null,
-      status,
+      status: "pendente",
       forma_pagamento: formaPagamento,
+      observacoes: "Custo de peças/serviços da OS — pagar ao fornecedor separadamente",
     });
   }
 
@@ -521,6 +550,10 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
 
   revalidatePath(`/ordens/${id}`);
   revalidatePath("/financeiro");
+  revalidatePath("/dashboard");
+  revalidatePath("/relatorios");
+  revalidatePath("/dre");
+  revalidatePath("/financeiro/fluxo");
   redirect(`/ordens/${id}`);
 }
 

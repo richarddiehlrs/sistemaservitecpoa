@@ -6,6 +6,7 @@ import { PageHeader, StatCard } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
 import { formatCurrency, formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
 import { saldoEmAberto } from "@/lib/financeiro";
+import { calcMetricasCaixa, calcMetricasCompetencia } from "@/lib/metricas-financeiras";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function RelatoriosPage({
 
   const supabase = await createClient();
 
-  const [{ data: pagos }, { data: aReceberData }, { data: ordens }, config] = await Promise.all([
+  const [{ data: pagos }, { data: aReceberData }, { data: ordens }, { data: lancAno }, config] = await Promise.all([
     supabase
       .from("lancamentos_financeiros")
       .select("tipo, valor_pago, data_pagamento, cliente_id, clientes(nome), categorias_financeiras(nome)")
@@ -43,6 +44,12 @@ export default async function RelatoriosPage({
       .select("id, numero, status, valor_total, custo_total, tecnico, data_abertura, clientes(nome)")
       .gte("data_abertura", inicio)
       .lte("data_abertura", `${fim}T23:59:59`),
+    supabase
+      .from("lancamentos_financeiros")
+      .select("tipo, valor, valor_pago, status, os_id, categorias_financeiras(grupo_dre)")
+      .neq("status", "cancelado")
+      .gte("data_competencia", inicio)
+      .lte("data_competencia", fim),
     getConfig(),
   ]);
 
@@ -54,6 +61,9 @@ export default async function RelatoriosPage({
   const totalDespesa = despesas.reduce((s, l) => s + Number(l.valor_pago), 0);
   const saldo = totalReceita - totalDespesa;
   const aReceber = (aReceberData || []).reduce((s, l) => s + saldoEmAberto(l), 0);
+
+  const metricasCaixa = calcMetricasCaixa(lista);
+  const metricasCompetencia = calcMetricasCompetencia(lancAno || []);
 
   // Mensal
   const chartData = MESES_CURTOS.map((label, i) => {
@@ -86,7 +96,7 @@ export default async function RelatoriosPage({
     // @ts-expect-error relação
     const nome = r.clientes?.nome || "Sem cliente";
     if (!porCliente[id]) porCliente[id] = { nome, total: 0 };
-    porCliente[id].total += Number(r.valor);
+    porCliente[id].total += Number(r.valor_pago);
   }
   const topClientes = Object.values(porCliente)
     .sort((a, b) => b.total - a.total)
@@ -98,30 +108,41 @@ export default async function RelatoriosPage({
   for (const r of receitas) {
     // @ts-expect-error relação
     const nome = r.categorias_financeiras?.nome || "Outras";
-    porCategoria[nome] = (porCategoria[nome] || 0) + Number(r.valor);
+    porCategoria[nome] = (porCategoria[nome] || 0) + Number(r.valor_pago);
   }
   const categoriaItems = Object.entries(porCategoria)
     .map(([label, value]) => ({ label, value, color: "bg-brand-500" }))
     .sort((a, b) => b.value - a.value);
 
-  // ===== Lucratividade (OS concluídas/entregues) =====
-  const faturadas = (ordens || []).filter((o) => ["concluida", "entregue"].includes(o.status));
-  const lucroOS = faturadas.map((o) => ({
-    id: o.id,
-    numero: o.numero,
-    // @ts-expect-error relação
-    cliente: o.clientes?.nome || "Sem cliente",
-    tecnico: o.tecnico || "Sem técnico",
-    receita: Number(o.valor_total),
-    custo: Number(o.custo_total || 0),
-    lucro: Number(o.valor_total) - Number(o.custo_total || 0),
-  }));
+  // ===== Lucratividade por OS (via lançamentos financeiros) =====
+  const osComLancamento = new Set((lancAno || []).filter((l) => l.os_id).map((l) => l.os_id!));
+  const faturadas = (ordens || []).filter(
+    (o) => ["concluida", "entregue", "aprovada"].includes(o.status) || osComLancamento.has(o.id)
+  );
 
-  const lucroTotal = lucroOS.reduce((s, o) => s + o.lucro, 0);
-  const custoTotal = lucroOS.reduce((s, o) => s + o.custo, 0);
-  const margem = lucroOS.reduce((s, o) => s + o.receita, 0) > 0
-    ? (lucroTotal / lucroOS.reduce((s, o) => s + o.receita, 0)) * 100
-    : 0;
+  const lucroOS = faturadas.map((o) => {
+    const lancOs = (lancAno || []).filter((l) => l.os_id === o.id);
+    const receitaLanc = lancOs.filter((l) => l.tipo === "receita").reduce((s, l) => s + Number(l.valor), 0);
+    const custoLanc = lancOs
+      .filter((l) => l.tipo === "despesa")
+      .reduce((s, l) => s + Number(l.valor), 0);
+    const receita = receitaLanc > 0 ? receitaLanc : Number(o.valor_total);
+    const custo = custoLanc > 0 ? custoLanc : Number(o.custo_total || 0);
+    return {
+      id: o.id,
+      numero: o.numero,
+      // @ts-expect-error relação
+      cliente: o.clientes?.nome || "Sem cliente",
+      tecnico: o.tecnico || "Sem técnico",
+      receita,
+      custo,
+      lucro: receita - custo,
+    };
+  });
+
+  const lucroTotal = metricasCompetencia.lucroBruto;
+  const custoTotal = metricasCompetencia.custoDireto;
+  const margem = metricasCompetencia.margemBruta;
 
   const topLucroOS = [...lucroOS].sort((a, b) => b.lucro - a.lucro).slice(0, 8);
 
@@ -161,12 +182,12 @@ export default async function RelatoriosPage({
       </form>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard title="Faturamento" value={formatCurrency(totalReceita)} tone="green" icon={<TrendingUp className="h-5 w-5" />} />
-        <StatCard title="Despesas" value={formatCurrency(totalDespesa)} tone="red" icon={<TrendingDown className="h-5 w-5" />} />
-        <StatCard title="Resultado" value={formatCurrency(saldo)} tone={saldo >= 0 ? "blue" : "red"} icon={<Wallet className="h-5 w-5" />} />
+        <StatCard title="Recebido (caixa)" value={formatCurrency(totalReceita)} tone="green" icon={<TrendingUp className="h-5 w-5" />} />
+        <StatCard title="Pago (caixa)" value={formatCurrency(totalDespesa)} tone="red" icon={<TrendingDown className="h-5 w-5" />} />
+        <StatCard title="Lucro bruto" value={formatCurrency(metricasCompetencia.lucroBruto)} tone="blue" icon={<PiggyBank className="h-5 w-5" />} hint={`${metricasCompetencia.margemBruta}% margem`} />
+        <StatCard title="Lucro líquido" value={formatCurrency(metricasCompetencia.lucroLiquido)} tone={metricasCompetencia.lucroLiquido >= 0 ? "green" : "red"} icon={<Percent className="h-5 w-5" />} hint={`Caixa: ${formatCurrency(metricasCaixa.lucroLiquido)}`} />
         <StatCard title="A receber" value={formatCurrency(aReceber)} tone="amber" icon={<Receipt className="h-5 w-5" />} />
         <StatCard title="OS no ano" value={String(qtdOS)} icon={<Wrench className="h-5 w-5" />} hint={`${concluidas} concluídas`} />
-        <StatCard title="Ticket médio" value={formatCurrency(ticketMedio)} tone="blue" icon={<Trophy className="h-5 w-5" />} />
       </div>
 
       <div className="mt-6 card p-5">
@@ -192,9 +213,10 @@ export default async function RelatoriosPage({
       {/* Lucratividade */}
       <h2 className="mt-10 mb-4 text-lg font-semibold text-slate-900">Lucratividade</h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Lucro bruto (OS)" value={formatCurrency(lucroTotal)} tone="green" icon={<PiggyBank className="h-5 w-5" />} hint={`${faturadas.length} OS faturadas`} />
-        <StatCard title="Custo total" value={formatCurrency(custoTotal)} tone="red" icon={<TrendingDown className="h-5 w-5" />} />
-        <StatCard title="Margem média" value={`${margem.toFixed(1)}%`} tone="blue" icon={<Percent className="h-5 w-5" />} />
+        <StatCard title="Lucro bruto (ano)" value={formatCurrency(lucroTotal)} tone="green" icon={<PiggyBank className="h-5 w-5" />} hint={`${faturadas.length} OS no relatório`} />
+        <StatCard title="Custo direto (ano)" value={formatCurrency(custoTotal)} tone="red" icon={<TrendingDown className="h-5 w-5" />} />
+        <StatCard title="Despesas operacionais" value={formatCurrency(metricasCompetencia.despesas)} tone="red" icon={<TrendingDown className="h-5 w-5" />} />
+        <StatCard title="Margem bruta" value={`${margem.toFixed(1)}%`} tone="blue" icon={<Percent className="h-5 w-5" />} />
         <StatCard title="Comissão técnicos" value={formatCurrency(tecnicos.reduce((s, t) => s + t.comissao, 0))} tone="amber" icon={<Trophy className="h-5 w-5" />} hint={`${comissaoPercent}% do lucro`} />
       </div>
 

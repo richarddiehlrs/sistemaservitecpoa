@@ -29,6 +29,7 @@ import {
 } from "@/lib/format";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
+import { calcLucroOs } from "@/lib/metricas-financeiras";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
 import { alterarStatusForm, excluirOrdem, lancarFinanceiro, registrarClienteAusente } from "../actions";
 import { OsEtiquetaPrompt } from "@/components/os-etiqueta-prompt";
@@ -103,6 +104,9 @@ export default async function OrdemDetalhePage({
     Number(os.acrescimo)
   );
   const visitaLinha = linhaVisitaValor(Number(os.valor_visita), os.abater_visita);
+
+  const lancamentosAtivos = (lancamentos || []).filter((l) => l.status !== "cancelado");
+  const lucroOs = calcLucroOs(lancamentosAtivos);
 
   const statusAction = alterarStatusForm.bind(null, id);
   const financeiroAction = lancarFinanceiro.bind(null, id);
@@ -429,9 +433,9 @@ export default async function OrdemDetalhePage({
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
               <DollarSign className="h-4 w-4" /> Financeiro
             </h3>
-            {lancamentos && lancamentos.length > 0 ? (
+            {lancamentosAtivos.length > 0 ? (
               <ul className="space-y-2 text-sm">
-                {lancamentos.map((l) => {
+                {lancamentosAtivos.map((l) => {
                   const devido = valorDevido(l);
                   const saldo = saldoEmAberto(l);
                   const recebido = l.tipo === "receita" && l.status === "pago";
@@ -477,25 +481,40 @@ export default async function OrdemDetalhePage({
                   </li>
                   );
                 })}
+                <li className="flex items-center justify-between border-t border-slate-200 px-3 pt-2 text-xs text-slate-500">
+                  <span>Lucro bruto</span>
+                  <span>{formatCurrency(lucroOs.lucroBruto)}</span>
+                </li>
+                {lucroOs.despesasOs > 0 && (
+                  <li className="flex items-center justify-between px-3 text-xs text-slate-500">
+                    <span>Despesas vinculadas</span>
+                    <span>- {formatCurrency(lucroOs.despesasOs)}</span>
+                  </li>
+                )}
                 <li className="flex items-center justify-between border-t border-slate-200 px-3 pt-2 font-semibold">
                   <span>Lucro líquido</span>
-                  <span className="text-green-700">
-                    {formatCurrency(valorTotal - (os.custo_total || 0))}
+                  <span className={lucroOs.lucroLiquido >= 0 ? "text-green-700" : "text-red-600"}>
+                    {formatCurrency(lucroOs.lucroLiquido)}
                   </span>
                 </li>
               </ul>
-            ) : (
+            ) : podeFinanceiro ? (
               <form action={financeiroAction} className="space-y-2">
                 <select name="status_pagamento" className="input" defaultValue="pendente">
                   <option value="pendente">A receber (pendente)</option>
                   <option value="pago">Já recebido (pago)</option>
                 </select>
                 <input type="date" name="data_vencimento" className="input" />
+                <p className="text-xs text-slate-500">
+                  O custo de peças será lançado como despesa pendente (separado do recebimento).
+                </p>
                 <button className="btn-primary w-full">
                   Lançar receita {formatCurrency(valorTotal)}
-                  {os.custo_total > 0 ? ` + custo ${formatCurrency(os.custo_total)}` : ""}
+                  {os.custo_total > 0 ? ` + custo pendente ${formatCurrency(os.custo_total)}` : ""}
                 </button>
               </form>
+            ) : (
+              <p className="text-sm text-slate-500">Sem lançamento financeiro. Aprovação gera receita pendente automaticamente.</p>
             )}
           </div>
 

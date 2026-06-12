@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Plus, Wrench, Users, DollarSign, AlertCircle, CalendarDays, MapPin } from "lucide-react";
+import { Plus, Wrench, Users, DollarSign, AlertCircle, CalendarDays, MapPin, PiggyBank, TrendingDown, Percent } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
 import { MetaCard } from "@/components/meta-card";
 import { salvarMeta } from "@/app/(app)/financeiro/actions";
 import { saldoEmAberto } from "@/lib/financeiro";
+import { calcMetricasCaixa } from "@/lib/metricas-financeiras";
 import {
   formatCurrency,
   formatDate,
@@ -72,6 +73,7 @@ export default async function DashboardPage() {
     { count: despesasCampo },
     { count: contasPagar },
     { count: clienteAusente },
+    { data: lancMes },
   ] = await Promise.all([
     supabase.from("clientes").select("id", { count: "exact", head: true }),
     supabase
@@ -146,10 +148,17 @@ export default async function DashboardPage() {
       .from("ordens_servico")
       .select("id", { count: "exact", head: true })
       .eq("status", "cliente_ausente"),
+    supabase
+      .from("lancamentos_financeiros")
+      .select("tipo, valor, valor_pago, status, categorias_financeiras(grupo_dre)")
+      .neq("status", "cancelado")
+      .gte("data_pagamento", inicioMes.toISOString().slice(0, 10))
+      .in("status", ["pago", "parcial"]),
   ]);
 
   const receitaMes = (recebimentos || []).reduce((s, r) => s + Number(r.valor_pago), 0);
   const aReceber = (contasReceber || []).reduce((s, r) => s + saldoEmAberto(r), 0);
+  const metricasMes = calcMetricasCaixa(lancMes || []);
 
   const anoAtual = new Date().getFullYear();
   const mesAtual = new Date().getMonth() + 1;
@@ -195,6 +204,37 @@ export default async function DashboardPage() {
         <StatCard title="Clientes" value={String(totalClientes ?? 0)} icon={<Users className="h-5 w-5" />} />
         <StatCard title="Recebido no mês" value={formatCurrency(receitaMes)} icon={<DollarSign className="h-5 w-5" />} tone="green" />
         <StatCard title="A receber" value={formatCurrency(aReceber)} icon={<AlertCircle className="h-5 w-5" />} tone="amber" />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Lucro bruto (mês)"
+          value={formatCurrency(metricasMes.lucroBruto)}
+          tone={metricasMes.lucroBruto >= 0 ? "blue" : "red"}
+          icon={<PiggyBank className="h-5 w-5" />}
+          hint={`Receita − custo direto • ${metricasMes.margemBruta}%`}
+        />
+        <StatCard
+          title="Despesas pagas (mês)"
+          value={formatCurrency(metricasMes.despesas)}
+          tone="red"
+          icon={<TrendingDown className="h-5 w-5" />}
+          hint="Operacionais + administrativas"
+        />
+        <StatCard
+          title="Lucro líquido (mês)"
+          value={formatCurrency(metricasMes.lucroLiquido)}
+          tone={metricasMes.lucroLiquido >= 0 ? "green" : "red"}
+          icon={<Percent className="h-5 w-5" />}
+          hint={`Margem ${metricasMes.margemLiquida}%`}
+        />
+        <StatCard
+          title="Custo direto (mês)"
+          value={formatCurrency(metricasMes.custoDireto)}
+          tone="amber"
+          icon={<DollarSign className="h-5 w-5" />}
+          hint="Peças e serviços pagos"
+        />
       </div>
 
       {(osAtrasadas ||

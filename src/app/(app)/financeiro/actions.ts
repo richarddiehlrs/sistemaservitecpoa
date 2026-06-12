@@ -130,6 +130,7 @@ export async function registrarPagamento(id: string, formData: FormData) {
 }
 
 export async function marcarPago(id: string) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
   const hoje = new Date().toISOString().slice(0, 10);
   const { data: l } = await supabase
@@ -240,6 +241,7 @@ export async function excluirLancamento(id: string) {
 // ===================== DESPESAS RECORRENTES =====================
 
 export async function salvarRecorrente(formData: FormData) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
   const id = str(formData.get("id"));
   const dados = {
@@ -258,6 +260,7 @@ export async function salvarRecorrente(formData: FormData) {
 }
 
 export async function alternarRecorrente(id: string, ativo: boolean) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
   const { error } = await supabase.from("despesas_recorrentes").update({ ativo }).eq("id", id);
   if (error) throw new Error(error.message);
@@ -265,6 +268,7 @@ export async function alternarRecorrente(id: string, ativo: boolean) {
 }
 
 export async function excluirRecorrente(id: string) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
   const { error } = await supabase.from("despesas_recorrentes").delete().eq("id", id);
   if (error) throw new Error(error.message);
@@ -273,6 +277,7 @@ export async function excluirRecorrente(id: string) {
 
 // Gera os lançamentos das despesas fixas para o mês informado (YYYY-MM).
 export async function gerarDespesasDoMes(formData: FormData) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
   const mes = str(formData.get("mes")) || new Date().toISOString().slice(0, 7);
   const [ano, m] = mes.split("-").map(Number);
@@ -315,6 +320,7 @@ export async function gerarDespesasDoMes(formData: FormData) {
 // ===================== METAS =====================
 
 export async function salvarMeta(formData: FormData) {
+  await requirePermissao("financeiro");
   const supabase = await createClient();
   const ano = int(formData.get("ano"), new Date().getFullYear());
   const mes = int(formData.get("mes"), new Date().getMonth() + 1);

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Wallet, Clock, Receipt, CalendarCog, LineChart, RefreshCw, X, Ban } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Clock, Receipt, CalendarCog, LineChart, RefreshCw, X, Ban, PiggyBank, Percent } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getConfig } from "@/lib/config";
 import { requirePermissao } from "@/lib/auth-guard";
@@ -11,6 +11,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { LancamentoAcoes } from "@/components/lancamento-acoes";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
+import { calcMetricasCaixa, calcMetricasCompetencia } from "@/lib/metricas-financeiras";
 import {
   criarLancamento,
   registrarPagamento,
@@ -71,6 +72,9 @@ export default async function FinanceiroPage({
   const aReceber = receitas.filter((l) => l.status !== "pago").reduce((s, l) => s + saldoEmAberto(l), 0);
   const aPagar = despesas.filter((l) => l.status !== "pago").reduce((s, l) => s + saldoEmAberto(l), 0);
   const saldo = recebido - pago;
+
+  const metricasCaixa = calcMetricasCaixa(ativos);
+  const metricasCompetencia = calcMetricasCompetencia(ativos);
 
   const inadimplentes = receitas
     .filter((l) => l.status !== "pago" && l.data_vencimento && l.data_vencimento < hoje)
@@ -178,11 +182,42 @@ export default async function FinanceiroPage({
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard title="Recebido" value={formatCurrency(recebido)} tone="green" icon={<TrendingUp className="h-5 w-5" />} />
-        <StatCard title="Pago" value={formatCurrency(pago)} tone="red" icon={<TrendingDown className="h-5 w-5" />} />
-        <StatCard title="Saldo (caixa)" value={formatCurrency(saldo)} tone={saldo >= 0 ? "blue" : "red"} icon={<Wallet className="h-5 w-5" />} />
+        <StatCard title="Recebido (caixa)" value={formatCurrency(recebido)} tone="green" icon={<TrendingUp className="h-5 w-5" />} />
+        <StatCard title="Pago (caixa)" value={formatCurrency(pago)} tone="red" icon={<TrendingDown className="h-5 w-5" />} />
+        <StatCard title="Saldo caixa" value={formatCurrency(saldo)} tone={saldo >= 0 ? "blue" : "red"} icon={<Wallet className="h-5 w-5" />} />
         <StatCard title="A receber" value={formatCurrency(aReceber)} tone="amber" icon={<Receipt className="h-5 w-5" />} />
         <StatCard title="A pagar" value={formatCurrency(aPagar)} tone="amber" icon={<Clock className="h-5 w-5" />} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Faturamento (competência)"
+          value={formatCurrency(metricasCompetencia.receita)}
+          tone="green"
+          icon={<TrendingUp className="h-5 w-5" />}
+          hint="Valor faturado no período"
+        />
+        <StatCard
+          title="Lucro bruto"
+          value={formatCurrency(metricasCompetencia.lucroBruto)}
+          tone={metricasCompetencia.lucroBruto >= 0 ? "blue" : "red"}
+          icon={<PiggyBank className="h-5 w-5" />}
+          hint={`Receita − custo direto • ${metricasCompetencia.margemBruta}%`}
+        />
+        <StatCard
+          title="Despesas operacionais"
+          value={formatCurrency(metricasCompetencia.despesas)}
+          tone="red"
+          icon={<TrendingDown className="h-5 w-5" />}
+          hint="Aluguel, salários, campo, etc."
+        />
+        <StatCard
+          title="Lucro líquido"
+          value={formatCurrency(metricasCompetencia.lucroLiquido)}
+          tone={metricasCompetencia.lucroLiquido >= 0 ? "green" : "red"}
+          icon={<Percent className="h-5 w-5" />}
+          hint={`Margem ${metricasCompetencia.margemLiquida}% • Caixa: ${formatCurrency(metricasCaixa.lucroLiquido)}`}
+        />
       </div>
 
       <div className="mt-6 card overflow-x-auto">

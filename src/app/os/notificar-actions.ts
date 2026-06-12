@@ -2,6 +2,7 @@
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { notificarOsAprovada } from "@/lib/notificacoes";
+import { criarReceitaPendenteOs } from "@/lib/os-financeiro";
 import type { Database } from "@/types/database";
 
 function supabaseAdmin() {
@@ -29,6 +30,8 @@ export async function notificarAprovacaoPortal(token: string) {
 
   // @ts-expect-error relação embutida
   const clienteNome = os.clientes?.nome as string | undefined;
+
+  await criarReceitaPendenteOs(supabase, os.id);
 
   await notificarOsAprovada({
     osId: os.id,
