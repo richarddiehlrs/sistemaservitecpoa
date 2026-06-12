@@ -4,9 +4,20 @@ export type LancamentoMetrica = {
   tipo: "receita" | "despesa";
   valor: number;
   valor_pago?: number | null;
+  juros?: number | null;
+  multa?: number | null;
   status?: string | null;
   categorias_financeiras?: { grupo_dre?: string | null } | null;
 };
+
+/** Valor em regime de competência (receita inclui juros e multa). */
+export function valorCompetencia(l: LancamentoMetrica): number {
+  const base = Number(l.valor);
+  if (l.tipo === "receita") {
+    return base + Number(l.juros || 0) + Number(l.multa || 0);
+  }
+  return base;
+}
 
 export type MetricasFinanceiras = {
   receita: number;
@@ -57,7 +68,7 @@ export function calcMetricasCompetencia(lancamentos: LancamentoMetrica[]): Metri
   let despesas = 0;
 
   for (const l of lancamentos.filter(isAtivo)) {
-    const v = Number(l.valor);
+    const v = valorCompetencia(l);
     const g = grupoDre(l);
     if (l.tipo === "receita") receita += v;
     if (GRUPOS_CUSTO_DIRETO.has(g)) custoDireto += v;
@@ -98,7 +109,7 @@ export function calcLucroOs(lancamentos: LancamentoMetrica[]) {
   const ativos = lancamentos.filter(isAtivo);
   const receita = ativos
     .filter((l) => l.tipo === "receita")
-    .reduce((s, l) => s + Number(l.valor), 0);
+    .reduce((s, l) => s + valorCompetencia(l), 0);
   const custo = ativos
     .filter((l) => l.tipo === "despesa" && GRUPOS_CUSTO_DIRETO.has(grupoDre(l)))
     .reduce((s, l) => s + Number(l.valor), 0);

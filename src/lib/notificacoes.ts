@@ -182,11 +182,17 @@ export async function notificarOsAprovada(opts: {
   await notificarAdminsAtendentes(payload);
 
   if (opts.tecnicoId) {
-    await criarNotificacaoUsuario(opts.tecnicoId, {
-      ...payload,
-      titulo: "Orçamento aprovado — execute o serviço",
-      mensagem: `${numeroFmt} • ${cliente}`,
-    });
+    const supabase = supabaseAdmin();
+    const { data: tec } = supabase
+      ? await supabase.from("profiles").select("papel").eq("id", opts.tecnicoId).maybeSingle()
+      : { data: null };
+    if (tec?.papel === "tecnico") {
+      await criarNotificacaoUsuario(opts.tecnicoId, {
+        ...payload,
+        titulo: "Orçamento aprovado — execute o serviço",
+        mensagem: `${numeroFmt} • ${cliente}`,
+      });
+    }
   }
 }
 

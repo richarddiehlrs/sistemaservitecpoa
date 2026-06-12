@@ -110,6 +110,9 @@ export function Notifications({
     financeiro: true,
     meta_faturamento: true,
     despesa_campo: true,
+    os_aprovada: true,
+    os_status: true,
+    cliente_ausente: true,
   });
   const ref = useRef<HTMLDivElement>(null);
 
@@ -141,7 +144,9 @@ export function Notifications({
     (async () => {
       const { data: prefData } = await supabase
         .from("preferencias_alertas")
-        .select("oficina_parada, financeiro, meta_faturamento, despesa_campo, dias_oficina_parada")
+        .select(
+          "oficina_parada, financeiro, meta_faturamento, despesa_campo, os_aprovada, os_status, cliente_ausente, dias_oficina_parada"
+        )
         .eq("user_id", userId)
         .maybeSingle();
       if (prefData) {
@@ -150,6 +155,9 @@ export function Notifications({
           financeiro: prefData.financeiro !== false,
           meta_faturamento: prefData.meta_faturamento !== false,
           despesa_campo: prefData.despesa_campo !== false,
+          os_aprovada: prefData.os_aprovada !== false,
+          os_status: prefData.os_status !== false,
+          cliente_ausente: prefData.cliente_ausente !== false,
         });
         setDiasOficina(prefData.dias_oficina_parada || DIAS_OFICINA_PARADA_PADRAO);
       }
@@ -205,20 +213,28 @@ export function Notifications({
       );
     }
 
-    if (verTodasOs) {
+    if (verTodasOs && prefs.os_status) {
       promessas.push(
         supabase
           .from("ordens_servico")
           .select("id, numero, data_previsao, status, clientes(nome)")
           .eq("status", "aguardando_aprovacao")
           .order("data_abertura", { ascending: false })
-          .limit(8),
+          .limit(8)
+      );
+    }
+    if (verTodasOs && prefs.cliente_ausente) {
+      promessas.push(
         supabase
           .from("ordens_servico")
           .select("id, numero, data_previsao, status, clientes(nome)")
           .eq("status", "cliente_ausente")
           .order("cliente_ausente_registrado_at", { ascending: false })
-          .limit(8),
+          .limit(8)
+      );
+    }
+    if (verTodasOs && prefs.os_aprovada) {
+      promessas.push(
         supabase
           .from("ordens_servico")
           .select("id, numero, data_previsao, status, clientes(nome)")
@@ -284,16 +300,22 @@ export function Notifications({
       setOficinaParada([]);
     }
 
-    if (verTodasOs) {
+    if (verTodasOs && prefs.os_status) {
       const apR = resultados[idx++] as { data: OsAlerta[] | null };
-      const auR = resultados[idx++] as { data: OsAlerta[] | null };
-      const axR = resultados[idx++] as { data: OsAlerta[] | null };
       setAguardandoAprovacao(apR.data || []);
-      setClienteAusente(auR.data || []);
-      setAprovadasExecucao(axR.data || []);
     } else {
       setAguardandoAprovacao([]);
+    }
+    if (verTodasOs && prefs.cliente_ausente) {
+      const auR = resultados[idx++] as { data: OsAlerta[] | null };
+      setClienteAusente(auR.data || []);
+    } else {
       setClienteAusente([]);
+    }
+    if (verTodasOs && prefs.os_aprovada) {
+      const axR = resultados[idx++] as { data: OsAlerta[] | null };
+      setAprovadasExecucao(axR.data || []);
+    } else {
       setAprovadasExecucao([]);
     }
 
@@ -385,15 +407,25 @@ export function Notifications({
     return eventos.some((e) => !e.lida && e.ref_id === refId && e.tipo === tipo);
   }
 
+  function jaTemEventoOs(osId: string, tipos: string[]) {
+    return eventos.some((e) => !e.lida && e.ref_id === osId && tipos.includes(e.tipo));
+  }
+
+  const aguardandoFiltrado = aguardandoAprovacao.filter(
+    (o) => !jaTemEventoOs(o.id, ["os_status", "os_aprovada"])
+  );
+  const aprovadasFiltradas = aprovadasExecucao.filter(
+    (o) => !jaTemEventoOs(o.id, ["os_aprovada", "os_status"])
+  );
   const clienteAusenteFiltrado = clienteAusente.filter((o) => !jaTemEvento("cliente_ausente", o.id));
   const despesasCampoFiltradas = despesasCampo.filter((d) => !jaTemEvento("despesa_campo", d.id));
 
   const criticos =
     eventosNaoLidos +
     atrasadas.length +
-    aguardandoAprovacao.length +
+    aguardandoFiltrado.length +
     clienteAusenteFiltrado.length +
-    aprovadasExecucao.length +
+    aprovadasFiltradas.length +
     contasVencidas.length +
     oficinaParada.length;
 
@@ -527,13 +559,13 @@ export function Notifications({
               </Secao>
             )}
 
-            {verTodasOs && aprovadasExecucao.length > 0 && (
+            {verTodasOs && prefs.os_aprovada && aprovadasFiltradas.length > 0 && (
               <Secao
                 titulo="Aprovadas — aguardando execução"
                 icon={<Wrench className="h-4 w-4 text-green-500" />}
-                count={aprovadasExecucao.length}
+                count={aprovadasFiltradas.length}
               >
-                {aprovadasExecucao.map((o) => (
+                {aprovadasFiltradas.map((o) => (
                   <ItemLink key={o.id} href={`/ordens/${o.id}`} onClose={() => setOpen(false)}>
                     <span className="font-medium text-slate-800">{formatNumeroOS(o.numero)}</span>{" "}
                     <span className="text-slate-500">{o.clientes?.nome || ""}</span>
@@ -543,14 +575,14 @@ export function Notifications({
               </Secao>
             )}
 
-            {verTodasOs && (
+            {verTodasOs && prefs.os_status && (
               <Secao
                 titulo="Aguardando aprovação"
                 icon={<Clock className="h-4 w-4 text-amber-500" />}
-                vazio={aguardandoAprovacao.length === 0}
-                count={aguardandoAprovacao.length}
+                vazio={aguardandoFiltrado.length === 0}
+                count={aguardandoFiltrado.length}
               >
-                {aguardandoAprovacao.map((o) => (
+                {aguardandoFiltrado.map((o) => (
                   <ItemLink key={o.id} href={`/ordens/${o.id}`} onClose={() => setOpen(false)}>
                     <span className="font-medium text-slate-800">{formatNumeroOS(o.numero)}</span>{" "}
                     <span className="text-slate-500">{o.clientes?.nome || ""}</span>
@@ -559,7 +591,7 @@ export function Notifications({
               </Secao>
             )}
 
-            {verTodasOs && (
+            {verTodasOs && prefs.cliente_ausente && (
               <Secao
                 titulo="Cliente ausente"
                 icon={<UserX className="h-4 w-4 text-rose-500" />}

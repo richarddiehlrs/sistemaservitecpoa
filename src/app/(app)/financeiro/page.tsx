@@ -56,8 +56,15 @@ export default async function FinanceiroPage({
   if (tipo) query = query.eq("tipo", tipo);
   if (status) query = query.eq("status", status);
 
-  const [{ data: lancamentos }, { data: categorias }, config] = await Promise.all([
+  const [{ data: lancamentos }, { data: lancamentosCaixa }, { data: categorias }, config] = await Promise.all([
     query,
+    supabase
+      .from("lancamentos_financeiros")
+      .select("*, categorias_financeiras(grupo_dre)")
+      .in("status", ["pago", "parcial"])
+      .gt("valor_pago", 0)
+      .gte("data_pagamento", periodo.inicio)
+      .lte("data_pagamento", periodo.fim),
     supabase.from("categorias_financeiras").select("*").order("nome"),
     getConfig(),
   ]);
@@ -67,13 +74,17 @@ export default async function FinanceiroPage({
   const receitas = ativos.filter((l) => l.tipo === "receita");
   const despesas = ativos.filter((l) => l.tipo === "despesa");
 
-  const recebido = receitas.reduce((s, l) => s + Number(l.valor_pago), 0);
-  const pago = despesas.reduce((s, l) => s + Number(l.valor_pago), 0);
+  const caixaAtivos = (lancamentosCaixa || []).filter((l) => l.status !== "cancelado");
+  const receitasCaixa = caixaAtivos.filter((l) => l.tipo === "receita");
+  const despesasCaixa = caixaAtivos.filter((l) => l.tipo === "despesa");
+
+  const recebido = receitasCaixa.reduce((s, l) => s + Number(l.valor_pago), 0);
+  const pago = despesasCaixa.reduce((s, l) => s + Number(l.valor_pago), 0);
   const aReceber = receitas.filter((l) => l.status !== "pago").reduce((s, l) => s + saldoEmAberto(l), 0);
   const aPagar = despesas.filter((l) => l.status !== "pago").reduce((s, l) => s + saldoEmAberto(l), 0);
   const saldo = recebido - pago;
 
-  const metricasCaixa = calcMetricasCaixa(ativos);
+  const metricasCaixa = calcMetricasCaixa(caixaAtivos);
   const metricasCompetencia = calcMetricasCompetencia(ativos);
 
   const inadimplentes = receitas

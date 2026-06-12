@@ -374,6 +374,7 @@ Execute no Supabase **na ordem**. As três últimas são essenciais para as inte
 | 16 | `0016_financeiro_integridade.sql` | Anti-duplicação OS, views DRE/fluxo corrigidas, `valor_pago` em quitados |
 | 17 | `0017_alertas_os_status.sql` | Preferência `os_status` separada de `os_nova` |
 | 18 | `0018_os_aprovar_idempotente.sql` | `os_aprovar` idempotente (sem histórico duplicado) |
+| 19 | `0019_rls_financeiro_papel.sql` | RLS financeiro por papel (admin/atendente vs técnico) |
 
 **Regras de workflow (Fase B):** matriz de transições em `transicao-status.ts`; check-out avança OS; cancelamento cancela lançamentos; OS finalizada bloqueada para edição (exceto admin).
 

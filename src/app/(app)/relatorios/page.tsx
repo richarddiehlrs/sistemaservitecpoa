@@ -6,7 +6,7 @@ import { PageHeader, StatCard } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
 import { formatCurrency, formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
 import { saldoEmAberto } from "@/lib/financeiro";
-import { calcMetricasCaixa, calcMetricasCompetencia } from "@/lib/metricas-financeiras";
+import { calcLucroOs, calcMetricasCaixa, calcMetricasCompetencia } from "@/lib/metricas-financeiras";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +46,7 @@ export default async function RelatoriosPage({
       .lte("data_abertura", `${fim}T23:59:59`),
     supabase
       .from("lancamentos_financeiros")
-      .select("tipo, valor, valor_pago, status, os_id, categorias_financeiras(grupo_dre)")
+      .select("tipo, valor, juros, multa, valor_pago, status, os_id, categorias_financeiras(grupo_dre)")
       .neq("status", "cancelado")
       .gte("data_competencia", inicio)
       .lte("data_competencia", fim),
@@ -121,13 +121,11 @@ export default async function RelatoriosPage({
   );
 
   const lucroOS = faturadas.map((o) => {
-    const lancOs = (lancAno || []).filter((l) => l.os_id === o.id);
-    const receitaLanc = lancOs.filter((l) => l.tipo === "receita").reduce((s, l) => s + Number(l.valor), 0);
-    const custoLanc = lancOs
-      .filter((l) => l.tipo === "despesa")
-      .reduce((s, l) => s + Number(l.valor), 0);
+    const lancOs = (lancAno || []).filter((l) => l.os_id === o.id && l.status !== "cancelado");
+    const { receita: receitaLanc, custo: custoLanc, lucroBruto } = calcLucroOs(lancOs);
     const receita = receitaLanc > 0 ? receitaLanc : Number(o.valor_total);
     const custo = custoLanc > 0 ? custoLanc : Number(o.custo_total || 0);
+    const lucro = receitaLanc > 0 || custoLanc > 0 ? lucroBruto : receita - custo;
     return {
       id: o.id,
       numero: o.numero,
@@ -136,7 +134,7 @@ export default async function RelatoriosPage({
       tecnico: o.tecnico || "Sem técnico",
       receita,
       custo,
-      lucro: receita - custo,
+      lucro,
     };
   });
 

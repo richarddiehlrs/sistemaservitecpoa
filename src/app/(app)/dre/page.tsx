@@ -38,7 +38,7 @@ export default async function DrePage({
   const supabase = await createClient();
   const { data } = await supabase
     .from("lancamentos_financeiros")
-    .select("valor, tipo, status, categorias_financeiras(grupo_dre)")
+    .select("valor, juros, multa, tipo, status, categorias_financeiras(grupo_dre)")
     .neq("status", "cancelado")
     .gte("data_competencia", p.inicio)
     .lte("data_competencia", p.fim);
@@ -47,7 +47,11 @@ export default async function DrePage({
   for (const l of data || []) {
     // @ts-expect-error relação
     const g = l.categorias_financeiras?.grupo_dre || (l.tipo === "receita" ? "outras_receitas" : "despesa_operacional");
-    soma[g] = (soma[g] || 0) + Number(l.valor);
+    const v =
+      l.tipo === "receita"
+        ? Number(l.valor) + Number(l.juros || 0) + Number(l.multa || 0)
+        : Number(l.valor);
+    soma[g] = (soma[g] || 0) + v;
   }
   const g = (k: string) => soma[k] || 0;
 
