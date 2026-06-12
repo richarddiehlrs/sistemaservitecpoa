@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { horarioTurno } from "@/lib/turnos";
-import { registrarHistoricoOs, transicionarStatusOs } from "@/lib/transicao-os";
+import { transicionarStatusOs } from "@/lib/transicao-os";
+import { statusPosCheckout } from "@/lib/transicao-status";
 
 function str(v: FormDataEntryValue | null): string | null {
   const s = v == null ? "" : String(v).trim();
@@ -174,6 +175,8 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
       status: "em_execucao",
       observacao: "Check-in do técnico na visita",
       origem: "check-in",
+      sistema: true,
+      papel: profile.papel,
       extras,
     });
   }
@@ -216,16 +219,27 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
   if (ag?.os_id) {
     const { data: os } = await supabase
       .from("ordens_servico")
-      .select("status")
+      .select("status, aprovado, tipo_atendimento")
       .eq("id", ag.os_id)
       .single();
-    if (os?.status) {
-      await registrarHistoricoOs(
-        supabase,
-        ag.os_id,
-        os.status,
-        "Check-out da visita realizado pelo técnico"
-      );
+
+    if (os) {
+      const proximo = statusPosCheckout({
+        status: os.status as never,
+        aprovado: Boolean(os.aprovado),
+        tipo_atendimento: os.tipo_atendimento ?? "domicilio",
+      });
+
+      if (proximo) {
+        await transicionarStatusOs(supabase, {
+          osId: ag.os_id,
+          status: proximo,
+          observacao: "Check-out da visita realizado pelo técnico",
+          origem: "check-out",
+          sistema: true,
+          papel: profile.papel,
+        });
+      }
     }
   }
 

@@ -12,7 +12,8 @@ import {
   temLancamentoAtivoOs,
 } from "@/lib/os-financeiro";
 import { transicionarStatusOs } from "@/lib/transicao-os";
-import { sincronizarAgendamentoOs, sincronizarAgendaStatusOs } from "@/lib/agenda-os";
+import { STATUS_OS_BLOQUEADO_EDICAO } from "@/lib/transicao-status";
+import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
 import { limparDadosVinculadosOs } from "@/lib/limpar-os";
 import {
   notificarOsNova,
@@ -302,9 +303,19 @@ export async function atualizarOrdem(id: string, formData: FormData) {
 
   const { data: osAtual } = await supabase
     .from("ordens_servico")
-    .select("numero, cliente_id, tecnico_id")
+    .select("numero, cliente_id, tecnico_id, status")
     .eq("id", id)
     .single();
+
+  if (
+    osAtual &&
+    STATUS_OS_BLOQUEADO_EDICAO.includes(osAtual.status as never) &&
+    profile.papel !== "admin"
+  ) {
+    throw new Error(
+      "Esta ordem está finalizada e não pode ser editada. Solicite ao administrador se precisar alterar."
+    );
+  }
 
   const { error } = await supabase
     .from("ordens_servico")
@@ -400,7 +411,7 @@ export async function alterarStatusForm(id: string, formData: FormData) {
 }
 
 export async function alterarStatus(id: string, status: StatusOS, observacao?: string) {
-  await requirePermissao("ordens_editar");
+  const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
   const result = await transicionarStatusOs(supabase, {
@@ -408,11 +419,15 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
     status,
     observacao,
     origem: "erp",
+    papel: profile.papel,
   });
 
-  if (result.mudou && status === "aprovada") {
+  if (result.mudou && (status === "aprovada" || status === "cancelada")) {
     revalidatePath("/financeiro");
     revalidatePath("/dashboard");
+    revalidatePath("/dre");
+    revalidatePath("/relatorios");
+    revalidatePath("/financeiro/fluxo");
   }
 
   revalidatePath(`/ordens/${id}`);
@@ -593,16 +608,6 @@ export async function registrarClienteAusente(id: string, formData: FormData) {
 
   const agora = new Date().toISOString();
 
-  const { error } = await supabase
-    .from("ordens_servico")
-    .update({
-      status: "cliente_ausente",
-      observacao_cliente_ausente: observacao,
-      cliente_ausente_registrado_at: agora,
-    })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-
   await supabase.from("os_anexos").insert({
     os_id: id,
     url: fotoUrl,
@@ -611,13 +616,20 @@ export async function registrarClienteAusente(id: string, formData: FormData) {
     descricao: observacao || "Cliente ausente — foto comprobatória",
   });
 
-  await supabase.from("os_status_historico").insert({
-    os_id: id,
+  await transicionarStatusOs(supabase, {
+    osId: id,
     status: "cliente_ausente",
-    observacao: observacao || `Cliente ausente — registrado por ${nomeTecnico(profile)}`,
+    observacao:
+      observacao || `Cliente ausente — registrado por ${nomeTecnico(profile)}`,
+    origem: "cliente-ausente",
+    sistema: true,
+    papel: profile.papel,
+    skipNotificacao: true,
+    extras: {
+      observacao_cliente_ausente: observacao,
+      cliente_ausente_registrado_at: agora,
+    },
   });
-
-  await sincronizarAgendaStatusOs(supabase, id, "cliente_ausente");
 
   const [{ data: osInfo }, { data: cli }] = await Promise.all([
     supabase.from("ordens_servico").select("numero").eq("id", id).single(),

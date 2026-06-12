@@ -1,4 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { STATUS_OS_BLOQUEADO_EDICAO } from "@/lib/transicao-status";
+import type { StatusOS } from "@/types/database";
 import { PageHeader } from "@/components/ui";
 import { OrdemForm } from "@/components/ordem-form";
 import { createClient } from "@/lib/supabase/server";
@@ -27,6 +29,13 @@ export default async function EditarOrdemPage({
     .single();
 
   if (!os) notFound();
+
+  if (
+    STATUS_OS_BLOQUEADO_EDICAO.includes(os.status as StatusOS) &&
+    profile.papel !== "admin"
+  ) {
+    redirect(`/ordens/${id}`);
+  }
 
   const [{ data: itens }, { data: equipamentos }, { data: catalogo }, { data: perfisTecnicos }] = await Promise.all([
     supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),

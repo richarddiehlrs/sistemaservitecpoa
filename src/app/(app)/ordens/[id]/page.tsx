@@ -31,6 +31,8 @@ import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
 import { calcLucroOs } from "@/lib/metricas-financeiras";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
+import { transicoesPermitidas } from "@/lib/transicao-status";
+import type { StatusOS } from "@/types/database";
 import { alterarStatusForm, excluirOrdem, lancarFinanceiro, registrarClienteAusente } from "../actions";
 import { OsEtiquetaPrompt } from "@/components/os-etiqueta-prompt";
 
@@ -109,6 +111,10 @@ export default async function OrdemDetalhePage({
   const lucroOs = calcLucroOs(lancamentosAtivos);
 
   const statusAction = alterarStatusForm.bind(null, id);
+  const transicoesStatus = transicoesPermitidas(os.status as StatusOS, profile.papel);
+  const podeEditarOs =
+    profile.papel === "admin" ||
+    !["concluida", "entregue", "cancelada"].includes(os.status);
   const financeiroAction = lancarFinanceiro.bind(null, id);
   const clienteAusenteAction = registrarClienteAusente.bind(null, id);
   const ehTecnico = profile.papel === "tecnico";
@@ -136,9 +142,11 @@ export default async function OrdemDetalhePage({
             <Link href={`/imprimir/os/${id}`} target="_blank" className="btn-secondary">
               <Printer className="h-4 w-4" /> Imprimir / PDF
             </Link>
-            <Link href={`/ordens/${id}/editar`} className="btn-primary">
-              <Pencil className="h-4 w-4" /> Editar
-            </Link>
+            {podeEditarOs && (
+              <Link href={`/ordens/${id}/editar`} className="btn-primary">
+                <Pencil className="h-4 w-4" /> Editar
+              </Link>
+            )}
             {podeExcluirOs && (
               <ConfirmButton
                 action={excluirOrdem.bind(null, id)}
@@ -277,7 +285,11 @@ export default async function OrdemDetalhePage({
               <h3 className="text-sm font-semibold text-slate-700">Status</h3>
               <StatusBadge status={os.status} />
             </div>
-            <OsStatusControl statusAtual={os.status} action={statusAction} />
+            <OsStatusControl
+              statusAtual={os.status}
+              action={statusAction}
+              transicoesPermitidas={transicoesStatus}
+            />
           </div>
 
           {/* Enviar ao cliente */}

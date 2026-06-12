@@ -97,6 +97,18 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
   return true;
 }
 
+/** Cancela lançamentos ativos vinculados à OS (ex.: OS cancelada). */
+export async function cancelarLancamentosOs(supabase: Db, osId: string): Promise<void> {
+  const { error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({ status: "cancelado" })
+    .eq("os_id", osId)
+    .neq("status", "cancelado");
+  if (error) {
+    console.error("[os-financeiro] Erro ao cancelar lançamentos:", error.message);
+  }
+}
+
 /** Sincroniza valores dos lançamentos ativos quando a OS é editada. */
 export async function sincronizarFinanceiroOs(
   supabase: Db,
@@ -120,13 +132,21 @@ export async function sincronizarFinanceiroOs(
     .maybeSingle();
 
   for (const l of lancamentos) {
-    if (l.tipo === "receita" && l.status !== "pago") {
+    const receitaProtegida = l.tipo === "receita" && ["pago", "parcial"].includes(l.status);
+    const despesaProtegida = l.tipo === "despesa" && l.status === "pago";
+
+    if (l.tipo === "receita" && !receitaProtegida) {
+      const pago = Number(l.valor_pago) || 0;
+      if (pago > 0 && valorReceita < pago) continue;
       await supabase.from("lancamentos_financeiros").update({ valor: valorReceita }).eq("id", l.id);
     }
-    if (l.tipo === "despesa" && l.descricao?.startsWith("Custo OS-") && l.status !== "pago") {
-      if (custoTotal > 0) {
-        await supabase.from("lancamentos_financeiros").update({ valor: custoTotal }).eq("id", l.id);
-      }
+    if (
+      l.tipo === "despesa" &&
+      l.descricao?.startsWith("Custo OS-") &&
+      !despesaProtegida &&
+      custoTotal > 0
+    ) {
+      await supabase.from("lancamentos_financeiros").update({ valor: custoTotal }).eq("id", l.id);
     }
   }
 

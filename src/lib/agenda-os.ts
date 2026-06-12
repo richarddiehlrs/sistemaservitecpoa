@@ -60,17 +60,28 @@ export async function sincronizarAgendamentoOs(
     if (existente.status === "agendado" || existente.status === "confirmado") {
       const { error } = await supabase.from("agendamentos").update(payload).eq("id", existente.id);
       if (error) throw new Error(error.message);
-    } else {
-      const { error } = await supabase
-        .from("agendamentos")
-        .update({
-          tecnico: opts.tecnico,
-          tecnico_id: opts.tecnico_id,
-          endereco,
-        })
-        .eq("id", existente.id);
-      if (error) throw new Error(error.message);
+      return existente.id;
     }
+
+    if (["realizado", "cancelado", "em_atendimento"].includes(existente.status)) {
+      const { data: novo, error } = await supabase
+        .from("agendamentos")
+        .insert({ ...payload, status: "agendado" })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      return novo?.id;
+    }
+
+    const { error } = await supabase
+      .from("agendamentos")
+      .update({
+        tecnico: opts.tecnico,
+        tecnico_id: opts.tecnico_id,
+        endereco,
+      })
+      .eq("id", existente.id);
+    if (error) throw new Error(error.message);
     return existente.id;
   }
 

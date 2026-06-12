@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Papel } from "@/lib/permissoes";
 import { sincronizarAgendaStatusOs } from "@/lib/agenda-os";
-import { criarReceitaPendenteOs } from "@/lib/os-financeiro";
+import { cancelarLancamentosOs, criarReceitaPendenteOs } from "@/lib/os-financeiro";
 import { notificarMudancaStatusOs } from "@/lib/notificacoes";
+import { validarTransicaoStatus } from "@/lib/transicao-status";
 import type { Database, StatusOS } from "@/types/database";
 
 type Db = SupabaseClient<Database>;
@@ -23,6 +25,9 @@ export type TransicaoOsOpts = {
   origem?: string;
   skipNotificacao?: boolean;
   skipFinanceiro?: boolean;
+  /** Pula validação da matriz (check-in, check-out, portal interno). */
+  sistema?: boolean;
+  papel?: Papel;
   extras?: Record<string, unknown>;
 };
 
@@ -36,6 +41,12 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
 
   if (!osAntes) throw new Error("OS não encontrada.");
   if (osAntes.status === opts.status) return { mudou: false as const };
+
+  if (opts.papel) {
+    validarTransicaoStatus(osAntes.status as StatusOS, opts.status, opts.papel, {
+      sistema: opts.sistema,
+    });
+  }
 
   const update: Record<string, unknown> = { status: opts.status, ...opts.extras };
 
@@ -63,6 +74,10 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
 
   if (opts.status === "aprovada" && !opts.skipFinanceiro) {
     await criarReceitaPendenteOs(supabase, opts.osId);
+  }
+
+  if (opts.status === "cancelada") {
+    await cancelarLancamentosOs(supabase, opts.osId);
   }
 
   if (
