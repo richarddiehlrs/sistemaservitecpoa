@@ -3,12 +3,10 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eraser, Check, Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { notificarAprovacaoPortal } from "@/app/os/notificar-actions";
+import { aprovarOrcamentoPortal } from "@/app/os/portal-actions";
 
 export function OsAprovar({ token }: { token: string }) {
   const router = useRouter();
-  const supabase = createClient();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const desenhando = useRef(false);
   const [temTraco, setTemTraco] = useState(false);
@@ -55,20 +53,13 @@ export function OsAprovar({ token }: { token: string }) {
     setEnviando(true);
     setErro(null);
     const assinatura = temTraco ? canvasRef.current!.toDataURL("image/png") : null;
-    const { data, error } = await supabase.rpc("os_aprovar", {
-      p_token: token,
-      p_assinatura: assinatura,
-      p_obs: obs || null,
-    });
+
+    const result = await aprovarOrcamentoPortal(token, assinatura, obs || null);
+
     setEnviando(false);
-    if (error || (data && (data as any).ok === false)) {
-      setErro("Não foi possível aprovar. Tente novamente ou entre em contato.");
+    if (!result.ok) {
+      setErro(result.erro);
       return;
-    }
-    try {
-      await notificarAprovacaoPortal(token);
-    } catch (err) {
-      console.error("[os-aprovar] Falha ao notificar aprovação:", err);
     }
     router.refresh();
   }
@@ -81,17 +72,21 @@ export function OsAprovar({ token }: { token: string }) {
       <canvas
         ref={canvasRef}
         width={400}
-        height={150}
+        height={120}
+        className="w-full touch-none rounded-lg border border-slate-200 bg-white"
         onPointerDown={start}
         onPointerMove={move}
         onPointerUp={end}
         onPointerLeave={end}
-        className="w-full touch-none rounded-lg border border-slate-300 bg-white"
-        style={{ aspectRatio: "400 / 150" }}
       />
-      <div className="flex items-center gap-2">
-        <button onClick={limpar} className="btn-secondary text-sm">
-          <Eraser className="h-4 w-4" /> Limpar
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={limpar}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+        >
+          <Eraser className="h-4 w-4" />
+          Limpar
         </button>
       </div>
       <textarea
@@ -99,10 +94,15 @@ export function OsAprovar({ token }: { token: string }) {
         onChange={(e) => setObs(e.target.value)}
         placeholder="Observação (opcional)"
         rows={2}
-        className="input"
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
       />
       {erro && <p className="text-sm text-red-600">{erro}</p>}
-      <button onClick={aprovar} disabled={enviando} className="btn-primary w-full">
+      <button
+        type="button"
+        onClick={aprovar}
+        disabled={enviando}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+      >
         {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
         Aprovar orçamento
       </button>

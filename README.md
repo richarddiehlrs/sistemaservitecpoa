@@ -6,6 +6,8 @@ ERP completo para assistência técnica de eletrodomésticos — **domicílio** 
 
 **Deploy:** [Vercel](https://vercel.com) · Repositório: [github.com/richarddiehlrs/sistemaservitecpoa](https://github.com/richarddiehlrs/sistemaservitecpoa)
 
+**Funcionamento completo do sistema:** [README-FUNCIONAMENTO.md](./README-FUNCIONAMENTO.md) — arquitetura, fluxos OS, financeiro, portal, alertas e regras de negócio.
+
 ---
 
 ## Funcionalidades

@@ -438,7 +438,7 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
   if (os.status === "cancelada") throw new Error("Não é possível lançar financeiro de OS cancelada.");
 
   if (await temLancamentoAtivoOs(supabase, id)) {
-    throw new Error("Esta OS já possui lançamento financeiro. Edite os valores na OS para sincronizar.");
+    throw new Error("Esta OS já possui receita financeira. Edite os valores na OS para sincronizar.");
   }
 
   const valorReceita = calcValorTotalCliente(
@@ -517,13 +517,30 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
 }
 
 export async function salvarAssinatura(id: string, dataUrl: string) {
+  const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
+
+  if (profile.papel === "tecnico") {
+    const { data: os } = await supabase
+      .from("ordens_servico")
+      .select("tecnico_id, tecnico")
+      .eq("id", id)
+      .single();
+    if (!os) throw new Error("Ordem não encontrada.");
+    const nome = nomeTecnico(profile);
+    const atribuido =
+      os.tecnico_id === profile.id ||
+      (os.tecnico?.toLowerCase().includes(nome.toLowerCase()) ?? false);
+    if (!atribuido) throw new Error("Esta ordem não está atribuída a você.");
+  }
+
   const { error } = await supabase
     .from("ordens_servico")
     .update({ assinatura_cliente: dataUrl })
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath(`/ordens/${id}`);
+  revalidatePath("/imprimir/os/" + id);
 }
 
 export async function salvarAssinaturaTecnico(id: string, dataUrl: string) {

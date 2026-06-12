@@ -4,18 +4,23 @@ import type { Database } from "@/types/database";
 
 type Db = SupabaseClient<Database>;
 
-export async function temLancamentoAtivoOs(supabase: Db, osId: string): Promise<boolean> {
+/** Verifica se já existe receita ativa na OS (despesas de campo não bloqueiam). */
+export async function temReceitaAtivaOs(supabase: Db, osId: string): Promise<boolean> {
   const { count } = await supabase
     .from("lancamentos_financeiros")
     .select("id", { count: "exact", head: true })
     .eq("os_id", osId)
+    .eq("tipo", "receita")
     .neq("status", "cancelado");
   return (count ?? 0) > 0;
 }
 
+/** @deprecated Use temReceitaAtivaOs — mantido para compatibilidade. */
+export const temLancamentoAtivoOs = temReceitaAtivaOs;
+
 /** Cria receita pendente quando o orçamento é aprovado (portal ou ERP). */
 export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promise<boolean> {
-  if (await temLancamentoAtivoOs(supabase, osId)) return false;
+  if (await temReceitaAtivaOs(supabase, osId)) return false;
 
   const { data: os } = await supabase
     .from("ordens_servico")
