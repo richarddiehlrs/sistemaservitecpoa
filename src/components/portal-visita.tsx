@@ -1,120 +1,279 @@
-import { MapPin, Truck, Wrench, UserX, CheckCircle2 } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardList,
+  FileText,
+  MapPin,
+  Package,
+  Truck,
+  UserX,
+  Wrench,
+  XCircle,
+} from "lucide-react";
 import { formatDate, formatDateTime, STATUS_OS_LABEL, STATUS_OS_COLOR } from "@/lib/format";
 import { TURNO_LABEL } from "@/lib/turnos";
 import { cn } from "@/lib/utils";
 
-const ETAPAS_VISITA = [
-  { key: "aberta", label: "Aberta", icon: CheckCircle2 },
-  { key: "em_roteiro", label: "Em roteiro", icon: Truck },
-  { key: "em_execucao", label: "Em atendimento", icon: Wrench },
-  { key: "concluida", label: "Concluída", icon: CheckCircle2 },
+type HistoricoItem = {
+  status: string;
+  observacao?: string | null;
+  created_at: string;
+};
+
+/** Etapas da jornada visíveis ao cliente (ordem fixa). */
+const JORNADA = [
+  { key: "registro", label: "Ordem registrada", icon: ClipboardList },
+  { key: "orcamento", label: "Orçamento enviado", icon: FileText },
+  { key: "aprovado", label: "Orçamento aprovado", icon: CheckCircle2 },
+  { key: "roteiro", label: "Técnico a caminho", icon: Truck },
+  { key: "atendimento", label: "Em atendimento", icon: Wrench },
+  { key: "peca", label: "Aguardando peça", icon: Package },
+  { key: "concluido", label: "Serviço concluído", icon: CheckCircle2 },
 ] as const;
 
-export function PortalVisitaStatus({
+const STATUS_PARA_ETAPA: Record<string, number> = {
+  aberta: 0,
+  em_analise: 0,
+  aguardando_aprovacao: 1,
+  aprovada: 2,
+  em_roteiro: 3,
+  em_execucao: 4,
+  cliente_ausente: 4,
+  aguardando_peca: 5,
+  concluida: 6,
+  entregue: 6,
+  garantia: 6,
+};
+
+function indiceEtapaAtual(status: string, aprovado: boolean): number {
+  if (status === "cancelada") return -1;
+  let base = STATUS_PARA_ETAPA[status] ?? (aprovado ? 2 : 0);
+  if (aprovado && base < 2) base = 2;
+  return base;
+}
+
+function observacaoParaCliente(obs?: string | null): string | null {
+  if (!obs?.trim()) return null;
+  const o = obs.toLowerCase();
+  if (o.includes("check-in") || o.includes("checkin")) return "Técnico iniciou o atendimento no local.";
+  if (o.includes("check-out") || o.includes("checkout")) return "Visita finalizada pelo técnico.";
+  if (o.includes("portal") || o.includes("aprovado pelo cliente")) return "Você aprovou o orçamento.";
+  if (o.includes("via erp") || o.includes("atualizado via")) return null;
+  return obs;
+}
+
+function iconeHistorico(status: string) {
+  switch (status) {
+    case "aguardando_aprovacao":
+      return FileText;
+    case "aprovada":
+      return CheckCircle2;
+    case "em_roteiro":
+      return Truck;
+    case "em_execucao":
+      return Wrench;
+    case "aguardando_peca":
+      return Package;
+    case "cliente_ausente":
+      return UserX;
+    case "concluida":
+    case "entregue":
+      return CheckCircle2;
+    case "cancelada":
+      return XCircle;
+    default:
+      return ClipboardList;
+  }
+}
+
+export function PortalAcompanhamento({
   status,
+  aprovado = false,
+  dataAprovacao,
   dataPrevisao,
   turno,
   tecnico,
+  historico = [],
 }: {
+  status: string;
+  aprovado?: boolean;
+  dataAprovacao?: string | null;
+  dataPrevisao?: string | null;
+  turno?: string | null;
+  tecnico?: string | null;
+  historico?: HistoricoItem[];
+}) {
+  const cancelada = status === "cancelada";
+  const etapaAtual = indiceEtapaAtual(status, aprovado);
+  const ehAusente = status === "cliente_ausente";
+
+  const eventos = [...historico].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+
+  // Datas-chave por etapa (a partir do histórico)
+  const dataPorEtapa: Partial<Record<string, string>> = {};
+  for (const h of eventos) {
+    const idx = STATUS_PARA_ETAPA[h.status];
+    if (idx === 0) dataPorEtapa.registro = h.created_at;
+    if (idx === 1) dataPorEtapa.orcamento = h.created_at;
+    if (idx === 2 || h.status === "aprovada") dataPorEtapa.aprovado = h.created_at;
+    if (idx === 3) dataPorEtapa.roteiro = h.created_at;
+    if (idx === 4) dataPorEtapa.atendimento = h.created_at;
+    if (idx === 5) dataPorEtapa.peca = h.created_at;
+    if (idx === 6) dataPorEtapa.concluido = h.created_at;
+  }
+  if (aprovado && dataAprovacao) dataPorEtapa.aprovado = dataAprovacao;
+
+  return (
+    <div className="card mb-4 overflow-hidden p-5">
+      <h2 className="mb-1 font-semibold text-slate-900">Acompanhamento do serviço</h2>
+      <p className="mb-5 text-xs text-slate-500">
+        Acompanhe cada etapa da sua ordem de serviço em tempo real.
+      </p>
+
+      {cancelada ? (
+        <div className="mb-5 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <XCircle className="h-5 w-5 shrink-0" />
+          Esta ordem de serviço foi cancelada.
+        </div>
+      ) : (
+        <ol className="mb-6 space-y-0">
+          {JORNADA.map((etapa, i) => {
+            const Icon = etapa.icon;
+            const concluida = etapaAtual > i;
+            const atual = etapaAtual === i;
+            const futura = etapaAtual < i;
+            const tevePeca =
+              status === "aguardando_peca" ||
+              eventos.some((h) => h.status === "aguardando_peca");
+            if (etapa.key === "peca" && !tevePeca && etapaAtual < 5) return null;
+
+            const dataEtapa = dataPorEtapa[etapa.key as keyof typeof dataPorEtapa];
+
+            return (
+              <li key={etapa.key} className="relative flex gap-3 pb-5 last:pb-0">
+                {i < JORNADA.length - 1 && (
+                  <span
+                    className={cn(
+                      "absolute left-[15px] top-8 bottom-0 w-0.5",
+                      concluida ? "bg-brand-400" : "bg-slate-200"
+                    )}
+                  />
+                )}
+                <div
+                  className={cn(
+                    "relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2",
+                    concluida && "border-brand-500 bg-brand-500 text-white",
+                    atual && !ehAusente && "border-brand-500 bg-brand-50 text-brand-700 ring-4 ring-brand-100",
+                    atual && ehAusente && etapa.key === "atendimento" && "border-rose-500 bg-rose-50 text-rose-700 ring-4 ring-rose-100",
+                    futura && "border-slate-200 bg-white text-slate-300"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <p
+                    className={cn(
+                      "text-sm font-medium",
+                      concluida || atual ? "text-slate-900" : "text-slate-400"
+                    )}
+                  >
+                    {etapa.label}
+                    {atual && (
+                      <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-brand-600">
+                        Agora
+                      </span>
+                    )}
+                  </p>
+                  {dataEtapa && (concluida || atual) && (
+                    <p className="text-xs text-slate-500">{formatDateTime(dataEtapa)}</p>
+                  )}
+                  {atual && ehAusente && etapa.key === "atendimento" && (
+                    <p className="mt-1 text-xs text-rose-600">
+                      Técnico compareceu, mas não foi possível realizar o atendimento.
+                    </p>
+                  )}
+                  {atual && etapa.key === "roteiro" && dataPrevisao && (
+                    <p className="mt-1 text-xs text-slate-600">
+                      Visita prevista: {formatDate(dataPrevisao)}
+                      {turno && TURNO_LABEL[turno] ? ` • ${TURNO_LABEL[turno]}` : ""}
+                    </p>
+                  )}
+                  {atual && etapa.key === "atendimento" && tecnico && (
+                    <p className="mt-1 flex items-center gap-1 text-xs text-slate-600">
+                      <MapPin className="h-3 w-3" /> Técnico: {tecnico}
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
+      {eventos.length > 0 && (
+        <>
+          <div className="mb-3 border-t border-slate-100 pt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Histórico detalhado
+            </h3>
+          </div>
+          <ol className="space-y-3">
+            {[...eventos].reverse().map((h, i) => {
+              const Icon = iconeHistorico(h.status);
+              const obs = observacaoParaCliente(h.observacao);
+              const cor = STATUS_OS_COLOR[h.status] || "bg-slate-100 text-slate-600";
+              return (
+                <li
+                  key={`${h.created_at}-${i}`}
+                  className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2.5"
+                >
+                  <div
+                    className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                      cor
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-1">
+                      <p className="text-sm font-medium text-slate-800">
+                        {STATUS_OS_LABEL[h.status] || h.status}
+                      </p>
+                      <time className="text-xs text-slate-400">{formatDateTime(h.created_at)}</time>
+                    </div>
+                    {obs && <p className="mt-0.5 text-xs text-slate-600">{obs}</p>}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** @deprecated Use PortalAcompanhamento — mantido para compatibilidade de import. */
+export function PortalVisitaStatus(props: {
   status: string;
   dataPrevisao?: string | null;
   turno?: string | null;
   tecnico?: string | null;
 }) {
-  const ehAusente = status === "cliente_ausente";
-  const idxAtual = (() => {
-    if (ehAusente || status === "em_execucao") return 2;
-    if (["concluida", "entregue"].includes(status)) return 3;
-    if (status === "em_roteiro") return 1;
-    return 0;
-  })();
-
   return (
-    <div className="card mb-4 p-5">
-      <h2 className="mb-3 font-semibold text-slate-900">Status da visita</h2>
-
-      {ehAusente ? (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          <UserX className="h-4 w-4 shrink-0" />
-          Técnico compareceu, mas o cliente não estava no local.
-        </div>
-      ) : (
-        <div className="mb-4 flex items-center justify-between gap-1">
-          {ETAPAS_VISITA.map((etapa, i) => {
-            const Icon = etapa.icon;
-            const ativo = i <= idxAtual;
-            const atual = i === idxAtual;
-            return (
-              <div key={etapa.key} className="flex flex-1 flex-col items-center gap-1">
-                <div
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs",
-                    ativo ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-300",
-                    atual && "ring-2 ring-brand-200"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                </div>
-                <span className={cn("text-center text-[10px] leading-tight", ativo ? "font-medium text-slate-700" : "text-slate-400")}>
-                  {etapa.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <dl className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <dt className="text-xs text-slate-400">Situação atual</dt>
-          <dd>
-            <span className={cn("badge", STATUS_OS_COLOR[status] || "bg-slate-100 text-slate-600")}>
-              {STATUS_OS_LABEL[status] || status}
-            </span>
-          </dd>
-        </div>
-        {dataPrevisao && (
-          <div>
-            <dt className="text-xs text-slate-400">Previsão de visita</dt>
-            <dd className="font-medium text-slate-800">
-              {formatDate(dataPrevisao)}
-              {turno && TURNO_LABEL[turno] ? ` (${TURNO_LABEL[turno]})` : ""}
-            </dd>
-          </div>
-        )}
-        {tecnico && (
-          <div className="col-span-2">
-            <dt className="text-xs text-slate-400">Técnico responsável</dt>
-            <dd className="flex items-center gap-1 font-medium text-slate-800">
-              <MapPin className="h-3.5 w-3.5 text-slate-400" /> {tecnico}
-            </dd>
-          </div>
-        )}
-      </dl>
-    </div>
+    <PortalAcompanhamento
+      status={props.status}
+      dataPrevisao={props.dataPrevisao}
+      turno={props.turno}
+      tecnico={props.tecnico}
+      historico={[]}
+    />
   );
 }
 
-export function PortalTimeline({
-  historico,
-}: {
-  historico: { status: string; observacao?: string | null; created_at: string }[];
-}) {
-  if (!historico?.length) return null;
-
-  return (
-    <div className="card mb-4 p-5">
-      <h2 className="mb-4 font-semibold text-slate-900">Acompanhamento</h2>
-      <ol className="relative space-y-0 border-l-2 border-brand-100 pl-4">
-        {historico.map((h, i) => (
-          <li key={i} className="relative pb-4 last:pb-0">
-            <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-brand-500 ring-4 ring-white" />
-            <p className="text-xs text-slate-400">{formatDateTime(h.created_at)}</p>
-            <p className="font-medium text-slate-800">{STATUS_OS_LABEL[h.status] || h.status}</p>
-            {h.observacao && <p className="text-sm text-slate-600">{h.observacao}</p>}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
+/** @deprecated Use PortalAcompanhamento */
+export function PortalTimeline({ historico }: { historico: HistoricoItem[] }) {
+  return <PortalAcompanhamento status="aberta" historico={historico} />;
 }

@@ -3,7 +3,7 @@ import { CheckCircle2, Clock, UserX } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { OsAprovar } from "@/components/os-aprovar";
 import { PortalQrCodes } from "@/components/portal-qr-codes";
-import { PortalTimeline, PortalVisitaStatus } from "@/components/portal-visita";
+import { PortalAcompanhamento } from "@/components/portal-visita";
 import { PrintButton } from "@/components/print-button";
 import {
   formatCurrency,
@@ -110,14 +110,15 @@ export default async function PortalOsPage({
           {os.servico && <Bloco titulo="Serviço executado" valor={os.servico} />}
         </div>
 
-        <PortalVisitaStatus
+        <PortalAcompanhamento
           status={os.status}
+          aprovado={Boolean(os.aprovado)}
+          dataAprovacao={os.data_aprovacao}
           dataPrevisao={os.data_previsao}
           turno={os.turno}
           tecnico={os.tecnico}
+          historico={historico}
         />
-
-        <PortalTimeline historico={historico} />
 
         {/* Cliente ausente */}
         {ehClienteAusente && (
