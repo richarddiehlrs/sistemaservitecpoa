@@ -6,8 +6,8 @@ import { requireProfile } from "@/lib/auth-guard";
 
 export async function registrarPushSubscription(formData: FormData) {
   const profile = await requireProfile();
-  if (profile.papel !== "tecnico") {
-    throw new Error("Push disponível apenas para técnicos.");
+  if (!["tecnico", "admin", "atendente"].includes(profile.papel)) {
+    throw new Error("Push não disponível para este perfil.");
   }
 
   const endpoint = String(formData.get("endpoint") || "").trim();

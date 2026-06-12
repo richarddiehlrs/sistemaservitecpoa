@@ -7,9 +7,11 @@ import { PortalTimeline, PortalVisitaStatus } from "@/components/portal-visita";
 import { PrintButton } from "@/components/print-button";
 import {
   formatCurrency,
+  formatCpfCnpj,
   formatDate,
   formatDateTime,
   formatNumeroOS,
+  formatTelefone,
   STATUS_OS_LABEL,
 } from "@/lib/format";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
@@ -88,8 +90,16 @@ export default async function PortalOsPage({
           </div>
 
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <Info titulo="Cliente" valor={os.cliente_nome} />
+            <Info titulo="Cliente" valor={os.cliente?.nome || os.cliente_nome} />
+            {os.cliente?.cpf_cnpj && <Info titulo="CPF/CNPJ" valor={formatCpfCnpj(os.cliente.cpf_cnpj)} />}
+            {os.cliente?.telefone && <Info titulo="Telefone" valor={formatTelefone(os.cliente.telefone)} />}
             <Info titulo="Equipamento" valor={os.equipamento} />
+            {os.equipamento_detalhe?.numero_serie && (
+              <Info titulo="Nº série" valor={os.equipamento_detalhe.numero_serie} />
+            )}
+            {os.equipamento_detalhe?.voltagem && (
+              <Info titulo="Voltagem" valor={os.equipamento_detalhe.voltagem} />
+            )}
             <Info titulo="Abertura" valor={formatDate(os.data_abertura)} />
             <Info titulo="Garantia" valor={`${os.garantia_dias} dias`} />
             {os.tecnico && <Info titulo="Técnico" valor={os.tecnico} />}
@@ -202,9 +212,29 @@ export default async function PortalOsPage({
             <OsAprovar token={token} />
           </div>
         ) : os.aprovado ? (
-          <div className="card flex items-center gap-2 p-5 text-green-700">
-            <CheckCircle2 className="h-5 w-5" />
-            Orçamento aprovado em {formatDate(os.data_aprovacao)}. Obrigado!
+          <div className="card space-y-3 p-5 text-green-700">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5" />
+              Orçamento aprovado em {formatDate(os.data_aprovacao)}. Obrigado!
+            </div>
+            {(os.assinatura_cliente || os.assinatura_tecnico) && (
+              <div className="grid grid-cols-1 gap-3 border-t border-green-200 pt-3 sm:grid-cols-2">
+                {os.assinatura_cliente && (
+                  <div className="rounded-lg border bg-white p-3">
+                    <p className="mb-1 text-xs text-slate-500">Assinatura do cliente</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={os.assinatura_cliente} alt="Assinatura cliente" className="h-16 object-contain" />
+                  </div>
+                )}
+                {os.assinatura_tecnico && (
+                  <div className="rounded-lg border bg-white p-3">
+                    <p className="mb-1 text-xs text-slate-500">Assinatura do técnico</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={os.assinatura_tecnico} alt="Assinatura técnico" className="h-16 object-contain" />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : null}
 

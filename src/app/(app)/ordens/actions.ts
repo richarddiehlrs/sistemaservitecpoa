@@ -473,6 +473,7 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
     supabase.from("categorias_financeiras").select("id").eq("nome", "Compra de peças").limit(1).single(),
   ]);
 
+  const jaPago = status === "pago";
   const lancamentos: Record<string, unknown>[] = [
     {
       tipo: "receita",
@@ -481,9 +482,11 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
       os_id: os.id,
       cliente_id: os.cliente_id,
       valor: valorReceita,
+      valor_pago: jaPago ? valorReceita : 0,
+      valor_liquido: jaPago ? valorReceita : null,
       data_competencia: hoje,
       data_vencimento: dataVencimento || hoje,
-      data_pagamento: status === "pago" ? hoje : null,
+      data_pagamento: jaPago ? hoje : null,
       status,
       forma_pagamento: formaPagamento,
     },
@@ -495,16 +498,19 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
 
   // Custo da OS -> despesa (gera o lucro líquido automaticamente no financeiro/DRE)
   if (Number(os.custo_total) > 0) {
+    const custo = Number(os.custo_total);
     lancamentos.push({
       tipo: "despesa",
       descricao: `Custo ${numeroFmt}`,
       categoria_id: catCusto?.id ?? null,
       os_id: os.id,
       cliente_id: os.cliente_id,
-      valor: os.custo_total,
+      valor: custo,
+      valor_pago: jaPago ? custo : 0,
+      valor_liquido: jaPago ? custo : null,
       data_competencia: hoje,
       data_vencimento: hoje,
-      data_pagamento: status === "pago" ? hoje : null,
+      data_pagamento: jaPago ? hoje : null,
       status,
       forma_pagamento: formaPagamento,
     });

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PrintButton } from "@/components/print-button";
-import { OsViaPrint } from "@/components/os-via-print";
+import { OsViaPrint, type OsViaPrintData } from "@/components/os-via-print";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +52,8 @@ export default async function ImprimirPortalOsPage({
             defeito_relatado: os.defeito as string | null,
             diagnostico: os.diagnostico as string | null,
             servico_executado: os.servico as string | null,
+            acompanha: os.acompanha as string | null,
+            estado_aparelho: os.estado_aparelho as string | null,
             valor_itens: Number(os.valor_itens),
             valor_visita: Number(os.valor_visita),
             abater_visita: Boolean(os.abater_visita),
@@ -59,21 +61,28 @@ export default async function ImprimirPortalOsPage({
             acrescimo: Number(os.acrescimo),
             garantia_dias: Number(os.garantia_dias),
             aprovado: Boolean(os.aprovado),
+            assinatura_cliente: os.assinatura_cliente as string | null,
             assinatura_tecnico: os.assinatura_tecnico as string | null,
             observacao_cliente_ausente: os.observacao_cliente_ausente as string | null,
             cliente_ausente_registrado_at: os.cliente_ausente_registrado_at as string | null,
           }}
+          cliente={os.cliente as OsViaPrintData["cliente"]}
           clienteNome={os.cliente_nome as string}
+          equip={os.equipamento_detalhe as OsViaPrintData["equip"]}
           equipamentoTexto={os.equipamento as string}
           itens={itens}
           anexosAusente={anexosAusente}
           historico={historico}
           config={{
             nome: empresa.nome || "Assistência Técnica",
+            cnpj: empresa.cnpj || undefined,
             telefone: empresa.telefone || undefined,
             email: empresa.email || undefined,
+            endereco: empresa.endereco || undefined,
+            cidade: empresa.cidade || undefined,
             logo_url: empresa.logo_url,
             termo_garantia: empresa.termo_garantia || undefined,
+            politica_os: empresa.politica_os || undefined,
           }}
           publicUrl={publicUrl}
           via="Via do Cliente"

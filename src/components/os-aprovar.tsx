@@ -65,7 +65,11 @@ export function OsAprovar({ token }: { token: string }) {
       setErro("Não foi possível aprovar. Tente novamente ou entre em contato.");
       return;
     }
-    notificarAprovacaoPortal(token).catch(() => {});
+    try {
+      await notificarAprovacaoPortal(token);
+    } catch (err) {
+      console.error("[os-aprovar] Falha ao notificar aprovação:", err);
+    }
     router.refresh();
   }
 

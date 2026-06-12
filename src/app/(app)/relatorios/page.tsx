@@ -5,6 +5,7 @@ import { requirePermissao } from "@/lib/auth-guard";
 import { PageHeader, StatCard } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
 import { formatCurrency, formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
+import { saldoEmAberto } from "@/lib/financeiro";
 
 export const dynamic = "force-dynamic";
 
@@ -26,15 +27,15 @@ export default async function RelatoriosPage({
   const [{ data: pagos }, { data: aReceberData }, { data: ordens }, config] = await Promise.all([
     supabase
       .from("lancamentos_financeiros")
-      .select("tipo, valor, data_pagamento, cliente_id, clientes(nome), categorias_financeiras(nome)")
-      .eq("status", "pago")
+      .select("tipo, valor_pago, data_pagamento, cliente_id, clientes(nome), categorias_financeiras(nome)")
+      .in("status", ["pago", "parcial"])
       .gte("data_pagamento", inicio)
       .lte("data_pagamento", fim),
     supabase
       .from("lancamentos_financeiros")
-      .select("valor")
+      .select("valor, valor_pago, juros, multa")
       .eq("tipo", "receita")
-      .eq("status", "pendente")
+      .in("status", ["pendente", "parcial"])
       .gte("data_competencia", inicio)
       .lte("data_competencia", fim),
     supabase
@@ -49,10 +50,10 @@ export default async function RelatoriosPage({
   const receitas = lista.filter((l) => l.tipo === "receita");
   const despesas = lista.filter((l) => l.tipo === "despesa");
 
-  const totalReceita = receitas.reduce((s, l) => s + Number(l.valor), 0);
-  const totalDespesa = despesas.reduce((s, l) => s + Number(l.valor), 0);
+  const totalReceita = receitas.reduce((s, l) => s + Number(l.valor_pago), 0);
+  const totalDespesa = despesas.reduce((s, l) => s + Number(l.valor_pago), 0);
   const saldo = totalReceita - totalDespesa;
-  const aReceber = (aReceberData || []).reduce((s, l) => s + Number(l.valor), 0);
+  const aReceber = (aReceberData || []).reduce((s, l) => s + saldoEmAberto(l), 0);
 
   // Mensal
   const chartData = MESES_CURTOS.map((label, i) => {
@@ -60,8 +61,8 @@ export default async function RelatoriosPage({
     const doMes = lista.filter((l) => (l.data_pagamento || "").startsWith(mesStr));
     return {
       label,
-      receita: doMes.filter((l) => l.tipo === "receita").reduce((s, l) => s + Number(l.valor), 0),
-      despesa: doMes.filter((l) => l.tipo === "despesa").reduce((s, l) => s + Number(l.valor), 0),
+      receita: doMes.filter((l) => l.tipo === "receita").reduce((s, l) => s + Number(l.valor_pago), 0),
+      despesa: doMes.filter((l) => l.tipo === "despesa").reduce((s, l) => s + Number(l.valor_pago), 0),
     };
   });
 

@@ -15,12 +15,29 @@ import { Home, Wrench } from "lucide-react";
 
 type ClienteLite = { id: string; nome: string; telefone: string | null };
 
+type MoneyField = number | "";
+
+function initMoney(v: number | null | undefined): MoneyField {
+  const n = Number(v ?? 0);
+  return n === 0 ? "" : n;
+}
+
+function parseMoneyInput(v: string): MoneyField {
+  if (v === "") return "";
+  const n = Number(v);
+  return Number.isFinite(n) ? n : "";
+}
+
+function moneyToNum(v: MoneyField): number {
+  return v === "" ? 0 : Number(v);
+}
+
 type ItemState = {
   tipo: "servico" | "peca";
   descricao: string;
   quantidade: number;
-  valor_unitario: number;
-  custo_unitario: number;
+  valor_unitario: MoneyField;
+  custo_unitario: MoneyField;
 };
 
 type Props = {
@@ -107,27 +124,33 @@ export function OrdemForm({
           tipo: i.tipo,
           descricao: i.descricao,
           quantidade: Number(i.quantidade),
-          valor_unitario: Number(i.valor_unitario),
-          custo_unitario: Number(i.custo_unitario || 0),
+          valor_unitario: initMoney(i.valor_unitario),
+          custo_unitario: initMoney(i.custo_unitario),
         }))
-      : [{ tipo: "servico", descricao: "", quantidade: 1, valor_unitario: 0, custo_unitario: 0 }]
+      : [{ tipo: "servico", descricao: "", quantidade: 1, valor_unitario: "", custo_unitario: "" }]
   );
 
   // ---- Valores ----
-  const [valorVisita, setValorVisita] = useState(Number(ordem?.valor_visita ?? 0));
+  const [valorVisita, setValorVisita] = useState<MoneyField>(initMoney(ordem?.valor_visita));
   const [abaterVisita, setAbaterVisita] = useState(ordem?.abater_visita ?? true);
-  const [desconto, setDesconto] = useState(Number(ordem?.desconto ?? 0));
-  const [acrescimo, setAcrescimo] = useState(Number(ordem?.acrescimo ?? 0));
+  const [desconto, setDesconto] = useState<MoneyField>(initMoney(ordem?.desconto));
+  const [acrescimo, setAcrescimo] = useState<MoneyField>(initMoney(ordem?.acrescimo));
 
   const valorItens = itens.reduce(
-    (s, i) => s + (Number(i.quantidade) || 0) * (Number(i.valor_unitario) || 0),
+    (s, i) => s + (Number(i.quantidade) || 0) * moneyToNum(i.valor_unitario),
     0
   );
   const custoItens = itens.reduce(
-    (s, i) => s + (Number(i.quantidade) || 0) * (Number(i.custo_unitario) || 0),
+    (s, i) => s + (Number(i.quantidade) || 0) * moneyToNum(i.custo_unitario),
     0
   );
-  const totalGeral = calcValorTotalCliente(valorItens, valorVisita, abaterVisita, desconto, acrescimo);
+  const totalGeral = calcValorTotalCliente(
+    valorItens,
+    moneyToNum(valorVisita),
+    abaterVisita,
+    moneyToNum(desconto),
+    moneyToNum(acrescimo)
+  );
   const lucro = totalGeral - custoItens;
 
   // Busca de clientes (debounce simples)
@@ -183,7 +206,7 @@ export function OrdemForm({
   function addItem() {
     setItens((arr) => [
       ...arr,
-      { tipo: "servico", descricao: "", quantidade: 1, valor_unitario: 0, custo_unitario: 0 },
+      { tipo: "servico", descricao: "", quantidade: 1, valor_unitario: "", custo_unitario: "" },
     ]);
   }
   function addDoCatalogo(id: string) {
@@ -191,7 +214,7 @@ export function OrdemForm({
     if (!s) return;
     setItens((arr) => [
       ...arr,
-      { tipo: s.tipo, descricao: s.descricao, quantidade: 1, valor_unitario: Number(s.valor), custo_unitario: 0 },
+      { tipo: s.tipo, descricao: s.descricao, quantidade: 1, valor_unitario: Number(s.valor), custo_unitario: "" },
     ]);
   }
   function updItem(idx: number, patch: Partial<ItemState>) {
@@ -230,7 +253,16 @@ export function OrdemForm({
     }
 
     formData.set("tipo_atendimento", tipoAtendimento);
-    formData.set("itens_json", JSON.stringify(itens));
+    formData.set(
+      "itens_json",
+      JSON.stringify(
+        itens.map((i) => ({
+          ...i,
+          valor_unitario: moneyToNum(i.valor_unitario),
+          custo_unitario: moneyToNum(i.custo_unitario),
+        }))
+      )
+    );
     if (abaterVisita) formData.set("abater_visita", "on");
     else formData.delete("abater_visita");
 
@@ -572,10 +604,10 @@ export function OrdemForm({
                 value={item.quantidade} onChange={(e) => updItem(idx, { quantidade: Number(e.target.value) })} />
               <input type="number" min="0" step="0.01" className="input col-span-4 sm:col-span-2" placeholder="Custo"
                 title="Custo que você pagou (peça/serviço)"
-                value={item.custo_unitario} onChange={(e) => updItem(idx, { custo_unitario: Number(e.target.value) })} />
+                value={item.custo_unitario} onChange={(e) => updItem(idx, { custo_unitario: parseMoneyInput(e.target.value) })} />
               <input type="number" min="0" step="0.01" className="input col-span-4 sm:col-span-2" placeholder="Venda"
                 title="Valor cobrado do cliente"
-                value={item.valor_unitario} onChange={(e) => updItem(idx, { valor_unitario: Number(e.target.value) })} />
+                value={item.valor_unitario} onChange={(e) => updItem(idx, { valor_unitario: parseMoneyInput(e.target.value) })} />
               <button type="button" onClick={() => rmItem(idx)}
                 className="col-span-1 flex items-center justify-center text-slate-400 hover:text-red-500">
                 <Trash2 className="h-4 w-4" />
@@ -713,7 +745,7 @@ export function OrdemForm({
             <div className={ehDomicilio ? "" : "hidden"}>
               <label className="label">Visita técnica (R$)</label>
               <input type="number" name="valor_visita" min="0" step="0.01" className="input"
-                value={ehDomicilio ? valorVisita : 0} onChange={(e) => setValorVisita(Number(e.target.value))} />
+                value={ehDomicilio ? valorVisita : ""} onChange={(e) => setValorVisita(parseMoneyInput(e.target.value))} />
               <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                 <input type="checkbox" checked={abaterVisita}
                   onChange={(e) => setAbaterVisita(e.target.checked)} />
@@ -725,19 +757,19 @@ export function OrdemForm({
               <div>
                 <label className="label">Desconto</label>
                 <input type="number" name="desconto" min="0" step="0.01" className="input"
-                  value={desconto} onChange={(e) => setDesconto(Number(e.target.value))} />
+                  value={desconto} onChange={(e) => setDesconto(parseMoneyInput(e.target.value))} />
               </div>
               <div>
                 <label className="label">Acréscimo</label>
                 <input type="number" name="acrescimo" min="0" step="0.01" className="input"
-                  value={acrescimo} onChange={(e) => setAcrescimo(Number(e.target.value))} />
+                  value={acrescimo} onChange={(e) => setAcrescimo(parseMoneyInput(e.target.value))} />
               </div>
             </div>
 
-            {valorVisita > 0 && (
+            {moneyToNum(valorVisita) > 0 && (
               <div className={`flex items-center justify-between text-xs ${abaterVisita ? "text-amber-600" : "text-slate-600"}`}>
                 <span>{abaterVisita ? "Visita abatida" : "Visita cobrada no total"}</span>
-                <span>{abaterVisita ? "- " : "+ "}{formatCurrency(valorVisita)}</span>
+                <span>{abaterVisita ? "- " : "+ "}{formatCurrency(moneyToNum(valorVisita))}</span>
               </div>
             )}
 

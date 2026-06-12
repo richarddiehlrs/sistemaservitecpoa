@@ -96,8 +96,8 @@ export default async function DashboardPage() {
       .in("status", ["pendente", "parcial"]),
     supabase
       .from("lancamentos_financeiros")
-      .select("tipo, valor, data_pagamento")
-      .eq("status", "pago")
+      .select("tipo, valor_pago, data_pagamento")
+      .in("status", ["pago", "parcial"])
       .gte("data_pagamento", inicio6m.toISOString().slice(0, 10)),
     supabase.from("ordens_servico").select("status"),
     supabase
@@ -166,8 +166,8 @@ export default async function DashboardPage() {
     const doMes = (lanc6m || []).filter((l) => (l.data_pagamento || "").startsWith(m.inicio));
     return {
       label: m.label,
-      receita: doMes.filter((l) => l.tipo === "receita").reduce((s, l) => s + Number(l.valor), 0),
-      despesa: doMes.filter((l) => l.tipo === "despesa").reduce((s, l) => s + Number(l.valor), 0),
+      receita: doMes.filter((l) => l.tipo === "receita").reduce((s, l) => s + Number(l.valor_pago), 0),
+      despesa: doMes.filter((l) => l.tipo === "despesa").reduce((s, l) => s + Number(l.valor_pago), 0),
     };
   });
 

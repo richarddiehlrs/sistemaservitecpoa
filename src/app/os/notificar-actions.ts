@@ -14,7 +14,10 @@ function supabaseAdmin() {
 /** Chamado após o cliente aprovar no portal (RPC os_aprovar). */
 export async function notificarAprovacaoPortal(token: string) {
   const supabase = supabaseAdmin();
-  if (!supabase) return;
+  if (!supabase) {
+    console.error("[notificarAprovacaoPortal] SUPABASE_SERVICE_ROLE_KEY não configurada.");
+    return;
+  }
 
   const { data: os } = await supabase
     .from("ordens_servico")

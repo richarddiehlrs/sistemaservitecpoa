@@ -28,6 +28,7 @@ import {
   TIPO_AGENDAMENTO_LABEL,
 } from "@/lib/format";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
+import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
 import { alterarStatusForm, excluirOrdem, lancarFinanceiro, registrarClienteAusente } from "../actions";
 import { OsEtiquetaPrompt } from "@/components/os-etiqueta-prompt";
@@ -430,17 +431,39 @@ export default async function OrdemDetalhePage({
             </h3>
             {lancamentos && lancamentos.length > 0 ? (
               <ul className="space-y-2 text-sm">
-                {lancamentos.map((l) => (
+                {lancamentos.map((l) => {
+                  const devido = valorDevido(l);
+                  const saldo = saldoEmAberto(l);
+                  const recebido = l.tipo === "receita" && l.status === "pago";
+                  const parcial = l.tipo === "receita" && l.status === "parcial";
+                  const label =
+                    l.tipo === "despesa"
+                      ? l.status === "pago"
+                        ? "Pago"
+                        : "A pagar"
+                      : recebido
+                        ? "Recebido"
+                        : parcial
+                          ? "Parcial"
+                          : "A receber";
+                  const valorExibir =
+                    l.tipo === "receita" && (recebido || parcial)
+                      ? Number(l.valor_pago || 0)
+                      : devido;
+                  return (
                   <li key={l.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
                     <div className="min-w-0">
-                      <span className={l.tipo === "despesa" ? "text-red-600" : l.status === "pago" ? "text-green-600" : "text-amber-600"}>
-                        {l.tipo === "despesa" ? "Custo" : l.status === "pago" ? "Recebido" : "A receber"}
+                      <span className={l.tipo === "despesa" ? "text-red-600" : recebido ? "text-green-600" : "text-amber-600"}>
+                        {l.tipo === "despesa" ? "Custo" : label}
                       </span>
                       <p className="truncate text-xs text-slate-400">{l.descricao}</p>
+                      {parcial && saldo > 0 && (
+                        <p className="text-xs text-amber-600">Saldo: {formatCurrency(saldo)}</p>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <span className="font-medium">
-                        {l.tipo === "despesa" ? "- " : ""}{formatCurrency(l.valor)}
+                        {l.tipo === "despesa" ? "- " : ""}{formatCurrency(valorExibir)}
                       </span>
                       {podeFinanceiro && (
                         <LancamentoAcoes
@@ -452,7 +475,8 @@ export default async function OrdemDetalhePage({
                       )}
                     </div>
                   </li>
-                ))}
+                  );
+                })}
                 <li className="flex items-center justify-between border-t border-slate-200 px-3 pt-2 font-semibold">
                   <span>Lucro líquido</span>
                   <span className="text-green-700">
