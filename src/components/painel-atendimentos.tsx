@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, Home, Wrench } from "lucide-react";
-import { formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
+import { formatDate, formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
 import {
   PAINEL_GRUPOS,
+  STATUS_PAINEL_ATIVOS,
   corPainelStatus,
   OFICINA_GRID_LINHAS,
   OFICINA_GRID_COLS,
@@ -82,7 +83,7 @@ export function PainelAtendimentos({ ordens }: { ordens: OsPainel[] }) {
 
 function SecaoDomicilio({ ordens }: { ordens: OsPainel[] }) {
   const colunas = PAINEL_GRUPOS.filter((g) =>
-    ["analise", "orcamento", "roteiro", "peca", "ausente", "garantia"].includes(g.key)
+    ["analise", "orcamento", "aprovada", "roteiro", "peca", "ausente", "garantia"].includes(g.key)
   );
 
   return (
@@ -193,12 +194,19 @@ function CardOs({ os, compact }: { os: OsPainel; compact?: boolean }) {
     >
       <div className="text-sm font-bold">{formatNumeroOS(os.numero)}</div>
       <div className="truncate text-[10px] opacity-90">{os.cliente_nome}</div>
+      {os.data_previsao && (
+        <div className="truncate text-[9px] opacity-75">{formatDate(os.data_previsao)}</div>
+      )}
       {os.tecnico && <div className="truncate text-[9px] opacity-75">{os.tecnico}</div>}
     </Link>
   );
 }
 
 function LegendaPainel({ contagem, total }: { contagem: Record<string, number>; total: number }) {
+  const gruposAtivos = PAINEL_GRUPOS.filter(
+    (g) => g.statuses.some((s) => STATUS_PAINEL_ATIVOS.includes(s)) || (contagem[g.key] || 0) > 0
+  );
+
   return (
     <div className="card mt-4 p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -206,7 +214,7 @@ function LegendaPainel({ contagem, total }: { contagem: Record<string, number>; 
         <span className="text-sm text-slate-500">Total no painel: <strong>{total}</strong></span>
       </div>
       <div className="flex flex-wrap gap-2">
-        {PAINEL_GRUPOS.map((g) => (
+        {gruposAtivos.map((g) => (
           <div
             key={g.key}
             className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium"

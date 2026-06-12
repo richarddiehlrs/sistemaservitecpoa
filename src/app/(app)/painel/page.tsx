@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, LayoutGrid } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth-guard";
 import { PageHeader } from "@/components/ui";
 import { PainelAtendimentos, type OsPainel } from "@/components/painel-atendimentos";
 import { STATUS_PAINEL_ATIVOS } from "@/lib/painel-atendimento";
@@ -8,6 +9,7 @@ import { STATUS_PAINEL_ATIVOS } from "@/lib/painel-atendimento";
 export const dynamic = "force-dynamic";
 
 export default async function PainelAtendimentosPage() {
+  await requirePermissao("ordens");
   const supabase = await createClient();
 
   const { data: ordens } = await supabase

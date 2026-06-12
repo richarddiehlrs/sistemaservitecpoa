@@ -29,7 +29,8 @@ export const PAINEL_GRUPOS: {
   texto: string;
 }[] = [
   { key: "analise", label: "Análise", statuses: ["aberta", "em_analise"], cor: "#2563eb", texto: "#ffffff" },
-  { key: "orcamento", label: "Orçamento", statuses: ["aguardando_aprovacao", "aprovada"], cor: "#f59e0b", texto: "#1e293b" },
+  { key: "orcamento", label: "Aguardando aprovação", statuses: ["aguardando_aprovacao"], cor: "#f59e0b", texto: "#1e293b" },
+  { key: "aprovada", label: "Aprovada — executar", statuses: ["aprovada"], cor: "#22c55e", texto: "#ffffff" },
   { key: "roteiro", label: "Em roteiro / execução", statuses: ["em_roteiro", "em_execucao"], cor: "#7c3aed", texto: "#ffffff" },
   { key: "peca", label: "Aguardando peça", statuses: ["aguardando_peca"], cor: "#dc2626", texto: "#ffffff" },
   { key: "ausente", label: "Cliente ausente", statuses: ["cliente_ausente"], cor: "#e11d48", texto: "#ffffff" },
