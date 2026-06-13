@@ -157,6 +157,14 @@ export type OsItem = {
   created_at: string;
 };
 
+export type OsEquipamento = {
+  id: string;
+  os_id: string;
+  equipamento_id: string;
+  ordem: number;
+  created_at: string;
+};
+
 export type OsStatusHistorico = {
   id: string;
   os_id: string;
@@ -338,6 +346,7 @@ export type Database = {
       equipamentos: TableDef<Equipamento>;
       ordens_servico: TableDef<OrdemServico>;
       os_itens: TableDef<OsItem>;
+      os_equipamentos: TableDef<OsEquipamento>;
       os_status_historico: TableDef<OsStatusHistorico>;
       categorias_financeiras: TableDef<CategoriaFinanceira>;
       lancamentos_financeiros: TableDef<LancamentoFinanceiro>;

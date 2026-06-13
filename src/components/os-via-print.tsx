@@ -9,6 +9,7 @@ import {
   STATUS_OS_LABEL,
 } from "@/lib/format";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
+import { linhaEquipamento, type EquipamentoResumo } from "@/lib/os-equipamentos";
 import { pixCopiaCola, PIX_CHAVE_CNPJ, GOOGLE_REVIEW_URL, formatPixCnpj } from "@/lib/pix";
 import { qrImageUrl } from "@/lib/qrcode";
 import { TURNO_LABEL } from "@/lib/turnos";
@@ -61,6 +62,8 @@ export type OsViaPrintData = {
     voltagem?: string;
     cor?: string;
   } | null;
+  /** Lista completa de equipamentos (prioridade sobre equip/equipamentoTexto). */
+  equips?: EquipamentoResumo[];
   equipamentoTexto?: string;
   itens: { id?: string; descricao: string; tipo?: string; quantidade: number; valor_unitario: number; subtotal: number }[];
   anexosAusente?: { url: string }[];
@@ -88,6 +91,7 @@ export function OsViaPrint(props: OsViaPrintData) {
     os,
     cliente,
     equip,
+    equips: equipsProp,
     itens,
     anexosAusente = [],
     historico = [],
@@ -100,6 +104,15 @@ export function OsViaPrint(props: OsViaPrintData) {
 
   const inteira = layout === "pagina-inteira";
   const clienteNome = props.clienteNome || cliente?.nome;
+  const equips =
+    equipsProp?.length
+      ? equipsProp
+      : equip
+        ? [equip]
+        : props.equipamentoTexto
+          ? [{ tipo: props.equipamentoTexto }]
+          : [];
+  const compacta = equips.length > 1 || itens.length > 5 || inteira === false && (equips.length + itens.length > 4);
 
   const valorTotal = calcValorTotalCliente(
     Number(os.valor_itens),
@@ -120,7 +133,7 @@ export function OsViaPrint(props: OsViaPrintData) {
   const logoH = inteira ? 52 : 42;
 
   return (
-    <div className={`via-os via-os--${layout}`}>
+    <div className={`via-os via-os--${layout}${compacta ? " via-os--compacta" : ""}`}>
       {/* Cabeçalho */}
       <header className="via-cabecalho">
         <div className="via-empresa">
@@ -173,18 +186,29 @@ export function OsViaPrint(props: OsViaPrintData) {
             </>
           ) : null}
         </Bloco>
-        <Bloco titulo="EQUIPAMENTO">
-          {equip ? (
-            <>
-              <div><strong>{equip.tipo} {equip.marca}</strong> {equip.modelo}</div>
-              {equip.numero_serie && <div>Série: {equip.numero_serie}</div>}
-              <div>
-                {equip.voltagem && <>Voltagem: {equip.voltagem} </>}
-                {equip.cor && <>• Cor: {equip.cor}</>}
-              </div>
-            </>
-          ) : props.equipamentoTexto ? (
-            <div>{props.equipamentoTexto}</div>
+        <Bloco titulo={equips.length > 1 ? `EQUIPAMENTOS (${equips.length})` : "EQUIPAMENTO"}>
+          {equips.length > 0 ? (
+            equips.length === 1 ? (
+              <>
+                <div><strong>{equips[0].tipo} {equips[0].marca}</strong> {equips[0].modelo}</div>
+                {equips[0].numero_serie && <div>Série: {equips[0].numero_serie}</div>}
+                <div>
+                  {equips[0].voltagem && <>Voltagem: {equips[0].voltagem} </>}
+                  {equips[0].cor && <>• Cor: {equips[0].cor}</>}
+                </div>
+              </>
+            ) : (
+              <table className="via-equip-tabela">
+                <tbody>
+                  {equips.map((eq, i) => (
+                    <tr key={i}>
+                      <td className="via-equip-num">{i + 1}.</td>
+                      <td>{linhaEquipamento(eq)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
           ) : (
             "—"
           )}

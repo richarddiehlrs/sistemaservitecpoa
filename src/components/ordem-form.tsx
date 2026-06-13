@@ -8,6 +8,7 @@ import { buscarCep } from "@/lib/cep";
 import { formatCurrency, formatTelefone } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import { TecnicoCargaTrabalho } from "@/components/tecnico-carga-trabalho";
+import { SpellCheckInput, SpellCheckTextarea } from "@/components/spell-check-field";
 import type { TecnicoOpcao } from "@/lib/tecnicos";
 import type { Equipamento, OrdemServico, OsItem, ServicoCatalogo, TipoAtendimento } from "@/types/database";
 import { TIPO_ATENDIMENTO_LABEL } from "@/lib/painel-atendimento";
@@ -40,11 +41,38 @@ type ItemState = {
   custo_unitario: MoneyField;
 };
 
+type EquipSlot = {
+  id: string;
+  tipo: string;
+  marca: string;
+  modelo: string;
+  serie: string;
+  voltagem: string;
+  cor: string;
+};
+
+function equipToSlot(e: Equipamento): EquipSlot {
+  return {
+    id: e.id,
+    tipo: e.tipo,
+    marca: e.marca || "",
+    modelo: e.modelo || "",
+    serie: e.numero_serie || "",
+    voltagem: e.voltagem || "",
+    cor: e.cor || "",
+  };
+}
+
+function emptyEquipSlot(): EquipSlot {
+  return { id: "", tipo: "", marca: "", modelo: "", serie: "", voltagem: "", cor: "" };
+}
+
 type Props = {
   action: (formData: FormData) => Promise<void>;
   ordem?: OrdemServico;
   clienteInicial?: ClienteLite | null;
   equipamentos?: Equipamento[];
+  equipamentosOsIniciais?: Equipamento[];
   itensIniciais?: OsItem[];
   catalogo?: ServicoCatalogo[];
   modoEdicao?: boolean;
@@ -65,6 +93,7 @@ export function OrdemForm({
   ordem,
   clienteInicial,
   equipamentos = [],
+  equipamentosOsIniciais = [],
   itensIniciais = [],
   catalogo = [],
   modoEdicao = false,
@@ -110,12 +139,15 @@ export function OrdemForm({
   });
   const [buscandoCep, setBuscandoCep] = useState(false);
 
-  // ---- Equipamento ----
+  // ---- Equipamentos (múltiplos) ----
   const [equipExistentes, setEquipExistentes] = useState<Equipamento[]>(equipamentos);
-  const [equipId, setEquipId] = useState<string>(ordem?.equipamento_id || "");
-  const [novoEquip, setNovoEquip] = useState({
-    tipo: "", marca: "", modelo: "", serie: "", voltagem: "", cor: "",
-  });
+  const [equipSlots, setEquipSlots] = useState<EquipSlot[]>(
+    equipamentosOsIniciais.length > 0
+      ? equipamentosOsIniciais.map(equipToSlot)
+      : ordem?.equipamento_id && equipamentos.length
+        ? [equipToSlot(equipamentos.find((e) => e.id === ordem.equipamento_id) || equipamentos[0])]
+        : [emptyEquipSlot()]
+  );
 
   // ---- Itens ----
   const [itens, setItens] = useState<ItemState[]>(
@@ -203,6 +235,24 @@ export function OrdemForm({
     }));
   }
 
+  function addEquipSlot() {
+    setEquipSlots((arr) => [...arr, emptyEquipSlot()]);
+  }
+  function updEquipSlot(idx: number, patch: Partial<EquipSlot>) {
+    setEquipSlots((arr) => arr.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
+  }
+  function selecionarEquipExistente(idx: number, equipamentoId: string) {
+    const eq = equipExistentes.find((e) => e.id === equipamentoId);
+    if (!eq) {
+      updEquipSlot(idx, emptyEquipSlot());
+      return;
+    }
+    updEquipSlot(idx, equipToSlot(eq));
+  }
+  function rmEquipSlot(idx: number) {
+    setEquipSlots((arr) => (arr.length <= 1 ? [emptyEquipSlot()] : arr.filter((_, i) => i !== idx)));
+  }
+
   function addItem() {
     setItens((arr) => [
       ...arr,
@@ -242,15 +292,25 @@ export function OrdemForm({
       formData.set("novo_uf", novoCli.uf);
     }
 
-    formData.set("equipamento_id", equipId);
-    if (!equipId) {
-      formData.set("equip_tipo", novoEquip.tipo);
-      formData.set("equip_marca", novoEquip.marca);
-      formData.set("equip_modelo", novoEquip.modelo);
-      formData.set("equip_serie", novoEquip.serie);
-      formData.set("equip_voltagem", novoEquip.voltagem);
-      formData.set("equip_cor", novoEquip.cor);
-    }
+    formData.set(
+      "equipamentos_json",
+      JSON.stringify(
+        equipSlots
+          .filter((s) => s.id || s.tipo.trim())
+          .map((s) =>
+            s.id
+              ? { id: s.id }
+              : {
+                  tipo: s.tipo,
+                  marca: s.marca,
+                  modelo: s.modelo,
+                  serie: s.serie,
+                  voltagem: s.voltagem,
+                  cor: s.cor,
+                }
+          )
+      )
+    );
 
     formData.set("tipo_atendimento", tipoAtendimento);
     formData.set(
@@ -459,71 +519,136 @@ export function OrdemForm({
         )}
       </div>
 
-      {/* ====================== EQUIPAMENTO ====================== */}
+      {/* ====================== EQUIPAMENTOS ====================== */}
       <div className="card p-5">
-        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Equipamento
-        </h3>
-        {equipExistentes.length > 0 && (
-          <div className="mb-4">
-            <label className="label">Selecionar equipamento já cadastrado</label>
-            <select className="input" value={equipId} onChange={(e) => setEquipId(e.target.value)}>
-              <option value="">+ Novo equipamento</option>
-              {equipExistentes.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.tipo} {e.marca ? `- ${e.marca}` : ""} {e.modelo ?? ""} {e.numero_serie ? `(${e.numero_serie})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {!equipId && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
-            <div className="sm:col-span-2">
-              <label className="label">Tipo *</label>
-              <input className="input" list="tipos-equip" value={novoEquip.tipo}
-                onChange={(e) => setNovoEquip({ ...novoEquip, tipo: e.target.value })}
-                placeholder="Ex: Geladeira" />
-              <datalist id="tipos-equip">
-                {["Geladeira","Freezer","Fogão","Cooktop","Forno","Micro-ondas","Máquina de Lavar",
-                  "Lava e Seca","Lava-louças","Secadora","Ar-condicionado","Adega","Lavadora de Alta Pressão",
-                  "Aspirador","Bebedouro","Purificador","Ventilador","Cafeteira"].map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Equipamentos
+          </h3>
+          <button type="button" onClick={addEquipSlot} className="btn-secondary text-sm">
+            <Plus className="h-4 w-4" /> Adicionar equipamento
+          </button>
+        </div>
+        <p className="mb-4 text-xs text-slate-500">
+          Você pode vincular mais de um aparelho na mesma ordem de serviço.
+        </p>
+        <div className="space-y-4">
+          {equipSlots.map((slot, idx) => (
+            <div key={idx} className="rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Equipamento {idx + 1}
+                </span>
+                {equipSlots.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => rmEquipSlot(idx)}
+                    className="text-slate-400 hover:text-red-500"
+                    title="Remover equipamento"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {equipExistentes.length > 0 && (
+                <div className="mb-3">
+                  <label className="label">Selecionar cadastrado do cliente</label>
+                  <select
+                    className="input"
+                    value={slot.id}
+                    onChange={(e) => selecionarEquipExistente(idx, e.target.value)}
+                  >
+                    <option value="">+ Cadastrar novo equipamento</option>
+                    {equipExistentes.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.tipo} {e.marca ? `- ${e.marca}` : ""} {e.modelo ?? ""}{" "}
+                        {e.numero_serie ? `(${e.numero_serie})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {!slot.id && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
+                  <div className="sm:col-span-2">
+                    <label className="label">Tipo *</label>
+                    <SpellCheckInput
+                      inline
+                      list="tipos-equip"
+                      value={slot.tipo}
+                      onChange={(e) => updEquipSlot(idx, { tipo: e.target.value })}
+                      placeholder="Ex: Geladeira"
+                      className="input"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="label">Marca</label>
+                    <SpellCheckInput
+                      inline
+                      value={slot.marca}
+                      onChange={(e) => updEquipSlot(idx, { marca: e.target.value })}
+                      className="input"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="label">Modelo</label>
+                    <SpellCheckInput
+                      inline
+                      value={slot.modelo}
+                      onChange={(e) => updEquipSlot(idx, { modelo: e.target.value })}
+                      className="input"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="label">Nº de série</label>
+                    <input
+                      className="input"
+                      value={slot.serie}
+                      onChange={(e) => updEquipSlot(idx, { serie: e.target.value })}
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="label">Voltagem</label>
+                    <select
+                      className="input"
+                      value={slot.voltagem}
+                      onChange={(e) => updEquipSlot(idx, { voltagem: e.target.value })}
+                    >
+                      <option value="">-</option>
+                      <option>110V</option>
+                      <option>220V</option>
+                      <option>Bivolt</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="label">Cor</label>
+                    <SpellCheckInput
+                      inline
+                      value={slot.cor}
+                      onChange={(e) => updEquipSlot(idx, { cor: e.target.value })}
+                      className="input"
+                    />
+                  </div>
+                </div>
+              )}
+              {slot.id && (
+                <p className="text-sm text-slate-700">
+                  <strong>{slot.tipo}</strong>
+                  {slot.marca && ` — ${slot.marca}`} {slot.modelo}
+                  {slot.serie && ` • Série: ${slot.serie}`}
+                  {slot.voltagem && ` • ${slot.voltagem}`}
+                </p>
+              )}
             </div>
-            <div className="sm:col-span-2">
-              <label className="label">Marca</label>
-              <input className="input" value={novoEquip.marca}
-                onChange={(e) => setNovoEquip({ ...novoEquip, marca: e.target.value })} />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="label">Modelo</label>
-              <input className="input" value={novoEquip.modelo}
-                onChange={(e) => setNovoEquip({ ...novoEquip, modelo: e.target.value })} />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="label">Nº de série</label>
-              <input className="input" value={novoEquip.serie}
-                onChange={(e) => setNovoEquip({ ...novoEquip, serie: e.target.value })} />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="label">Voltagem</label>
-              <select className="input" value={novoEquip.voltagem}
-                onChange={(e) => setNovoEquip({ ...novoEquip, voltagem: e.target.value })}>
-                <option value="">-</option>
-                <option>110V</option>
-                <option>220V</option>
-                <option>Bivolt</option>
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="label">Cor</label>
-              <input className="input" value={novoEquip.cor}
-                onChange={(e) => setNovoEquip({ ...novoEquip, cor: e.target.value })} />
-            </div>
-          </div>
-        )}
+          ))}
+        </div>
+        <datalist id="tipos-equip">
+          {["Geladeira","Freezer","Fogão","Cooktop","Forno","Micro-ondas","Máquina de Lavar",
+            "Lava e Seca","Lava-louças","Secadora","Ar-condicionado","Adega","Lavadora de Alta Pressão",
+            "Aspirador","Bebedouro","Purificador","Ventilador","Cafeteira"].map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
       </div>
 
       {/* ====================== ATENDIMENTO ====================== */}
@@ -534,24 +659,23 @@ export function OrdemForm({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
           <div className="sm:col-span-6">
             <label className="label">Defeito relatado pelo cliente</label>
-            <textarea name="defeito_relatado" rows={2} className="input"
-              defaultValue={ordem?.defeito_relatado || ""} />
+            <SpellCheckTextarea name="defeito_relatado" defaultValue={ordem?.defeito_relatado || ""} />
           </div>
           <div className="sm:col-span-3">
             <label className="label">Acessórios / o que acompanha</label>
-            <input name="acompanha" className="input" defaultValue={ordem?.acompanha || ""} />
+            <SpellCheckInput inline name="acompanha" defaultValue={ordem?.acompanha || ""} className="input" />
           </div>
           <div className="sm:col-span-3">
             <label className="label">Estado / avarias do aparelho</label>
-            <input name="estado_aparelho" className="input" defaultValue={ordem?.estado_aparelho || ""} />
+            <SpellCheckInput inline name="estado_aparelho" defaultValue={ordem?.estado_aparelho || ""} className="input" />
           </div>
           <div className="sm:col-span-6">
             <label className="label">Diagnóstico / laudo técnico</label>
-            <textarea name="diagnostico" rows={2} className="input" defaultValue={ordem?.diagnostico || ""} />
+            <SpellCheckTextarea name="diagnostico" defaultValue={ordem?.diagnostico || ""} />
           </div>
           <div className="sm:col-span-6">
             <label className="label">Serviço executado</label>
-            <textarea name="servico_executado" rows={2} className="input" defaultValue={ordem?.servico_executado || ""} />
+            <SpellCheckTextarea name="servico_executado" defaultValue={ordem?.servico_executado || ""} />
           </div>
         </div>
       </div>
@@ -599,6 +723,7 @@ export function OrdemForm({
                 <option value="peca">Peça</option>
               </select>
               <input className="input col-span-9 sm:col-span-4" placeholder="Descrição"
+                spellCheck lang="pt-BR" autoCorrect="on"
                 value={item.descricao} onChange={(e) => updItem(idx, { descricao: e.target.value })} />
               <input type="number" min="0" step="0.01" className="input col-span-3 sm:col-span-1" placeholder="Qtd"
                 value={item.quantidade} onChange={(e) => updItem(idx, { quantidade: Number(e.target.value) })} />
@@ -726,7 +851,7 @@ export function OrdemForm({
             )}
             <div className="sm:col-span-4">
               <label className="label">Observações</label>
-              <textarea name="observacoes" rows={2} className="input" defaultValue={ordem?.observacoes || ""} />
+              <SpellCheckTextarea name="observacoes" defaultValue={ordem?.observacoes || ""} />
             </div>
           </div>
         </div>

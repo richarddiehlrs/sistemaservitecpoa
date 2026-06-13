@@ -422,6 +422,54 @@ body {
 .via-os--meia-pagina .via-assinatura-linha { font-size: 8pt; }
 .via-os--pagina-inteira .via-assinatura-linha { font-size: 9.5pt; }
 
+/* Layout compacto — múltiplos equipamentos / muitos itens em 1 folha A4 */
+.via-os--compacta.via-os--meia-pagina {
+  font-size: 8pt;
+  line-height: 1.25;
+}
+.via-os--compacta .via-cabecalho {
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+.via-os--compacta .via-bloco {
+  margin-bottom: 4px;
+}
+.via-os--compacta .via-campo-linha {
+  margin-bottom: 2px;
+}
+.via-os--compacta .via-tabela {
+  font-size: 7.5pt;
+}
+.via-os--compacta .via-tabela th,
+.via-os--compacta .via-tabela td {
+  padding: 2px 4px;
+}
+.via-equip-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: inherit;
+}
+.via-equip-tabela td {
+  padding: 1px 0;
+  vertical-align: top;
+}
+.via-equip-num {
+  width: 1.2em;
+  color: #64748b;
+  padding-right: 4px !important;
+}
+.via-os--compacta .via-qrs img {
+  width: 52px !important;
+  height: 52px !important;
+}
+.via-os--compacta .via-garantia {
+  font-size: 7pt;
+  margin-top: 4px;
+}
+.via-os--compacta .via-assinatura img {
+  height: 28px !important;
+}
+
 @media screen {
   body.modo-impressao {
     background: #e2e8f0;

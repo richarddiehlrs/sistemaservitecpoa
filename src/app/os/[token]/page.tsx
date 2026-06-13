@@ -36,6 +36,8 @@ export default async function PortalOsPage({
   const anexosAusente: { url: string }[] = os.anexos_ausente || [];
   const historico: { status: string; observacao?: string | null; created_at: string }[] =
     os.historico || [];
+  const equips: { tipo?: string; marca?: string; modelo?: string; numero_serie?: string; voltagem?: string }[] =
+    os.equipamentos || [];
   const ehClienteAusente = os.status === "cliente_ausente";
   const podeAprovar = !os.aprovado && os.status !== "cancelada" && !ehClienteAusente;
   const valorTotal = calcValorTotalCliente(
@@ -93,12 +95,31 @@ export default async function PortalOsPage({
             <Info titulo="Cliente" valor={os.cliente?.nome || os.cliente_nome} />
             {os.cliente?.cpf_cnpj && <Info titulo="CPF/CNPJ" valor={formatCpfCnpj(os.cliente.cpf_cnpj)} />}
             {os.cliente?.telefone && <Info titulo="Telefone" valor={formatTelefone(os.cliente.telefone)} />}
-            <Info titulo="Equipamento" valor={os.equipamento} />
-            {os.equipamento_detalhe?.numero_serie && (
-              <Info titulo="Nº série" valor={os.equipamento_detalhe.numero_serie} />
-            )}
-            {os.equipamento_detalhe?.voltagem && (
-              <Info titulo="Voltagem" valor={os.equipamento_detalhe.voltagem} />
+            {equips.length > 1 ? (
+              <div className="col-span-2">
+                <dt className="text-xs text-slate-500">Equipamentos ({equips.length})</dt>
+                <dd className="font-medium text-slate-800">
+                  <ul className="mt-1 list-inside list-decimal space-y-0.5 text-sm">
+                    {equips.map((e, i) => (
+                      <li key={i}>
+                        {[e.tipo, e.marca, e.modelo].filter(Boolean).join(" ")}
+                        {e.numero_serie && ` • S/N ${e.numero_serie}`}
+                        {e.voltagem && ` • ${e.voltagem}`}
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            ) : (
+              <>
+                <Info titulo="Equipamento" valor={os.equipamento} />
+                {os.equipamento_detalhe?.numero_serie && (
+                  <Info titulo="Nº série" valor={os.equipamento_detalhe.numero_serie} />
+                )}
+                {os.equipamento_detalhe?.voltagem && (
+                  <Info titulo="Voltagem" valor={os.equipamento_detalhe.voltagem} />
+                )}
+              </>
             )}
             <Info titulo="Abertura" valor={formatDate(os.data_abertura)} />
             <Info titulo="Garantia" valor={`${os.garantia_dias} dias`} />

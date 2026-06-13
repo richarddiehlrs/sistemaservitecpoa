@@ -27,7 +27,7 @@ import {
   STATUS_AGENDAMENTO_LABEL,
   TIPO_AGENDAMENTO_LABEL,
 } from "@/lib/format";
-import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
+import { carregarEquipamentosOs, textoEquipamentos } from "@/lib/os-equipamentos";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
 import { calcLucroOs } from "@/lib/metricas-financeiras";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
@@ -68,6 +68,7 @@ export default async function OrdemDetalhePage({
     { data: categorias },
     { data: agendamentos },
     config,
+    equipamentosOs,
   ] = await Promise.all([
       supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),
       supabase
@@ -88,6 +89,7 @@ export default async function OrdemDetalhePage({
         .eq("os_id", id)
         .order("data", { ascending: false }),
       getConfig(),
+      carregarEquipamentosOs(supabase, id),
     ]);
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
@@ -97,6 +99,7 @@ export default async function OrdemDetalhePage({
   const cliente = os.clientes;
   // @ts-expect-error relação embutida
   const equip = os.equipamentos;
+  const equips = equipamentosOs.length > 0 ? equipamentosOs : equip ? [equip] : [];
 
   const valorTotal = calcValorTotalCliente(
     Number(os.valor_itens),
@@ -182,17 +185,25 @@ export default async function OrdemDetalhePage({
                 </p>
               </div>
               <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase text-slate-400">Equipamento</h3>
-                {equip ? (
-                  <>
-                    <p className="font-medium text-slate-800">
-                      {equip.tipo} {equip.marca && `- ${equip.marca}`} {equip.modelo}
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      {equip.numero_serie && `Série: ${equip.numero_serie}`}{" "}
-                      {equip.voltagem && `• ${equip.voltagem}`}
-                    </p>
-                  </>
+                <h3 className="mb-2 text-xs font-semibold uppercase text-slate-400">
+                  {equips.length > 1 ? `Equipamentos (${equips.length})` : "Equipamento"}
+                </h3>
+                {equips.length > 0 ? (
+                  <ul className="space-y-2">
+                    {equips.map((e, i) => (
+                      <li key={e.id || i}>
+                        <p className="font-medium text-slate-800">
+                          {equips.length > 1 && <span className="text-slate-400">{i + 1}. </span>}
+                          {e.tipo} {e.marca && `- ${e.marca}`} {e.modelo}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {e.numero_serie && `Série: ${e.numero_serie}`}{" "}
+                          {e.voltagem && `• ${e.voltagem}`}
+                          {e.cor && ` • ${e.cor}`}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
                 ) : (
                   <p className="text-sm text-slate-400">Não informado</p>
                 )}
@@ -301,7 +312,7 @@ export default async function OrdemDetalhePage({
               clienteNome={cliente?.nome}
               clienteTelefone={cliente?.telefone}
               clienteEmail={cliente?.email}
-              equipamento={equip ? `${equip.tipo} ${equip.marca ?? ""} ${equip.modelo ?? ""}`.trim() : null}
+              equipamento={equips.length ? textoEquipamentos(equips) : null}
               defeito={os.defeito_relatado}
               valorTotal={valorTotal}
               garantiaDias={os.garantia_dias}

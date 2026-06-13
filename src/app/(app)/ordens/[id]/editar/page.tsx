@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { mapTecnicos } from "@/lib/tecnicos";
+import { carregarEquipamentosOs } from "@/lib/os-equipamentos";
 import { atualizarOrdem } from "../../actions";
 import { formatNumeroOS } from "@/lib/format";
 
@@ -37,7 +38,8 @@ export default async function EditarOrdemPage({
     redirect(`/ordens/${id}`);
   }
 
-  const [{ data: itens }, { data: equipamentos }, { data: catalogo }, { data: perfisTecnicos }] = await Promise.all([
+  const [{ data: itens }, { data: equipamentos }, { data: catalogo }, { data: perfisTecnicos }, equipamentosOs] =
+    await Promise.all([
     supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),
     supabase
       .from("equipamentos")
@@ -46,6 +48,7 @@ export default async function EditarOrdemPage({
       .order("created_at", { ascending: false }),
     supabase.from("servicos_catalogo").select("*").eq("ativo", true).order("descricao"),
     supabase.from("profiles").select("*").eq("papel", "tecnico").eq("ativo", true).order("nome"),
+    carregarEquipamentosOs(supabase, id),
   ]);
   const tecnicos = mapTecnicos(perfisTecnicos || []);
 
@@ -61,6 +64,7 @@ export default async function EditarOrdemPage({
         ordem={os}
         clienteInicial={clienteInicial}
         equipamentos={equipamentos || []}
+        equipamentosOsIniciais={equipamentosOs}
         itensIniciais={itens || []}
         catalogo={catalogo || []}
         modoEdicao

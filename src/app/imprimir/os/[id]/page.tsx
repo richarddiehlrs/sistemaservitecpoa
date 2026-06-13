@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PrintButton } from "@/components/print-button";
 import { OsViaPrint } from "@/components/os-via-print";
 import { getConfig } from "@/lib/config";
+import { carregarEquipamentosOs } from "@/lib/os-equipamentos";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +23,11 @@ export default async function ImprimirOsPage({
 
   if (!os) notFound();
 
-  const [{ data: itens }, { data: anexos }, config] = await Promise.all([
+  const [{ data: itens }, { data: anexos }, config, equips] = await Promise.all([
     supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),
     supabase.from("os_anexos").select("*").eq("os_id", id).eq("momento", "cliente_ausente").order("created_at"),
     getConfig(),
+    carregarEquipamentosOs(supabase, id),
   ]);
 
   // @ts-expect-error relação embutida
@@ -40,7 +42,11 @@ export default async function ImprimirOsPage({
     os,
     cliente,
     equip,
-    itens: itens || [],
+    equips,
+    itens: (itens || []).map((it) => ({
+      ...it,
+      subtotal: Number(it.quantidade) * Number(it.valor_unitario),
+    })),
     anexosAusente: anexos || [],
     config,
     publicUrl,

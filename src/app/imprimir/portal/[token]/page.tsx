@@ -33,6 +33,7 @@ export default async function ImprimirPortalOsPage({
     created_at: string;
   }[];
 
+  const equips = (os.equipamentos || []) as OsViaPrintData["equips"];
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
   const publicUrl = siteUrl ? `${siteUrl}/os/${token}` : "";
 
@@ -69,6 +70,7 @@ export default async function ImprimirPortalOsPage({
           cliente={os.cliente as OsViaPrintData["cliente"]}
           clienteNome={os.cliente_nome as string}
           equip={os.equipamento_detalhe as OsViaPrintData["equip"]}
+          equips={equips}
           equipamentoTexto={os.equipamento as string}
           itens={itens}
           anexosAusente={anexosAusente}

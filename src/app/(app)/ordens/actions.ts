@@ -8,6 +8,10 @@ import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import {
+  resolverEquipamentosOs,
+  salvarVinculosEquipamentosOs,
+} from "@/lib/os-equipamentos";
+import {
   sincronizarFinanceiroOs,
   temLancamentoAtivoOs,
 } from "@/lib/os-financeiro";
@@ -144,40 +148,17 @@ async function resolverCliente(
   return data!.id;
 }
 
-async function resolverEquipamento(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  formData: FormData,
-  clienteId: string
-): Promise<string | null> {
-  const equipamentoId = str(formData.get("equipamento_id"));
-  if (equipamentoId) return equipamentoId;
-
-  const tipo = str(formData.get("equip_tipo"));
-  if (!tipo) return null;
-
-  const { data, error } = await supabase
-    .from("equipamentos")
-    .insert({
-      cliente_id: clienteId,
-      tipo,
-      marca: str(formData.get("equip_marca")),
-      modelo: str(formData.get("equip_modelo")),
-      numero_serie: str(formData.get("equip_serie")),
-      voltagem: str(formData.get("equip_voltagem")),
-      cor: str(formData.get("equip_cor")),
-    })
-    .select("id")
-    .single();
-  if (error) throw new Error(error.message);
-  return data!.id;
-}
-
 export async function criarOrdem(formData: FormData) {
   const profile = await requirePermissao("ordens_criar");
   const supabase = await createClient();
 
   const clienteId = await resolverCliente(supabase, formData);
-  const equipamentoId = await resolverEquipamento(supabase, formData, clienteId);
+  const equipamentoIds = await resolverEquipamentosOs(
+    supabase,
+    clienteId,
+    str(formData.get("equipamentos_json"))
+  );
+  const equipamentoId = equipamentoIds[0] ?? null;
 
   const itens = lerItens(formData);
   const tipo = lerTipoAtendimento(formData);
@@ -242,6 +223,8 @@ export async function criarOrdem(formData: FormData) {
     );
     if (itensErr) throw new Error(itensErr.message);
   }
+
+  await salvarVinculosEquipamentosOs(supabase, os!.id, equipamentoIds);
 
   await supabase.from("os_status_historico").insert({
     os_id: os!.id,
@@ -389,6 +372,15 @@ export async function atualizarOrdem(id: string, formData: FormData) {
         custo_unitario: Number(i.custo_unitario) || 0,
       }))
     );
+  }
+
+  if (osAtual) {
+    const equipamentoIds = await resolverEquipamentosOs(
+      supabase,
+      osAtual.cliente_id,
+      str(formData.get("equipamentos_json"))
+    );
+    await salvarVinculosEquipamentosOs(supabase, id, equipamentoIds);
   }
 
   await sincronizarFinanceiroOs(supabase, id, total, custoItens);

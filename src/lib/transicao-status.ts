@@ -7,8 +7,8 @@ const TRANSICOES_OPERACAO: Partial<Record<StatusOS, StatusOS[]>> = {
   aberta: ["em_analise", "cancelada"],
   em_analise: ["aguardando_aprovacao", "aguardando_peca", "aprovada", "cancelada", "aberta"],
   aguardando_aprovacao: ["aprovada", "em_analise", "cancelada"],
-  aprovada: ["em_roteiro", "em_execucao", "aguardando_peca", "cancelada"],
-  em_roteiro: ["em_execucao", "cliente_ausente", "cancelada"],
+  aprovada: ["em_roteiro", "em_execucao", "aguardando_peca", "concluida", "cancelada"],
+  em_roteiro: ["em_execucao", "cliente_ausente", "concluida", "cancelada"],
   em_execucao: [
     "aguardando_aprovacao",
     "aguardando_peca",
@@ -27,8 +27,8 @@ const TRANSICOES_OPERACAO: Partial<Record<StatusOS, StatusOS[]>> = {
 /** Transições permitidas para técnico (campo). */
 const TRANSICOES_TECNICO: Partial<Record<StatusOS, StatusOS[]>> = {
   em_roteiro: ["em_execucao", "cliente_ausente"],
-  em_execucao: ["aguardando_aprovacao", "aguardando_peca", "cliente_ausente"],
-  aguardando_peca: ["em_execucao"],
+  em_execucao: ["aguardando_aprovacao", "aguardando_peca", "cliente_ausente", "concluida"],
+  aguardando_peca: ["em_execucao", "concluida"],
   aprovada: ["em_execucao", "em_roteiro"],
 };
 

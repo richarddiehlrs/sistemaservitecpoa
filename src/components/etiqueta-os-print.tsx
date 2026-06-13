@@ -2,11 +2,7 @@ import { qrImageUrl } from "@/lib/qrcode";
 import { urlAbrirOs } from "@/lib/os-scan";
 import { formatDate, formatNumeroOS, formatTelefone } from "@/lib/format";
 import type { Cliente, Equipamento, OrdemServico } from "@/types/database";
-
-function linhaEquipamento(equip: Equipamento | null | undefined): string {
-  const p = [equip?.tipo, equip?.marca, equip?.modelo].filter(Boolean).join(" ");
-  return p || "—";
-}
+import { linhaEquipamento } from "@/lib/os-equipamentos";
 
 function truncar(texto: string | null | undefined, max: number): string {
   const t = (texto || "").trim();
@@ -18,15 +14,23 @@ export function EtiquetaOsPrint({
   os,
   cliente,
   equip,
+  equips = [],
   empresaNome,
   siteUrl,
 }: {
   os: OrdemServico;
   cliente: Cliente | null;
   equip: Equipamento | null;
+  equips?: Equipamento[];
   empresaNome: string;
   siteUrl: string;
 }) {
+  const listaEquips = equips.length > 0 ? equips : equip ? [equip] : [];
+  const textoEquip =
+    listaEquips.length > 1
+      ? `${listaEquips.length} aparelhos`
+      : linhaEquipamento(listaEquips[0]);
+
   const qrUrl = urlAbrirOs(os.id, siteUrl);
   const qrImg = qrImageUrl(qrUrl, 180);
 
@@ -49,10 +53,10 @@ export function EtiquetaOsPrint({
             </p>
           )}
           <p className="etiqueta-os-linha">
-            <strong>Equip.:</strong> {truncar(linhaEquipamento(equip), 32)}
+            <strong>Equip.:</strong> {truncar(textoEquip, 32)}
           </p>
           <p className="etiqueta-os-linha">
-            <strong>Defeito:</strong> {truncar(os.defeito_reclamado, 40)}
+            <strong>Defeito:</strong> {truncar(os.defeito_relatado, 40)}
           </p>
           <p className="etiqueta-os-data">{formatDate(os.data_abertura)} · Oficina</p>
         </div>

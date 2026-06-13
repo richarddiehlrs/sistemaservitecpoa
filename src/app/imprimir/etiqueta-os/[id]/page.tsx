@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PrintButton } from "@/components/print-button";
 import { EtiquetaOsPrint } from "@/components/etiqueta-os-print";
 import { getConfig } from "@/lib/config";
+import { carregarEquipamentosOs } from "@/lib/os-equipamentos";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,10 @@ export default async function ImprimirEtiquetaOsPage({
     notFound();
   }
 
-  const config = await getConfig();
+  const [config, equips] = await Promise.all([
+    getConfig(),
+    carregarEquipamentosOs(supabase, id),
+  ]);
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
 
   // @ts-expect-error relação embutida
@@ -44,6 +48,7 @@ export default async function ImprimirEtiquetaOsPage({
         os={os}
         cliente={cliente}
         equip={equip}
+        equips={equips}
         empresaNome={config.empresa_nome || "ServitecPoa"}
         siteUrl={siteUrl}
       />
