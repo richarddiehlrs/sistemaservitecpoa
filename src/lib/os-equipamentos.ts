@@ -26,24 +26,20 @@ export function textoEquipamentos(equips: EquipamentoResumo[]): string {
   return equips.map((e) => linhaEquipamento(e)).filter(Boolean).join(" • ");
 }
 
-/** Carrega equipamentos vinculados à OS (ordem preservada). */
-export async function carregarEquipamentosOs(
-  supabase: Db,
-  osId: string
-): Promise<Equipamento[]> {
-  const { data: vinculos } = await supabase
-    .from("os_equipamentos")
-    .select("equipamento_id, ordem")
-    .eq("os_id", osId)
-    .order("ordem");
+function erroTabelaOsEquipamentos(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message || "").toLowerCase();
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    (msg.includes("os_equipamentos") &&
+      (msg.includes("does not exist") ||
+        msg.includes("schema cache") ||
+        msg.includes("could not find")))
+  );
+}
 
-  if (vinculos?.length) {
-    const ids = vinculos.map((v) => v.equipamento_id);
-    const { data: equips } = await supabase.from("equipamentos").select("*").in("id", ids);
-    const map = new Map((equips || []).map((e) => [e.id, e]));
-    return vinculos.map((v) => map.get(v.equipamento_id)).filter(Boolean) as Equipamento[];
-  }
-
+async function fallbackEquipamentoPrincipal(supabase: Db, osId: string): Promise<Equipamento[]> {
   const { data: os } = await supabase
     .from("ordens_servico")
     .select("equipamento_id, equipamentos(*)")
@@ -53,6 +49,35 @@ export async function carregarEquipamentosOs(
   // @ts-expect-error relação embutida
   const equip = os?.equipamentos as Equipamento | null;
   return equip ? [equip] : [];
+}
+
+/** Carrega equipamentos vinculados à OS (ordem preservada). */
+export async function carregarEquipamentosOs(
+  supabase: Db,
+  osId: string
+): Promise<Equipamento[]> {
+  const { data: vinculos, error } = await supabase
+    .from("os_equipamentos")
+    .select("equipamento_id, ordem")
+    .eq("os_id", osId)
+    .order("ordem");
+
+  if (error) {
+    if (erroTabelaOsEquipamentos(error)) {
+      return fallbackEquipamentoPrincipal(supabase, osId);
+    }
+    console.error("[os-equipamentos] Erro ao carregar vínculos:", error.message);
+    return fallbackEquipamentoPrincipal(supabase, osId);
+  }
+
+  if (vinculos?.length) {
+    const ids = vinculos.map((v) => v.equipamento_id);
+    const { data: equips } = await supabase.from("equipamentos").select("*").in("id", ids);
+    const map = new Map((equips || []).map((e) => [e.id, e]));
+    return vinculos.map((v) => map.get(v.equipamento_id)).filter(Boolean) as Equipamento[];
+  }
+
+  return fallbackEquipamentoPrincipal(supabase, osId);
 }
 
 export type EquipamentoInput = {
@@ -117,13 +142,17 @@ export async function salvarVinculosEquipamentosOs(
   osId: string,
   equipamentoIds: string[]
 ): Promise<void> {
-  await supabase.from("os_equipamentos").delete().eq("os_id", osId);
+  const { error: delErr } = await supabase.from("os_equipamentos").delete().eq("os_id", osId);
 
-  if (equipamentoIds.length > 0) {
+  if (!delErr && equipamentoIds.length > 0) {
     const { error } = await supabase.from("os_equipamentos").insert(
       equipamentoIds.map((equipamento_id, ordem) => ({ os_id: osId, equipamento_id, ordem }))
     );
-    if (error) throw new Error(error.message);
+    if (error && !erroTabelaOsEquipamentos(error)) {
+      throw new Error(error.message);
+    }
+  } else if (delErr && !erroTabelaOsEquipamentos(delErr)) {
+    throw new Error(delErr.message);
   }
 
   await supabase

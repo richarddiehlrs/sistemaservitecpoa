@@ -28,6 +28,7 @@ import {
   TIPO_AGENDAMENTO_LABEL,
 } from "@/lib/format";
 import { carregarEquipamentosOs, textoEquipamentos } from "@/lib/os-equipamentos";
+import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
 import { calcLucroOs } from "@/lib/metricas-financeiras";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
