@@ -49,7 +49,7 @@ export async function sincronizarAgendamentoOs(
 
   const { data: existente } = await supabase
     .from("agendamentos")
-    .select("id, status")
+    .select("id, status, data, turno")
     .eq("os_id", opts.osId)
     .neq("status", "cancelado")
     .order("created_at", { ascending: false })
@@ -64,7 +64,24 @@ export async function sincronizarAgendamentoOs(
     }
 
     if (existente.status === "em_atendimento") {
-      throw new Error("Não é possível reagendar: há uma visita em andamento para esta OS.");
+      const mudouData =
+        existente.data !== opts.data || (existente.turno || "dia") !== turno;
+      if (mudouData) {
+        throw new Error(
+          "Não é possível alterar data/turno enquanto o técnico está em atendimento. Finalize a visita primeiro."
+        );
+      }
+      const { error } = await supabase
+        .from("agendamentos")
+        .update({
+          tecnico: opts.tecnico,
+          tecnico_id: opts.tecnico_id,
+          endereco,
+          titulo,
+        })
+        .eq("id", existente.id);
+      if (error) throw new Error(error.message);
+      return existente.id;
     }
 
     if (["realizado", "cancelado"].includes(existente.status)) {

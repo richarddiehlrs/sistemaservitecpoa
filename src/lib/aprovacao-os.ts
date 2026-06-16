@@ -181,7 +181,12 @@ export async function requererReaprovacaoSeValoresMudaram(
 
   if (Math.abs(totalNovo - referencia) < 0.01) return false;
 
-  await cancelarReceitaPendenteOs(supabase, osId);
+  try {
+    await cancelarReceitaPendenteOs(supabase, osId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Não foi possível alterar o orçamento.";
+    throw new Error(msg);
+  }
 
   await supabase
     .from("ordens_servico")

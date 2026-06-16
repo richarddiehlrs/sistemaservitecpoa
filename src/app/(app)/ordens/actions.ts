@@ -13,6 +13,11 @@ import {
 } from "@/lib/os-equipamentos";
 import { executarAprovacaoOs, requererReaprovacaoSeValoresMudaram } from "@/lib/aprovacao-os";
 import {
+  calcTotaisOs,
+  deveEnviarAguardandoAprovacao,
+  resolverAbaterVisita,
+} from "@/lib/orcamento-os";
+import {
   sincronizarFinanceiroOs,
   temLancamentoAtivoOs,
 } from "@/lib/os-financeiro";
@@ -101,16 +106,7 @@ function calcTotais(
   desconto: number,
   acrescimo: number
 ) {
-  const valorItens = itens.reduce(
-    (s, i) => s + Number(i.quantidade) * Number(i.valor_unitario),
-    0
-  );
-  const custoItens = itens.reduce(
-    (s, i) => s + Number(i.quantidade) * Number(i.custo_unitario || 0),
-    0
-  );
-  const total = calcValorTotalCliente(valorItens, valorVisita, abaterVisita, desconto, acrescimo);
-  return { valorItens, custoItens, total };
+  return calcTotaisOs(itens, valorVisita, abaterVisita, desconto, acrescimo);
 }
 
 function lerItens(formData: FormData): ItemInput[] {
@@ -164,7 +160,11 @@ export async function criarOrdem(formData: FormData) {
   const itens = lerItens(formData);
   const tipo = lerTipoAtendimento(formData);
   const valorVisita = tipo === "domicilio" ? num(formData.get("valor_visita")) : 0;
-  const abaterVisita = tipo === "domicilio" && formData.get("abater_visita") === "on";
+  const valorItensPrev = itens.reduce(
+    (s, i) => s + Number(i.quantidade) * Number(i.valor_unitario),
+    0
+  );
+  const abaterVisita = resolverAbaterVisita(tipo, formData, valorItensPrev);
   const desconto = num(formData.get("desconto"));
   const acrescimo = num(formData.get("acrescimo"));
   const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
@@ -273,7 +273,11 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   const itens = lerItens(formData);
   const tipo = lerTipoAtendimento(formData);
   const valorVisita = tipo === "domicilio" ? num(formData.get("valor_visita")) : 0;
-  const abaterVisita = tipo === "domicilio" && formData.get("abater_visita") === "on";
+  const valorItensPrev = itens.reduce(
+    (s, i) => s + Number(i.quantidade) * Number(i.valor_unitario),
+    0
+  );
+  const abaterVisita = resolverAbaterVisita(tipo, formData, valorItensPrev);
   const desconto = num(formData.get("desconto"));
   const acrescimo = num(formData.get("acrescimo"));
   const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
@@ -413,6 +417,33 @@ export async function atualizarOrdem(id: string, formData: FormData) {
       },
       total
     );
+
+    const { data: osPosReaprovacao } = await supabase
+      .from("ordens_servico")
+      .select("aprovado, status")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (
+      osPosReaprovacao &&
+      !osPosReaprovacao.aprovado &&
+      deveEnviarAguardandoAprovacao({
+        tipo,
+        aprovado: false,
+        status: osPosReaprovacao.status as StatusOS,
+        valorItens,
+        total,
+      })
+    ) {
+      await transicionarStatusOs(supabase, {
+        osId: id,
+        status: "aguardando_aprovacao",
+        observacao: "Orçamento enviado — aguardando aprovação do cliente",
+        origem: "orcamento",
+        sistema: true,
+        skipNotificacao: false,
+      });
+    }
   }
 
   const { data: osDepois } = await supabase

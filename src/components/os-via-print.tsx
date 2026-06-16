@@ -8,7 +8,7 @@ import {
   formatTelefone,
   STATUS_OS_LABEL,
 } from "@/lib/format";
-import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
+import { calcValorTotalCliente, resumoOrcamentoCliente } from "@/lib/os-valores";
 import { linhaEquipamento, type EquipamentoResumo } from "@/lib/os-equipamentos";
 import { pixCopiaCola, PIX_CHAVE_CNPJ, GOOGLE_REVIEW_URL, formatPixCnpj } from "@/lib/pix";
 import { qrImageUrl } from "@/lib/qrcode";
@@ -121,7 +121,13 @@ export function OsViaPrint(props: OsViaPrintData) {
     Number(os.desconto),
     Number(os.acrescimo)
   );
-  const visitaLinha = linhaVisitaValor(Number(os.valor_visita), os.abater_visita);
+  const resumo = resumoOrcamentoCliente({
+    valor_itens: Number(os.valor_itens),
+    valor_visita: Number(os.valor_visita),
+    abater_visita: Boolean(os.abater_visita),
+    desconto: Number(os.desconto),
+    acrescimo: Number(os.acrescimo),
+  });
 
   const pixPayload = pixCopiaCola({
     nome: config.nome,
@@ -263,14 +269,30 @@ export function OsViaPrint(props: OsViaPrintData) {
             <LinhaTotal titulo="Serviços + peças" valor={formatCurrency(os.valor_itens)} />
             {os.acrescimo > 0 && <LinhaTotal titulo="Acréscimo" valor={`+ ${formatCurrency(os.acrescimo)}`} />}
             {os.desconto > 0 && <LinhaTotal titulo="Desconto" valor={`- ${formatCurrency(os.desconto)}`} />}
-            {visitaLinha.valor > 0 && (
+            {resumo.mostraAbatimentoVisita && (
+              <>
+                <LinhaTotal titulo="Subtotal do reparo" valor={formatCurrency(resumo.subtotalServicos)} />
+                <LinhaTotal
+                  titulo={resumo.visitaLinha.label}
+                  valor={`${resumo.visitaLinha.prefixo}${formatCurrency(resumo.visitaLinha.valor)}`}
+                />
+              </>
+            )}
+            {!resumo.mostraAbatimentoVisita && resumo.visitaLinha.valor > 0 && (
               <LinhaTotal
-                titulo={`Visita técnica${os.abater_visita ? " (abatida)" : ""}`}
-                valor={`${visitaLinha.prefixo}${formatCurrency(visitaLinha.valor)}`}
+                titulo={resumo.visitaLinha.label}
+                valor={`${resumo.visitaLinha.prefixo}${formatCurrency(resumo.visitaLinha.valor)}`}
               />
             )}
+            {resumo.textoVisitaPaga && (
+              <tr>
+                <td colSpan={2} className="via-visita-abatida">
+                  {resumo.textoVisitaPaga} Restante do reparo: {formatCurrency(resumo.total)}.
+                </td>
+              </tr>
+            )}
             <tr className="via-total-final">
-              <td>TOTAL</td>
+              <td>{resumo.labelTotal.toUpperCase()}</td>
               <td>{formatCurrency(valorTotal)}</td>
             </tr>
           </tbody>

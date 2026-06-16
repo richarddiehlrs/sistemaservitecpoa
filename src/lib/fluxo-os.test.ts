@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { statusAposAprovacao, calcValorAprovadoOs } from "@/lib/aprovacao-os";
-import { calcValorTotalCliente } from "@/lib/os-valores";
+import { calcValorTotalCliente, resumoOrcamentoCliente } from "@/lib/os-valores";
 import {
   agruparLucroPorTecnico,
   calcComissaoTecnico,
@@ -69,9 +69,9 @@ describe("validarTransicaoStatus", () => {
     expect(() => validarTransicaoStatus("em_execucao", "cancelada", "tecnico")).toThrow();
   });
 
-  it("sistema pode check-out para aguardando_aprovacao", () => {
+  it("sistema permite reaprovacao de em_roteiro", () => {
     expect(() =>
-      validarTransicaoStatus("em_execucao", "aguardando_aprovacao", "tecnico", { sistema: true })
+      validarTransicaoStatus("em_roteiro", "aguardando_aprovacao", "atendente", { sistema: true })
     ).not.toThrow();
   });
 });
@@ -93,6 +93,33 @@ describe("calcValorTotalCliente", () => {
 
   it("abate visita já paga", () => {
     expect(calcValorTotalCliente(200, 80, true, 0, 0)).toBe(120);
+  });
+});
+
+describe("resumoOrcamentoCliente", () => {
+  it("mostra abatimento e label de resta pagar", () => {
+    const r = resumoOrcamentoCliente({
+      valor_itens: 500,
+      valor_visita: 80,
+      abater_visita: true,
+    });
+    expect(r.total).toBe(420);
+    expect(r.mostraAbatimentoVisita).toBe(true);
+    expect(r.labelTotal).toBe("Total do reparo (resta pagar)");
+    expect(r.visitaLinha.prefixo).toBe("- ");
+    expect(r.textoVisitaPaga).toContain("já foi paga");
+  });
+
+  it("sem abatimento mantém total simples", () => {
+    const r = resumoOrcamentoCliente({
+      valor_itens: 200,
+      valor_visita: 80,
+      abater_visita: false,
+    });
+    expect(r.total).toBe(280);
+    expect(r.mostraAbatimentoVisita).toBe(false);
+    expect(r.labelTotal).toBe("Total");
+    expect(r.textoVisitaPaga).toBeNull();
   });
 });
 
@@ -193,6 +220,34 @@ describe("portal aprovação", () => {
         valorTotal: 200,
       })
     ).toBe(false);
+  });
+});
+
+describe("orcamento e visita", () => {
+  it("abate visita por padrão quando há itens no orçamento", async () => {
+    const { resolverAbaterVisita } = await import("@/lib/orcamento-os");
+    const fd = new FormData();
+    expect(resolverAbaterVisita("domicilio", fd, 200)).toBe(true);
+  });
+
+  it("soma visita só quando incluir_visita_orcamento marcado", async () => {
+    const { resolverAbaterVisita } = await import("@/lib/orcamento-os");
+    const fd = new FormData();
+    fd.set("incluir_visita_orcamento", "on");
+    expect(resolverAbaterVisita("domicilio", fd, 200)).toBe(false);
+  });
+
+  it("envia para aguardando_aprovacao quando há orçamento em roteiro", async () => {
+    const { deveEnviarAguardandoAprovacao } = await import("@/lib/orcamento-os");
+    expect(
+      deveEnviarAguardandoAprovacao({
+        tipo: "domicilio",
+        aprovado: false,
+        status: "em_roteiro",
+        valorItens: 150,
+        total: 70,
+      })
+    ).toBe(true);
   });
 });
 

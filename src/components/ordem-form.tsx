@@ -6,6 +6,7 @@ import { Loader2, Plus, Search, Trash2, UserCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { buscarCep } from "@/lib/cep";
 import { formatCurrency, formatTelefone, hojeYmdLocal } from "@/lib/format";
+import { OrcamentoResumoCliente } from "@/components/orcamento-resumo-cliente";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import { TecnicoCargaTrabalho } from "@/components/tecnico-carga-trabalho";
 import { SpellCheckInput, SpellCheckTextarea } from "@/components/spell-check-field";
@@ -164,7 +165,11 @@ export function OrdemForm({
 
   // ---- Valores ----
   const [valorVisita, setValorVisita] = useState<MoneyField>(initMoney(ordem?.valor_visita));
-  const [abaterVisita, setAbaterVisita] = useState(ordem?.abater_visita ?? true);
+  const [erroSalvar, setErroSalvar] = useState<string | null>(null);
+  const [incluirVisitaOrcamento, setIncluirVisitaOrcamento] = useState(
+    ordem ? !ordem.abater_visita : false
+  );
+  const abaterVisita = !incluirVisitaOrcamento;
   const [desconto, setDesconto] = useState<MoneyField>(initMoney(ordem?.desconto));
   const [acrescimo, setAcrescimo] = useState<MoneyField>(initMoney(ordem?.acrescimo));
 
@@ -323,11 +328,18 @@ export function OrdemForm({
         }))
       )
     );
+    if (incluirVisitaOrcamento) formData.set("incluir_visita_orcamento", "on");
+    else formData.delete("incluir_visita_orcamento");
     if (abaterVisita) formData.set("abater_visita", "on");
     else formData.delete("abater_visita");
 
+    setErroSalvar(null);
     startTransition(async () => {
-      await action(formData);
+      try {
+        await action(formData);
+      } catch (e) {
+        setErroSalvar(e instanceof Error ? e.message : "Erro ao salvar a ordem de serviço.");
+      }
     });
   }
 
@@ -885,10 +897,19 @@ export function OrdemForm({
               <label className="label">Visita técnica (R$)</label>
               <input type="number" name="valor_visita" min="0" step="0.01" className="input"
                 value={ehDomicilio ? valorVisita : ""} onChange={(e) => setValorVisita(parseMoneyInput(e.target.value))} />
-              <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
-                <input type="checkbox" checked={abaterVisita}
-                  onChange={(e) => setAbaterVisita(e.target.checked)} />
-                Abater visita do total do serviço
+              <label className="mt-2 flex items-start gap-2 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={incluirVisitaOrcamento}
+                  onChange={(e) => setIncluirVisitaOrcamento(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Incluir valor da visita no orçamento total
+                  <span className="mt-0.5 block text-[11px] text-slate-400">
+                    Desmarcado (padrão): visita já paga separadamente — não soma ao total do serviço.
+                  </span>
+                </span>
               </label>
             </div>
 
@@ -905,17 +926,14 @@ export function OrdemForm({
               </div>
             </div>
 
-            {moneyToNum(valorVisita) > 0 && (
-              <div className={`flex items-center justify-between text-xs ${abaterVisita ? "text-amber-600" : "text-slate-600"}`}>
-                <span>{abaterVisita ? "Visita abatida" : "Visita cobrada no total"}</span>
-                <span>{abaterVisita ? "- " : "+ "}{formatCurrency(moneyToNum(valorVisita))}</span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between border-t border-slate-200 pt-3">
-              <span className="font-semibold text-slate-900">Total (cliente)</span>
-              <span className="text-xl font-bold text-brand-700">{formatCurrency(totalGeral)}</span>
-            </div>
+            <OrcamentoResumoCliente
+              valor_itens={valorItens}
+              valor_visita={moneyToNum(valorVisita)}
+              abater_visita={abaterVisita}
+              desconto={moneyToNum(desconto)}
+              acrescimo={moneyToNum(acrescimo)}
+              mostrarExplicacao={ehDomicilio && abaterVisita && moneyToNum(valorVisita) > 0}
+            />
 
             <div className="mt-2 space-y-1 rounded-lg bg-slate-50 p-3 text-xs">
               <div className="flex items-center justify-between text-slate-500">
@@ -932,6 +950,12 @@ export function OrdemForm({
           </div>
         </div>
       </div>
+
+      {erroSalvar && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {erroSalvar}
+        </div>
+      )}
 
       <div className="flex justify-end gap-3">
         <button type="button" onClick={() => router.back()} className="btn-secondary">

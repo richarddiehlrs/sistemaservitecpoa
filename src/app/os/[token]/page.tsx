@@ -16,8 +16,9 @@ import {
   formatTelefone,
   STATUS_OS_LABEL,
 } from "@/lib/format";
-import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
+import { calcValorTotalCliente } from "@/lib/os-valores";
 import { podeAprovarOrcamentoPortal } from "@/lib/portal-aprovacao";
+import { OrcamentoResumoCliente } from "@/components/orcamento-resumo-cliente";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,6 @@ export default async function PortalOsPage({
     Number(os.desconto),
     Number(os.acrescimo)
   );
-  const visitaLinha = linhaVisitaValor(Number(os.valor_visita), os.abater_visita);
   const proximoAgendamento = os.proximo_agendamento as {
     data?: string;
     hora_inicio?: string | null;
@@ -230,20 +230,14 @@ export default async function PortalOsPage({
               </tbody>
             </table>
           )}
-          <div className="space-y-1 border-t border-slate-200 px-5 py-3 text-sm">
-            <Linha titulo="Serviços + peças" valor={formatCurrency(os.valor_itens)} />
-            {os.acrescimo > 0 && <Linha titulo="Acréscimo" valor={`+ ${formatCurrency(os.acrescimo)}`} />}
-            {os.desconto > 0 && <Linha titulo="Desconto" valor={`- ${formatCurrency(os.desconto)}`} />}
-            {visitaLinha.valor > 0 && (
-              <Linha
-                titulo={`Visita técnica${os.abater_visita ? " (abatida)" : ""}`}
-                valor={`${visitaLinha.prefixo}${formatCurrency(visitaLinha.valor)}`}
-              />
-            )}
-            <div className="flex items-center justify-between border-t border-slate-200 pt-2">
-              <span className="text-base font-semibold">Total</span>
-              <span className="text-xl font-bold text-brand-700">{formatCurrency(valorTotal)}</span>
-            </div>
+          <div className="border-t border-slate-200 px-5 py-3">
+            <OrcamentoResumoCliente
+              valor_itens={Number(os.valor_itens)}
+              valor_visita={Number(os.valor_visita)}
+              abater_visita={Boolean(os.abater_visita)}
+              desconto={Number(os.desconto)}
+              acrescimo={Number(os.acrescimo)}
+            />
           </div>
         </div>
 
@@ -314,14 +308,6 @@ function Bloco({ titulo, valor }: { titulo: string; valor: string }) {
     <div className="mt-3">
       <p className="text-xs font-semibold uppercase text-slate-400">{titulo}</p>
       <p className="whitespace-pre-wrap text-sm text-slate-700">{valor}</p>
-    </div>
-  );
-}
-function Linha({ titulo, valor }: { titulo: string; valor: string }) {
-  return (
-    <div className="flex items-center justify-between text-slate-600">
-      <span>{titulo}</span>
-      <span>{valor}</span>
     </div>
   );
 }
