@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
 import { amanhaYmdLocal, hojeYmdLocal } from "@/lib/format";
+import { useToast } from "@/components/toast";
 
 type Resultado = "visita" | "servico_concluido" | "aguardando_peca";
 
@@ -25,6 +26,7 @@ export function CheckoutModal({
   const [agendarRetorno, setAgendarRetorno] = useState(true);
   const [retornoData, setRetornoData] = useState(amanhaYmdLocal);
   const [retornoTurno, setRetornoTurno] = useState<"manha" | "tarde" | "dia">("manha");
+  const toast = useToast();
 
   if (!open) return null;
 
@@ -48,8 +50,15 @@ export function CheckoutModal({
     } catch {
       // segue sem GPS
     }
-    await onConfirm(fd);
-    onClose();
+    try {
+      await onConfirm(fd);
+      onClose();
+    } catch (err) {
+      toast.push(
+        err instanceof Error && err.message ? err.message : "Erro ao finalizar visita.",
+        "error"
+      );
+    }
   }
 
   const hoje = hojeYmdLocal();

@@ -18,6 +18,33 @@ import {
   mensagemCheckinBloqueado,
 } from "@/lib/checkin-os";
 
+async function garantirAtribuicaoCampo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profile: Awaited<ReturnType<typeof requirePermissao>>,
+  opts: { agendamentoId: string; osId?: string | null }
+) {
+  if (profile.papel !== "tecnico") return;
+  const nome = nomeTecnico(profile);
+
+  const { error: agErr } = await supabase
+    .from("agendamentos")
+    .update({ tecnico_id: profile.id, tecnico: nome })
+    .eq("id", opts.agendamentoId);
+  if (agErr) throw new Error(agErr.message);
+
+  if (opts.osId) {
+    const { error: osErr } = await supabase
+      .from("ordens_servico")
+      .update({ tecnico_id: profile.id, tecnico: nome })
+      .eq("id", opts.osId);
+    if (osErr) throw new Error(osErr.message);
+  }
+}
+
+function assertSupabaseOk(error: { message: string } | null, ctx: string) {
+  if (error) throw new Error(`${ctx}: ${error.message}`);
+}
+
 function str(v: FormDataEntryValue | null): string | null {
   const s = v == null ? "" : String(v).trim();
   return s === "" ? null : s;
@@ -214,6 +241,11 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
   const ag = await carregarAgendamento(supabase, id);
   validarCheckinAgenda(ag);
 
+  await garantirAtribuicaoCampo(supabase, profile, {
+    agendamentoId: id,
+    osId: ag.os_id,
+  });
+
   if (profile.papel === "tecnico") {
     await assertUmaVisitaEmAtendimento(supabase, profile.id, id);
   }
@@ -317,6 +349,11 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
   const ag = await carregarAgendamento(supabase, id);
   validarCheckoutAgenda(ag);
 
+  await garantirAtribuicaoCampo(supabase, profile, {
+    agendamentoId: id,
+    osId: ag.os_id,
+  });
+
   const lat = coord(formData?.get("lat"));
   const lng = coord(formData?.get("lng"));
   const precisao = coord(formData?.get("precisao"));
@@ -341,10 +378,24 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
       .single();
 
     if (os) {
-      if (os.status !== "em_execucao") {
-        throw new Error(
-          "A ordem não está em execução. Atualize a OS ou faça check-in antes do check-out."
-        );
+      let statusOs = os.status as string;
+
+      if (statusOs !== "em_execucao") {
+        if (["em_roteiro", "aprovada", "aguardando_peca"].includes(statusOs)) {
+          await transicionarStatusOs(supabase, {
+            osId: ag.os_id,
+            status: "em_execucao",
+            observacao: "Sincronizado automaticamente no check-out",
+            origem: "check-out",
+            sistema: true,
+            papel: profile.papel,
+          });
+          statusOs = "em_execucao";
+        } else {
+          throw new Error(
+            "A ordem não está em execução. Faça check-in na visita antes do check-out."
+          );
+        }
       }
 
       if (visitaCobrada && Number(os.valor_visita) > 0 && !os.abater_visita) {
@@ -355,10 +406,11 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
           Number(os.desconto),
           Number(os.acrescimo)
         );
-        await supabase
+        const { error: updVisita } = await supabase
           .from("ordens_servico")
           .update({ abater_visita: true, valor_total: novoTotal })
           .eq("id", ag.os_id);
+        assertSupabaseOk(updVisita, "Não foi possível registrar visita paga");
 
         if (os.aprovado) {
           await requererReaprovacaoSeValoresMudaram(
@@ -390,10 +442,11 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
           Number(os.desconto),
           Number(os.acrescimo)
         );
-        await supabase
+        const { error: updIncluir } = await supabase
           .from("ordens_servico")
           .update({ abater_visita: false, valor_total: novoTotal })
           .eq("id", ag.os_id);
+        assertSupabaseOk(updIncluir, "Não foi possível atualizar valor da visita");
       }
 
       const { data: osAtual } = await supabase

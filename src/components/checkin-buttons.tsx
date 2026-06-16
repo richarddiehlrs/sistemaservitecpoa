@@ -7,6 +7,11 @@ import { obterPosicaoGps } from "@/lib/geo";
 import { useToast } from "@/components/toast";
 import { CheckoutModal } from "@/components/checkout-modal";
 
+function mensagemErro(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  return "Erro ao registrar check-in/out.";
+}
+
 export function CheckinButtons({
   agendamento,
   checkinAction,
@@ -43,18 +48,13 @@ export function CheckinButtons({
       await fn(fd);
       router.refresh();
     } catch (err) {
-      toast.push((err as Error).message || "Erro ao registrar check-in/out.", "error");
-      throw err;
+      toast.push(mensagemErro(err), "error");
     }
   }
 
   function executar(fn: (formData: FormData) => Promise<void>) {
     start(async () => {
-      try {
-        await comGps(fn);
-      } catch {
-        // toast já exibido
-      }
+      await comGps(fn);
     });
   }
 
@@ -93,10 +93,10 @@ export function CheckinButtons({
         onConfirm={async (fd) => {
           try {
             await checkoutAction(fd);
+            setModalCheckout(false);
             router.refresh();
           } catch (err) {
-            toast.push((err as Error).message || "Erro no check-out.", "error");
-            throw err;
+            toast.push(mensagemErro(err), "error");
           }
         }}
         pending={pending}

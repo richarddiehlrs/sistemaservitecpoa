@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TrendingUp, TrendingDown, Wallet, Receipt, Wrench, Trophy, PiggyBank, Percent } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getConfig } from "@/lib/config";

@@ -67,11 +67,12 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
     opts.observacao ||
     (opts.origem ? `Atualizado via ${opts.origem}` : null);
 
-  await supabase.from("os_status_historico").insert({
+  const { error: histErr } = await supabase.from("os_status_historico").insert({
     os_id: opts.osId,
     status: opts.status,
     observacao: obsHistorico,
   });
+  if (histErr) throw new Error(histErr.message);
 
   await sincronizarAgendaStatusOs(supabase, opts.osId, opts.status);
 
