@@ -5,9 +5,11 @@ import { getConfig } from "@/lib/config";
 import { requirePermissao } from "@/lib/auth-guard";
 import { PageHeader, StatCard } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
-import { formatCurrency, formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
+import { formatCurrency, formatDate, formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
 import { saldoEmAberto } from "@/lib/financeiro";
 import { calcLucroOs, calcMetricasCaixa, calcMetricasCompetencia } from "@/lib/metricas-financeiras";
+import { calcPrejuizoGarantiaPeriodo } from "@/lib/os-garantia";
+import { MotivoOsBadge } from "@/components/motivo-os-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,7 @@ export default async function RelatoriosPage({
 
   const supabase = await createClient();
 
-  const [{ data: pagos }, { data: aReceberData }, { data: ordens }, { data: lancAno }, config] = await Promise.all([
+  const [{ data: pagos }, { data: aReceberData }, { data: ordens }, { data: lancAno }, { data: retornosGarantia }, config] = await Promise.all([
     supabase
       .from("lancamentos_financeiros")
       .select("tipo, valor_pago, data_pagamento, cliente_id, clientes(nome), categorias_financeiras(nome)")
@@ -51,6 +53,13 @@ export default async function RelatoriosPage({
       .neq("status", "cancelado")
       .gte("data_competencia", inicio)
       .lte("data_competencia", fim),
+    supabase
+      .from("ordens_servico")
+      .select("id, numero, status, os_origem_id, data_abertura, data_conclusao, custo_total, valor_total, clientes(nome)")
+      .eq("motivo_atendimento", "retorno_garantia")
+      .gte("data_abertura", inicio)
+      .lte("data_abertura", `${fim}T23:59:59`)
+      .order("data_abertura", { ascending: false }),
     getConfig(),
   ]);
 
@@ -65,6 +74,26 @@ export default async function RelatoriosPage({
 
   const metricasCaixa = calcMetricasCaixa(lista);
   const metricasCompetencia = calcMetricasCompetencia(lancAno || []);
+
+  const retornoIds = new Set((retornosGarantia || []).map((o) => o.id));
+  const prejuizoRetornosAno = calcPrejuizoGarantiaPeriodo(lancAno || [], retornoIds);
+  const retornosDetalhe = (retornosGarantia || []).map((o) => {
+    const lancOs = (lancAno || []).filter((l) => l.os_id === o.id && l.status !== "cancelado");
+    const receitaPaga = lancOs
+      .filter((l) => l.tipo === "receita")
+      .reduce((s, l) => s + Number(l.valor_pago), 0);
+    const custo = lancOs
+      .filter((l) => l.tipo === "despesa")
+      .reduce((s, l) => s + Number(l.valor), 0);
+    return {
+      ...o,
+      // @ts-expect-error relação
+      cliente: o.clientes?.nome as string | undefined,
+      receitaPaga,
+      custo,
+      prejuizo: Math.max(0, Math.round((custo - receitaPaga) * 100) / 100),
+    };
+  });
 
   // Mensal
   const chartData = MESES_CURTOS.map((label, i) => {
@@ -296,6 +325,55 @@ export default async function RelatoriosPage({
           Defina o percentual de comissão em Configurações para calcular a comissão dos técnicos automaticamente.
         </p>
       )}
+
+      <div className="mt-8 card overflow-x-auto p-5">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="font-semibold text-slate-900">Retornos em garantia ({ano})</h2>
+            <p className="text-sm text-slate-500">
+              Prejuízo total no ano: {formatCurrency(prejuizoRetornosAno.prejuizo)} • {retornosDetalhe.length} OS
+            </p>
+          </div>
+          <Link href="/ordens?motivo=retorno_garantia" className="text-sm font-medium text-brand-600 hover:underline">
+            Ver todas →
+          </Link>
+        </div>
+        {retornosDetalhe.length === 0 ? (
+          <p className="text-sm text-slate-500">Nenhum retorno em garantia aberto neste ano.</p>
+        ) : (
+          <table className="table-base">
+            <thead>
+              <tr>
+                <th>OS</th>
+                <th>Cliente</th>
+                <th>Abertura</th>
+                <th>Status</th>
+                <th className="text-right">Custo</th>
+                <th className="text-right">Recebido</th>
+                <th className="text-right">Prejuízo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {retornosDetalhe.map((o) => (
+                <tr key={o.id}>
+                  <td className="font-medium">
+                    <Link href={`/ordens/${o.id}`} className="text-brand-600 hover:underline">
+                      {formatNumeroOS(o.numero)}
+                    </Link>
+                    <MotivoOsBadge motivo="retorno_garantia" />
+                  </td>
+                  <td>{o.cliente || "—"}</td>
+                  <td>{formatDate(o.data_abertura)}</td>
+                  <td>{STATUS_OS_LABEL[o.status] || o.status}</td>
+                  <td className="text-right text-red-600">{formatCurrency(o.custo)}</td>
+                  <td className="text-right text-green-600">{formatCurrency(o.receitaPaga)}</td>
+                  <td className="text-right font-semibold text-orange-700">{formatCurrency(o.prejuizo)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

@@ -22,9 +22,11 @@ import {
   STATUS_OS_ATRASO,
   STATUS_OFICINA_PARADA,
   DIAS_OFICINA_PARADA_PADRAO,
+  DIAS_AVISO_GARANTIA,
   META_ALERTA_PERCENTUAL,
   limiteFinanceiroYmd,
 } from "@/lib/alertas";
+import { diasRestantesGarantia, garantiaExpirandoEmBreve } from "@/lib/os-garantia";
 import { nomeTecnico } from "@/lib/permissoes";
 import { STATUS_OS_ABERTAS } from "@/lib/os-status";
 
@@ -119,6 +121,7 @@ export default async function DashboardPage() {
     { data: agendaSemanaTec },
     { data: agendaRealizadosMes },
     { data: despesasCampoTec },
+    { data: osGarantiaBase },
   ] = await Promise.all([
     supabase.from("clientes").select("id", { count: "exact", head: true }),
     supabase
@@ -217,6 +220,14 @@ export default async function DashboardPage() {
       .eq("tipo", "despesa")
       .eq("origem", "campo")
       .eq("status", "pendente"),
+    supabase
+      .from("ordens_servico")
+      .select("id, numero, data_conclusao, garantia_dias, clientes(nome)")
+      .in("status", ["concluida", "entregue"])
+      .eq("motivo_atendimento", "normal")
+      .not("data_conclusao", "is", null)
+      .order("data_conclusao", { ascending: false })
+      .limit(80),
   ]);
 
   const receitaMes = (recebimentos || []).reduce((s, r) => s + Number(r.valor_pago), 0);
@@ -258,6 +269,10 @@ export default async function DashboardPage() {
     despesasCampoTec || [],
     hojeStr
   );
+
+  const garantiaExpirando = (osGarantiaBase || [])
+    .filter((o) => garantiaExpirandoEmBreve(o, DIAS_AVISO_GARANTIA))
+    .slice(0, 8);
 
   return (
     <div>
@@ -316,6 +331,7 @@ export default async function DashboardPage() {
         despesasCampo ||
         contasPagar ||
         clienteAusente ||
+        garantiaExpirando.length > 0 ||
         (meta > 0 && receitaMes < meta * (META_ALERTA_PERCENTUAL / 100))) ? (
         <div className="mt-4 flex flex-wrap gap-2">
           {(osAtrasadas ?? 0) > 0 && (
@@ -358,8 +374,37 @@ export default async function DashboardPage() {
               {visitasHoje} visita(s) hoje na agenda
             </Link>
           )}
+          {garantiaExpirando.length > 0 && (
+            <span className="badge bg-orange-50 text-orange-900 ring-1 ring-orange-200">
+              {garantiaExpirando.length} garantia(s) expira em até {DIAS_AVISO_GARANTIA} dias
+            </span>
+          )}
         </div>
       ) : null}
+
+      {garantiaExpirando.length > 0 && (
+        <div className="mt-4 card border-orange-200 bg-orange-50/40 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-orange-900">Garantias expirando em breve</h2>
+          <ul className="space-y-1 text-sm text-orange-950">
+            {garantiaExpirando.map((o) => {
+              const dias = diasRestantesGarantia(o);
+              // @ts-expect-error relação
+              const nome = o.clientes?.nome as string | undefined;
+              return (
+                <li key={o.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <Link href={`/ordens/${o.id}`} className="font-medium text-brand-700 hover:underline">
+                    {formatNumeroOS(o.numero)}
+                    {nome ? ` — ${nome}` : ""}
+                  </Link>
+                  <span className="text-xs text-orange-800">
+                    {dias === 0 ? "expira hoje" : `restam ${dias} dia(s)`}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Gráficos */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">

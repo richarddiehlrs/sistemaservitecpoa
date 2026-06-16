@@ -6,6 +6,7 @@ import { nomeTecnico, temPermissao } from "@/lib/permissoes";
 import { PageHeader, EmptyState, StatusBadge } from "@/components/ui";
 import { ExportCsv } from "@/components/export-csv";
 import { ExcluirOrdemButton } from "@/components/excluir-ordem-button";
+import { MotivoOsBadge } from "@/components/motivo-os-badge";
 import { STATUS_OS_LABEL, formatCurrency, formatDate, formatNumeroOS } from "@/lib/format";
 import { excluirOrdem } from "./actions";
 
@@ -16,9 +17,9 @@ const PAGE_SIZE = 20;
 export default async function OrdensPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; page?: string; motivo?: string }>;
 }) {
-  const { status, q, page } = await searchParams;
+  const { status, q, page, motivo } = await searchParams;
   const pagina = Math.max(1, parseInt(page || "1", 10) || 1);
   const profile = await requireProfile();
   const podeExcluirOs = temPermissao(profile.papel, "ordens_excluir");
@@ -26,10 +27,11 @@ export default async function OrdensPage({
 
   let query = supabase
     .from("ordens_servico")
-    .select("id, numero, status, valor_total, data_abertura, defeito_relatado, tecnico, clientes(nome)", { count: "exact" })
+    .select("id, numero, status, valor_total, data_abertura, defeito_relatado, tecnico, motivo_atendimento, clientes(nome)", { count: "exact" })
     .order("data_abertura", { ascending: false });
 
   if (status) query = query.eq("status", status);
+  if (motivo === "retorno_garantia") query = query.eq("motivo_atendimento", "retorno_garantia");
   if (profile.papel === "tecnico") {
     const nome = nomeTecnico(profile);
     query = query.or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${nome}%`);
@@ -60,6 +62,7 @@ export default async function OrdensPage({
   function buildHref(p: number) {
     const sp = new URLSearchParams();
     if (status) sp.set("status", status);
+    if (motivo) sp.set("motivo", motivo);
     if (q) sp.set("q", q);
     sp.set("page", String(p));
     return `/ordens?${sp.toString()}`;
@@ -87,6 +90,7 @@ export default async function OrdensPage({
       {/* Busca */}
       <form className="mb-3" action="/ordens" method="get">
         {status && <input type="hidden" name="status" value={status} />}
+        {motivo && <input type="hidden" name="motivo" value={motivo} />}
         <input
           name="q"
           defaultValue={q || ""}
@@ -102,6 +106,12 @@ export default async function OrdensPage({
           className={`badge ${!status ? "bg-brand-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}
         >
           Todas
+        </Link>
+        <Link
+          href="/ordens?motivo=retorno_garantia"
+          className={`badge ${motivo === "retorno_garantia" ? "bg-orange-600 text-white" : "bg-orange-50 text-orange-800 ring-1 ring-orange-200"}`}
+        >
+          Retornos garantia
         </Link>
         {Object.entries(STATUS_OS_LABEL).map(([key, label]) => (
           <Link
@@ -147,6 +157,7 @@ export default async function OrdensPage({
                       <Link href={`/ordens/${os.id}`} className="text-brand-600 hover:underline">
                         {formatNumeroOS(os.numero)}
                       </Link>
+                      <MotivoOsBadge motivo={os.motivo_atendimento} />
                     </td>
                     {/* @ts-expect-error relação embutida */}
                     <td>{os.clientes?.nome ?? "-"}</td>

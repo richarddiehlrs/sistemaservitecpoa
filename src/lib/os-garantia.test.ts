@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   calcPrejuizoGarantiaPeriodo,
+  diasRestantesGarantia,
+  garantiaExpirandoEmBreve,
   osDentroGarantia,
   podeAbrirRetornoGarantia,
 } from "@/lib/os-garantia";
@@ -36,6 +38,22 @@ describe("os-garantia", () => {
       osIds
     );
     expect(r.prejuizo).toBe(150);
+  });
+
+  it("garantia expirando em breve", () => {
+    const conclusao = new Date();
+    conclusao.setDate(conclusao.getDate() - 80);
+    expect(garantiaExpirandoEmBreve({ data_conclusao: conclusao.toISOString(), garantia_dias: 90 }, 15)).toBe(
+      true
+    );
+  });
+
+  it("dias restantes de garantia", () => {
+    const conclusao = new Date();
+    conclusao.setDate(conclusao.getDate() - 10);
+    const dias = diasRestantesGarantia({ data_conclusao: conclusao.toISOString(), garantia_dias: 90 });
+    expect(dias).toBeGreaterThanOrEqual(79);
+    expect(dias).toBeLessThanOrEqual(81);
   });
 
   it("bloqueia retorno se já é retorno", () => {

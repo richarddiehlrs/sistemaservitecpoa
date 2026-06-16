@@ -207,6 +207,7 @@ export default async function OrdemDetalhePage({
       <PageHeader
         title={`Ordem ${formatNumeroOS(os.numero)}`}
         subtitle={`Aberta em ${formatDateTime(os.data_abertura)}${ehOficina ? " · Oficina" : ""}${retornoGarantia ? " · Retorno garantia" : ""}`}
+        eyebrow={retornoGarantia ? "Retorno em garantia" : undefined}
         action={
           <div className="flex flex-wrap gap-2">
             {ehOficina && (

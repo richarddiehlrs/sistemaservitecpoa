@@ -122,6 +122,23 @@ Toda transição relevante passa por `transicionarStatusOs`, que executa em sequ
 
 `excluirOrdem` chama `limparDadosVinculadosOs` (`src/lib/limpar-os.ts`): remove agendamentos, lançamentos financeiros, itens, histórico, anexos e fotos no Storage antes de apagar a OS.
 
+### 3.6 Retorno em garantia
+
+**Arquivos:** `src/lib/os-garantia.ts` · `src/app/(app)/ordens/actions.ts` (action `abrirRetornoGarantia`) · migration `0033_retorno_garantia.sql`
+
+Fluxo integrado (não reutiliza a mesma linha financeira do serviço original):
+
+1. OS **concluída/entregue** dentro de `garantia_dias` → botão **Abrir retorno em garantia** na OS original.
+2. Cria **nova OS** com `motivo_atendimento = retorno_garantia` e `os_origem_id` apontando para a original.
+3. Original vai para status `garantia`; retorno entra na agenda (domicílio) com prioridade alta.
+4. **Sem receita automática** na aprovação — custo de peças vira despesa `Custo retorno garantia`.
+5. **Pagamento do cliente é manual** no check-out (“Cliente pagou nesta visita”) ou no financeiro.
+6. **Prejuízo** = custo do retorno − valor recebido (card no Financeiro e tabela em Relatórios).
+
+Alertas: Dashboard lista OS com garantia expirando em até 15 dias (`DIAS_AVISO_GARANTIA`).
+
+Portal: banner “Retorno em garantia” + número da OS original (migration `0034_portal_retorno_garantia.sql`).
+
 ---
 
 ## 4. Fluxos operacionais completos
@@ -198,8 +215,10 @@ Usada em: formulário da OS, detalhe, portal, impressão e lançamentos.
 
 | Evento | O que acontece no financeiro |
 |--------|------------------------------|
-| Cliente **aprova** no portal | Server action atômica `aprovarOrcamentoPortal`: receita **pendente** + custo + notificações |
-| Status → **aprovada** no ERP | Idem (se ainda não houver lançamento) |
+| Cliente **aprova** no portal | **Não** gera receita (apenas registra aprovação — receita na conclusão) |
+| Status → **aprovada** no ERP | Idem — receita na conclusão do serviço |
+| **Conclusão** do serviço (check-out) | RPC `criar_receita_os_interno` — faturamento bruto; pagamento opcional no check-out |
+| **Retorno garantia** concluído | RPC `sincronizar_financeiro_retorno_garantia` — só custo + receita manual |
 | **Lançar receita** manual na OS | Receita (pendente ou paga) + custo sempre **pendente** |
 | **Editar OS** com lançamentos | Sincroniza valores dos títulos pendentes |
 
@@ -221,6 +240,7 @@ Usada em: formulário da OS, detalhe, portal, impressão e lançamentos.
 | **Lucro bruto** | Receita − Custo direto |
 | **Despesas operacionais** | Aluguel, salários, campo, admin, impostos, etc. |
 | **Lucro líquido** | Lucro bruto − Despesas operacionais |
+| **Prejuízo (garantia)** | Custo dos retornos − receita paga nos retornos (`calcPrejuizoGarantiaPeriodo`) |
 
 **Dois regimes:**
 

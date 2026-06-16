@@ -63,11 +63,21 @@ export default async function PortalOsPage({
   } | null;
   const nps = os.nps as { nota?: number; comentario?: string | null } | null;
   const mostrarNps = ["concluida", "entregue"].includes(os.status);
+  const retornoGarantia = os.motivo_atendimento === "retorno_garantia";
 
   return (
     <div className="min-h-screen bg-slate-100 py-8">
       <PrintButton href={`/imprimir/portal/${token}`} />
       <div className="mx-auto max-w-2xl px-4">
+        {retornoGarantia && (
+          <div className="mb-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+            <strong>Retorno em garantia</strong>
+            {os.os_origem_numero ? (
+              <> — referente ao serviço OS {formatNumeroOS(Number(os.os_origem_numero))}</>
+            ) : null}
+            . Atendimento coberto pela garantia; valores adicionais, se houver, serão informados pela empresa.
+          </div>
+        )}
         {/* Cabeçalho da empresa */}
         <div className="card mb-4 flex items-center gap-3 p-5">
           {empresa.logo_url ? (

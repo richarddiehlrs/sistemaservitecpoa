@@ -32,6 +32,28 @@ export function osDentroGarantia(os: {
   return hoje <= fim;
 }
 
+/** Dias até o fim da garantia (negativo = expirada). */
+export function diasRestantesGarantia(os: {
+  data_conclusao: string | null;
+  garantia_dias: number;
+}): number | null {
+  const fim = dataFimGarantiaOs(os);
+  if (!fim) return null;
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  fim.setHours(0, 0, 0, 0);
+  return Math.round((fim.getTime() - hoje.getTime()) / 86400000);
+}
+
+export function garantiaExpirandoEmBreve(
+  os: { data_conclusao: string | null; garantia_dias: number },
+  diasAviso = 15
+): boolean {
+  const restantes = diasRestantesGarantia(os);
+  if (restantes == null) return false;
+  return restantes >= 0 && restantes <= diasAviso;
+}
+
 const STATUS_ORIGEM_RETORNO: StatusOS[] = ["concluida", "entregue", "garantia"];
 
 export function podeAbrirRetornoGarantia(os: OrdemServico & { motivo_atendimento?: string | null }): {
