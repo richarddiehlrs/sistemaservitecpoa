@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sincronizarAgendaStatusOs } from "@/lib/agenda-os";
-import { criarReceitaPendenteOs, cancelarReceitaPendenteOs } from "@/lib/os-financeiro";
+import { cancelarReceitaPendenteOs } from "@/lib/os-financeiro";
 import { notificarOsAprovada, notificarReaprovacaoOrcamento } from "@/lib/notificacoes";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import {
@@ -49,7 +49,7 @@ export function calcValorAprovadoOs(os: {
   );
 }
 
-/** Aprovação: OS + histórico + agenda + financeiro + notificações (com rollback se financeiro falhar). */
+/** Aprovação: OS + histórico + agenda + notificações (financeiro na conclusão do serviço). */
 export async function executarAprovacaoOs(
   supabase: Db,
   opts: {
@@ -109,7 +109,6 @@ export async function executarAprovacaoOs(
   }
 
   if (os.aprovado) {
-    await criarReceitaPendenteOs(supabase, os.id);
     return { ok: true, jaAprovada: true };
   }
 
@@ -139,7 +138,6 @@ export async function executarAprovacaoOs(
   }
 
   if (!atualizada) {
-    await criarReceitaPendenteOs(supabase, os.id);
     return { ok: true, jaAprovada: true };
   }
 
@@ -150,31 +148,6 @@ export async function executarAprovacaoOs(
   });
 
   await sincronizarAgendaStatusOs(supabase, os.id, novoStatus);
-
-  const financeOk = await criarReceitaPendenteOs(supabase, os.id);
-  if (!financeOk) {
-    console.warn("[aprovacao-os] Receita não criada — revertendo aprovação OS", os.id);
-    await supabase
-      .from("ordens_servico")
-      .update({
-        aprovado: false,
-        data_aprovacao: null,
-        valor_aprovado: null,
-        observacao_aprovacao: null,
-        status: statusOriginal,
-        valor_total: Number(os.valor_total),
-        ...(opts.assinatura ? { assinatura_cliente: null } : {}),
-      })
-      .eq("id", os.id);
-
-    await supabase.from("os_status_historico").insert({
-      os_id: os.id,
-      status: statusOriginal,
-      observacao: "Aprovação revertida: não foi possível gerar receita no financeiro",
-    });
-
-    return { ok: false, erro: "Não foi possível gerar a receita no financeiro. A aprovação foi desfeita." };
-  }
 
   await notificarOsAprovada({
     osId: os.id,
@@ -239,7 +212,7 @@ export async function requererReaprovacaoSeValoresMudaram(
     await transicionarStatusOs(supabase, {
       osId,
       status: "aguardando_aprovacao",
-      observacao: "Orçamento alterado — nova aprovação do cliente necessária (receita pendente cancelada)",
+      observacao: "Orçamento alterado — nova aprovação do cliente necessária",
       origem: "reaprovacao",
       sistema: true,
       skipFinanceiro: true,

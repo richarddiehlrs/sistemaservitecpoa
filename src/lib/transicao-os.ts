@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Papel } from "@/lib/permissoes";
 import { sincronizarAgendaStatusOs } from "@/lib/agenda-os";
-import { cancelarLancamentosOs, criarReceitaPendenteOs } from "@/lib/os-financeiro";
+import { cancelarLancamentosOs } from "@/lib/os-financeiro";
 import { notificarMudancaStatusOs, notificarWhatsAppClienteSugerido } from "@/lib/notificacoes";
 import { eventoAutoPorStatus } from "@/lib/mensagens-cliente";
 import { validarTransicaoStatus } from "@/lib/transicao-status";
