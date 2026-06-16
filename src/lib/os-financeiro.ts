@@ -61,6 +61,7 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
       data_competencia: hoje,
       data_vencimento: hoje,
       status: "pendente",
+      origem: "sistema",
       forma_pagamento: os.forma_pagamento,
       observacoes: "Gerado automaticamente na aprovação do orçamento",
     },
@@ -79,6 +80,7 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
       data_competencia: hoje,
       data_vencimento: hoje,
       status: "pendente",
+      origem: "sistema",
       observacoes: "Custo de peças — pagar ao fornecedor separadamente",
     });
   }
@@ -97,25 +99,62 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
   return true;
 }
 
-/** Cancela lançamentos ativos vinculados à OS (ex.: OS cancelada). */
+/** Cancela receita e custo automáticos pendentes (mantém despesas de campo e quitados). */
+export async function cancelarReceitaPendenteOs(supabase: Db, osId: string): Promise<void> {
+  const { data: lancamentos } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, tipo, descricao, status, origem")
+    .eq("os_id", osId)
+    .neq("status", "cancelado");
+
+  for (const l of lancamentos || []) {
+    if (l.origem === "campo" || l.status === "pago") continue;
+    const custoOs = l.tipo === "despesa" && l.descricao?.startsWith("Custo OS-");
+    const receitaPendente = l.tipo === "receita" && ["pendente", "parcial"].includes(l.status);
+    if (receitaPendente || (custoOs && l.status === "pendente")) {
+      await supabase.from("lancamentos_financeiros").update({ status: "cancelado" }).eq("id", l.id);
+    }
+  }
+}
+
+/** Cancela lançamentos automáticos vinculados à OS (ex.: OS cancelada). Preserva despesas de campo. */
 export async function cancelarLancamentosOs(supabase: Db, osId: string): Promise<void> {
+  const { data: lancamentos } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, origem, status")
+    .eq("os_id", osId)
+    .neq("status", "cancelado");
+
+  const ids = (lancamentos || [])
+    .filter((l) => l.origem !== "campo" && l.status !== "pago")
+    .map((l) => l.id);
+
+  if (!ids.length) return;
+
   const { error } = await supabase
     .from("lancamentos_financeiros")
     .update({ status: "cancelado" })
-    .eq("os_id", osId)
-    .neq("status", "cancelado");
+    .in("id", ids);
   if (error) {
     console.error("[os-financeiro] Erro ao cancelar lançamentos:", error.message);
   }
 }
 
-/** Sincroniza valores dos lançamentos ativos quando a OS é editada. */
+/** Sincroniza valores dos lançamentos ativos quando a OS é editada (somente se aprovada). */
 export async function sincronizarFinanceiroOs(
   supabase: Db,
   osId: string,
   valorReceita: number,
   custoTotal: number
 ): Promise<void> {
+  const { data: os } = await supabase
+    .from("ordens_servico")
+    .select("aprovado")
+    .eq("id", osId)
+    .maybeSingle();
+
+  if (!os?.aprovado) return;
+
   const { data: lancamentos } = await supabase
     .from("lancamentos_financeiros")
     .select("id, tipo, descricao, status, valor_pago")
@@ -143,10 +182,13 @@ export async function sincronizarFinanceiroOs(
     if (
       l.tipo === "despesa" &&
       l.descricao?.startsWith("Custo OS-") &&
-      !despesaProtegida &&
-      custoTotal > 0
+      !despesaProtegida
     ) {
-      await supabase.from("lancamentos_financeiros").update({ valor: custoTotal }).eq("id", l.id);
+      if (custoTotal <= 0) {
+        await supabase.from("lancamentos_financeiros").update({ status: "cancelado" }).eq("id", l.id);
+      } else {
+        await supabase.from("lancamentos_financeiros").update({ valor: custoTotal }).eq("id", l.id);
+      }
     }
   }
 
@@ -172,6 +214,7 @@ export async function sincronizarFinanceiroOs(
         data_competencia: hoje,
         data_vencimento: hoje,
         status: "pendente",
+        origem: "sistema",
         observacoes: "Custo sincronizado da OS",
       });
     }

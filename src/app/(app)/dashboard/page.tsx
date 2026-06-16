@@ -272,7 +272,7 @@ export default async function DashboardPage() {
             </Link>
           )}
           {(contasPagar ?? 0) > 0 && (
-            <Link href="/financeiro?vencidos=1" className="badge bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100">
+            <Link href="/financeiro?tipo=despesa&status=pendente" className="badge bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100">
               {contasPagar} contas a pagar
             </Link>
           )}

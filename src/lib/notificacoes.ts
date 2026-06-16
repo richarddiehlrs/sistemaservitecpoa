@@ -234,6 +234,24 @@ export async function notificarDespesaCampo(opts: {
   });
 }
 
+export async function notificarReaprovacaoOrcamento(opts: {
+  osId: string;
+  numero: number;
+  clienteNome?: string | null;
+}) {
+  const { formatNumeroOS } = await import("@/lib/format");
+
+  await notificarAdminsAtendentes({
+    tipo: "financeiro",
+    titulo: "Orçamento alterado — reaprovação necessária",
+    mensagem: `${formatNumeroOS(opts.numero)} • ${opts.clienteNome || "Cliente"} — receita pendente cancelada`,
+    url: `/ordens/${opts.osId}`,
+    prioridade: "alta",
+    ref_tipo: "os",
+    ref_id: opts.osId,
+  });
+}
+
 export async function notificarMudancaStatusOs(opts: {
   osId: string;
   numero: number;

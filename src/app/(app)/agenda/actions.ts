@@ -6,7 +6,9 @@ import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { horarioTurno } from "@/lib/turnos";
 import { transicionarStatusOs } from "@/lib/transicao-os";
-import { statusPosCheckout, type CheckoutResultado } from "@/lib/transicao-status";
+import { statusPosCheckout, statusPermiteCheckin, type CheckoutResultado } from "@/lib/transicao-status";
+import { calcValorTotalCliente } from "@/lib/os-valores";
+import { sincronizarFinanceiroOs } from "@/lib/os-financeiro";
 
 function str(v: FormDataEntryValue | null): string | null {
   const s = v == null ? "" : String(v).trim();
@@ -165,6 +167,18 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
   if (error) throw new Error(error.message);
 
   if (ag.os_id) {
+    const { data: osCheckin } = await supabase
+      .from("ordens_servico")
+      .select("status")
+      .eq("id", ag.os_id)
+      .single();
+
+    if (!osCheckin || !statusPermiteCheckin(osCheckin.status as never)) {
+      throw new Error(
+        "Esta OS aguarda aprovação do cliente antes de iniciar o atendimento. Reagende após a aprovação."
+      );
+    }
+
     const extras: Record<string, string> = {};
     if (assumir || profile.papel === "tecnico") {
       extras.tecnico = nome;
@@ -222,16 +236,34 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
 
     const { data: os } = await supabase
       .from("ordens_servico")
-      .select("status, aprovado, tipo_atendimento, valor_visita")
+      .select(
+        "status, aprovado, tipo_atendimento, valor_visita, valor_itens, abater_visita, desconto, acrescimo, custo_total"
+      )
       .eq("id", ag.os_id)
       .single();
 
     if (os) {
-      if (visitaCobrada && Number(os.valor_visita) > 0) {
+      if (visitaCobrada && Number(os.valor_visita) > 0 && !os.abater_visita) {
+        const novoTotal = calcValorTotalCliente(
+          Number(os.valor_itens),
+          Number(os.valor_visita),
+          true,
+          Number(os.desconto),
+          Number(os.acrescimo)
+        );
         await supabase
           .from("ordens_servico")
-          .update({ abater_visita: true })
+          .update({ abater_visita: true, valor_total: novoTotal })
           .eq("id", ag.os_id);
+
+        if (os.aprovado) {
+          await sincronizarFinanceiroOs(
+            supabase,
+            ag.os_id,
+            novoTotal,
+            Number(os.custo_total) || 0
+          );
+        }
       }
 
       const proximo = statusPosCheckout(
@@ -269,5 +301,6 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
 
   revalidatePath("/agenda");
   revalidatePath("/campo");
+  revalidatePath("/financeiro");
   if (ag?.os_id) revalidatePath(`/ordens/${ag.os_id}`);
 }

@@ -1,19 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sincronizarAgendaStatusOs } from "@/lib/agenda-os";
-import { criarReceitaPendenteOs } from "@/lib/os-financeiro";
-import { notificarOsAprovada } from "@/lib/notificacoes";
+import { criarReceitaPendenteOs, cancelarReceitaPendenteOs } from "@/lib/os-financeiro";
+import { notificarOsAprovada, notificarReaprovacaoOrcamento } from "@/lib/notificacoes";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import type { Database, StatusOS } from "@/types/database";
 
 type Db = SupabaseClient<Database>;
 
-/** Status que passam para `aprovada` ao aprovar orçamento. */
-export const STATUS_APROVA_PARA: StatusOS[] = [
-  "aberta",
-  "em_analise",
-  "aguardando_aprovacao",
-  "em_execucao",
-];
+/** Status que passam para `aprovada` ao aprovar orçamento (execução mantém status atual). */
+export const STATUS_APROVA_PARA: StatusOS[] = ["aberta", "em_analise", "aguardando_aprovacao"];
+
+export function statusAposAprovacao(statusAtual: StatusOS): StatusOS {
+  if (statusAtual === "em_execucao" || statusAtual === "em_roteiro" || statusAtual === "aguardando_peca") {
+    return statusAtual;
+  }
+  return STATUS_APROVA_PARA.includes(statusAtual) ? "aprovada" : statusAtual;
+}
 
 export type AprovarOsResult =
   | { ok: true; jaAprovada?: boolean }
@@ -72,9 +74,7 @@ export async function executarAprovacaoOs(
     return { ok: true, jaAprovada: true };
   }
 
-  const novoStatus: StatusOS = STATUS_APROVA_PARA.includes(os.status as StatusOS)
-    ? "aprovada"
-    : (os.status as StatusOS);
+  const novoStatus = statusAposAprovacao(os.status as StatusOS);
 
   const update: Record<string, unknown> = {
     aprovado: true,
@@ -115,6 +115,7 @@ export async function executarAprovacaoOs(
   const financeOk = await criarReceitaPendenteOs(supabase, os.id);
   if (!financeOk) {
     console.warn("[aprovacao-os] Receita não criada para OS", os.id);
+    return { ok: false, erro: "Orçamento salvo, mas não foi possível gerar a receita no financeiro." };
   }
 
   await notificarOsAprovada({
@@ -152,6 +153,8 @@ export async function requererReaprovacaoSeValoresMudaram(
 
   if (Math.abs(totalNovo - referencia) < 0.01) return false;
 
+  await cancelarReceitaPendenteOs(supabase, osId);
+
   await supabase
     .from("ordens_servico")
     .update({
@@ -163,15 +166,31 @@ export async function requererReaprovacaoSeValoresMudaram(
     .eq("id", osId);
 
   if (["aprovada", "em_execucao"].includes(antes.status)) {
+    const { data: osMeta } = await supabase
+      .from("ordens_servico")
+      .select("numero, clientes(nome)")
+      .eq("id", osId)
+      .maybeSingle();
+
     const { transicionarStatusOs } = await import("@/lib/transicao-os");
     await transicionarStatusOs(supabase, {
       osId,
       status: "aguardando_aprovacao",
-      observacao: "Orçamento alterado — nova aprovação do cliente necessária",
+      observacao: "Orçamento alterado — nova aprovação do cliente necessária (receita pendente cancelada)",
       origem: "reaprovacao",
       sistema: true,
       skipFinanceiro: true,
     });
+
+    if (osMeta) {
+      // @ts-expect-error relação embutida
+      const clienteNome = osMeta.clientes?.nome as string | undefined;
+      await notificarReaprovacaoOrcamento({
+        osId,
+        numero: osMeta.numero,
+        clienteNome,
+      });
+    }
   }
 
   return true;

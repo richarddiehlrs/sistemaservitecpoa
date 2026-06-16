@@ -133,14 +133,32 @@ export default async function OrdemDetalhePage({
     os.status !== "cancelada" &&
     os.status !== "cliente_ausente" &&
     !["concluida", "entregue"].includes(os.status);
+  const jaFoiAprovada = (historico || []).some((h) => h.status === "aprovada");
   const valorMudouAposAprovacao =
     os.aprovado &&
     os.valor_aprovado != null &&
     Math.abs(valorTotal - Number(os.valor_aprovado)) > 0.01;
+  const aguardaNovaAprovacao =
+    !os.aprovado && os.status === "aguardando_aprovacao" && jaFoiAprovada && valorTotal > 0;
+  const receitaSemAprovacao =
+    !os.aprovado &&
+    lancamentosAtivos.some(
+      (l) => l.tipo === "receita" && !["cancelado", "pago"].includes(l.status)
+    );
   const ehOficina = os.tipo_atendimento === "oficina";
 
   return (
     <div>
+      {receitaSemAprovacao && (
+        <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          Há receita pendente no financeiro sem orçamento aprovado. Reaprove o orçamento ou cancele o lançamento manualmente.
+        </div>
+      )}
+      {aguardaNovaAprovacao && (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Orçamento alterado após aprovação anterior. Solicite nova assinatura do cliente antes de concluir o serviço.
+        </div>
+      )}
       {valorMudouAposAprovacao && (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           O orçamento foi alterado após a última aprovação. Solicite nova assinatura do cliente antes de concluir.

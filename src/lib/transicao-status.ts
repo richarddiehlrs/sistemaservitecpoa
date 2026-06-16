@@ -35,9 +35,29 @@ const TRANSICOES_TECNICO: Partial<Record<StatusOS, StatusOS[]>> = {
 
 /** Transições automáticas do sistema (check-in, check-out, etc.) — não exigem papel. */
 const TRANSICOES_SISTEMA: Partial<Record<StatusOS, StatusOS[]>> = {
+  aberta: ["em_execucao"],
+  em_analise: ["em_execucao"],
+  aprovada: ["em_execucao"],
   em_roteiro: ["em_execucao", "cliente_ausente"],
-  em_execucao: ["aguardando_aprovacao", "concluida", "cliente_ausente", "aguardando_peca"],
+  em_execucao: ["aguardando_aprovacao", "concluida", "cliente_ausente", "aguardando_peca", "aprovada"],
+  aguardando_peca: ["em_execucao"],
+  garantia: ["em_execucao"],
 };
+
+/** Status que permitem check-in do técnico na visita. */
+export const STATUS_PERMITE_CHECKIN: StatusOS[] = [
+  "aberta",
+  "em_analise",
+  "aprovada",
+  "em_roteiro",
+  "em_execucao",
+  "aguardando_peca",
+  "garantia",
+];
+
+export function statusPermiteCheckin(status: StatusOS): boolean {
+  return STATUS_PERMITE_CHECKIN.includes(status);
+}
 
 export function transicoesPermitidas(de: StatusOS, papel: Papel): StatusOS[] {
   const mapa = papel === "tecnico" ? TRANSICOES_TECNICO : TRANSICOES_OPERACAO;
@@ -53,7 +73,7 @@ export function validarTransicaoStatus(
   if (de === para) return;
 
   const permitidas = opts?.sistema
-    ? TRANSICOES_SISTEMA[de] ?? [para]
+    ? TRANSICOES_SISTEMA[de] ?? []
     : transicoesPermitidas(de, papel);
 
   if (!permitidas.includes(para)) {
@@ -85,7 +105,7 @@ export function statusPosCheckout(
       return os.aprovado ? "concluida" : "aguardando_aprovacao";
     case "visita":
     default:
-      return "aguardando_aprovacao";
+      return os.aprovado ? "aprovada" : "aguardando_aprovacao";
   }
 }
 

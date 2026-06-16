@@ -402,7 +402,15 @@ export async function atualizarOrdem(id: string, formData: FormData) {
     );
   }
 
-  await sincronizarFinanceiroOs(supabase, id, total, custoItens);
+  const { data: osDepois } = await supabase
+    .from("ordens_servico")
+    .select("aprovado")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (osDepois?.aprovado) {
+    await sincronizarFinanceiroOs(supabase, id, total, custoItens);
+  }
 
   revalidatePath(`/ordens/${id}`);
   revalidatePath("/financeiro");
@@ -424,6 +432,27 @@ export async function alterarStatusForm(id: string, formData: FormData) {
 export async function alterarStatus(id: string, status: StatusOS, observacao?: string) {
   const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
+
+  if (status === "aprovada") {
+    const result = await executarAprovacaoOs(supabase, {
+      osId: id,
+      obs: observacao ?? null,
+      origem: "erp",
+    });
+    if (!result.ok) throw new Error(result.erro);
+
+    revalidatePath("/financeiro");
+    revalidatePath("/dashboard");
+    revalidatePath("/dre");
+    revalidatePath("/relatorios");
+    revalidatePath("/financeiro/fluxo");
+    revalidatePath(`/ordens/${id}`);
+    revalidatePath("/ordens");
+    revalidatePath("/agenda");
+    revalidatePath("/campo");
+    revalidatePath("/painel");
+    return;
+  }
 
   const result = await transicionarStatusOs(supabase, {
     osId: id,
