@@ -38,7 +38,7 @@ export function Topbar({
         {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
       </button>
 
-      <GlobalSearch />
+      <GlobalSearch papel={papel} userId={userId} userNome={userNome} />
 
       <div className="ml-auto flex items-center gap-1">
         {papel && temPermissao(papel, "ordens") && (

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, LayoutGrid } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
+import { nomeTecnico } from "@/lib/permissoes";
 import { PageHeader } from "@/components/ui";
 import { PainelAtendimentos, type OsPainel } from "@/components/painel-atendimentos";
 import { STATUS_PAINEL_ATIVOS } from "@/lib/painel-atendimento";
@@ -9,14 +10,21 @@ import { STATUS_PAINEL_ATIVOS } from "@/lib/painel-atendimento";
 export const dynamic = "force-dynamic";
 
 export default async function PainelAtendimentosPage() {
-  await requirePermissao("ordens");
+  const profile = await requirePermissao("ordens");
   const supabase = await createClient();
 
-  const { data: ordens } = await supabase
+  let query = supabase
     .from("ordens_servico")
     .select("id, numero, status, tipo_atendimento, tecnico, data_previsao, prioridade, clientes(nome)")
     .in("status", STATUS_PAINEL_ATIVOS)
     .order("numero", { ascending: true });
+
+  if (profile.papel === "tecnico") {
+    const tecnico = nomeTecnico(profile);
+    query = query.or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${tecnico}%`);
+  }
+
+  const { data: ordens } = await query;
 
   const lista: OsPainel[] = (ordens || []).map((o) => ({
     id: o.id,

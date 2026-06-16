@@ -9,6 +9,7 @@ import { transicionarStatusOs } from "@/lib/transicao-os";
 import { statusPosCheckout, statusPermiteCheckin, type CheckoutResultado } from "@/lib/transicao-status";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import { sincronizarFinanceiroOs } from "@/lib/os-financeiro";
+import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
 
 function str(v: FormDataEntryValue | null): string | null {
   const s = v == null ? "" : String(v).trim();
@@ -237,7 +238,7 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
     const { data: os } = await supabase
       .from("ordens_servico")
       .select(
-        "status, aprovado, tipo_atendimento, valor_visita, valor_itens, abater_visita, desconto, acrescimo, custo_total"
+        "status, aprovado, tipo_atendimento, valor_visita, valor_itens, abater_visita, desconto, acrescimo, custo_total, cliente_id, numero, tecnico, tecnico_id, data_previsao, turno"
       )
       .eq("id", ag.os_id)
       .single();
@@ -290,6 +291,34 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
           origem: "check-out",
           sistema: true,
           papel: profile.papel,
+        });
+      }
+
+      const agendarRetorno = formData?.get("agendar_retorno") === "on";
+      const retornoData = str(formData?.get("retorno_data"));
+      const retornoTurno = str(formData?.get("retorno_turno")) || "manha";
+
+      if (
+        agendarRetorno &&
+        retornoData &&
+        os.tipo_atendimento === "domicilio"
+      ) {
+        const tecnico_id = os.tecnico_id || profile.id;
+        const tecnico = os.tecnico || nomeTecnico(profile);
+
+        await supabase
+          .from("ordens_servico")
+          .update({ data_previsao: retornoData, turno: retornoTurno as never })
+          .eq("id", ag.os_id);
+
+        await sincronizarAgendamentoOs(supabase, {
+          osId: ag.os_id,
+          clienteId: os.cliente_id,
+          numero: os.numero,
+          data: retornoData,
+          turno: retornoTurno,
+          tecnico,
+          tecnico_id,
         });
       }
     }

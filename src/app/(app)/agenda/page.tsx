@@ -285,6 +285,7 @@ function CardAgendamento({
             agendamento={a as never}
             checkinAction={checkinAgendamento.bind(null, a.id as string)}
             checkoutAction={checkoutAgendamento.bind(null, a.id as string)}
+            permitirRetorno={Boolean(a.os_id)}
           />
         </div>
       )}

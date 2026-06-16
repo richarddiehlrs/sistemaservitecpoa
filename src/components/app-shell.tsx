@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { CampoNavMobile } from "./campo-nav-mobile";
 import { ToastProvider } from "./toast";
 import { RegisterSW } from "./register-sw";
 import { RouteGuard } from "./route-guard";
@@ -38,6 +39,9 @@ export function AppShell({
     });
   }
 
+  const papel = (role as Papel) || "admin";
+  const ehTecnico = papel === "tecnico";
+
   return (
     <ToastProvider>
       <RegisterSW />
@@ -70,8 +74,13 @@ export function AppShell({
             userNome={userNome}
           />
           <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-7xl animate-fade-in-up p-4 sm:p-6 lg:p-8">{children}</div>
+            <div
+              className={`mx-auto max-w-7xl animate-fade-in-up p-4 sm:p-6 lg:p-8${ehTecnico ? " pb-24 lg:pb-8" : ""}`}
+            >
+              {children}
+            </div>
           </main>
+          {ehTecnico && <CampoNavMobile />}
         </div>
       </div>
     </ToastProvider>

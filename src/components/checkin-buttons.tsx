@@ -10,10 +10,12 @@ export function CheckinButtons({
   agendamento,
   checkinAction,
   checkoutAction,
+  permitirRetorno = false,
 }: {
   agendamento: { status: string; checkin_at: string | null; checkout_at: string | null };
   checkinAction: (formData: FormData) => Promise<void>;
   checkoutAction: (formData: FormData) => Promise<void>;
+  permitirRetorno?: boolean;
 }) {
   const [pending, start] = useTransition();
   const [modalCheckout, setModalCheckout] = useState(false);
@@ -80,6 +82,7 @@ export function CheckinButtons({
           router.refresh();
         }}
         pending={pending}
+        permitirRetorno={permitirRetorno}
       />
     </>
   );

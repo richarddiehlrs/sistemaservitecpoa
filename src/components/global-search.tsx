@@ -6,11 +6,28 @@ import { Search, Loader2, Wrench, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatNumeroOS, formatTelefone, STATUS_OS_LABEL } from "@/lib/format";
 import { extrairReferenciaOs } from "@/lib/os-scan";
+import type { Papel } from "@/lib/permissoes";
 
 type CliRes = { id: string; nome: string; telefone: string | null };
 type OsRes = { id: string; numero: number; status: string; clientes?: { nome?: string } | null };
 
-export function GlobalSearch() {
+function filtroTecnicoOr(papel?: Papel, userId?: string, userNome?: string): string | null {
+  if (papel !== "tecnico" || !userId) return null;
+  const nome = (userNome || "").trim();
+  return nome
+    ? `tecnico_id.eq.${userId},tecnico.ilike.%${nome}%`
+    : `tecnico_id.eq.${userId}`;
+}
+
+export function GlobalSearch({
+  papel,
+  userId,
+  userNome,
+}: {
+  papel?: Papel;
+  userId?: string;
+  userNome?: string;
+}) {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -20,6 +37,7 @@ export function GlobalSearch() {
   const [ordens, setOrdens] = useState<OsRes[]>([]);
   const ref = useRef<HTMLDivElement>(null);
   const deb = useRef<ReturnType<typeof setTimeout>>();
+  const filtroTecnico = filtroTecnicoOr(papel, userId, userNome);
 
   useEffect(() => {
     function h(e: MouseEvent) {
@@ -40,16 +58,17 @@ export function GlobalSearch() {
     setOpen(true);
     clearTimeout(deb.current);
     deb.current = setTimeout(async () => {
-      const ref = extrairReferenciaOs(q);
-      if (ref) {
-        const osRef =
-          ref.tipo === "id"
-            ? supabase.from("ordens_servico").select("id, numero, status, clientes(nome)").eq("id", ref.valor).limit(1)
+      const refOs = extrairReferenciaOs(q);
+      if (refOs) {
+        let osRef =
+          refOs.tipo === "id"
+            ? supabase.from("ordens_servico").select("id, numero, status, clientes(nome)").eq("id", refOs.valor).limit(1)
             : supabase
                 .from("ordens_servico")
                 .select("id, numero, status, clientes(nome)")
-                .eq("numero", ref.valor)
+                .eq("numero", refOs.valor)
                 .limit(1);
+        if (filtroTecnico) osRef = osRef.or(filtroTecnico);
         const { data } = await osRef;
         if (data?.[0]) {
           go(`/ordens/${data[0].id}`);
@@ -67,7 +86,7 @@ export function GlobalSearch() {
         .order("nome")
         .limit(5);
 
-      const osReq =
+      let osReq =
         !Number.isNaN(numero) && numero > 0
           ? supabase
               .from("ordens_servico")
@@ -80,12 +99,14 @@ export function GlobalSearch() {
               .order("data_abertura", { ascending: false })
               .limit(3);
 
+      if (filtroTecnico) osReq = osReq.or(filtroTecnico);
+
       const [cli, os] = await Promise.all([cliReq, osReq]);
       setClientes((cli.data as CliRes[]) || []);
       setOrdens((os.data as unknown as OsRes[]) || []);
       setLoading(false);
     }, 250);
-  }, [q, supabase]);
+  }, [q, supabase, filtroTecnico]);
 
   function go(href: string) {
     setOpen(false);
@@ -102,7 +123,7 @@ export function GlobalSearch() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => q && setOpen(true)}
-        placeholder="Buscar OS, cliente ou telefone..."
+        placeholder={papel === "tecnico" ? "Buscar minhas OS ou cliente..." : "Buscar OS, cliente ou telefone..."}
         className="input pl-9"
       />
       {loading && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />}

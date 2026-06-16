@@ -1,31 +1,50 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
 
 type Resultado = "visita" | "servico_concluido" | "aguardando_peca";
+
+function dataAmanhaYmd(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
 
 export function CheckoutModal({
   open,
   onClose,
   onConfirm,
   pending,
+  permitirRetorno = false,
 }: {
   open: boolean;
   onClose: () => void;
   onConfirm: (fd: FormData) => Promise<void>;
   pending: boolean;
+  permitirRetorno?: boolean;
 }) {
   const [resultado, setResultado] = useState<Resultado>("visita");
   const [visitaCobrada, setVisitaCobrada] = useState(false);
+  const [agendarRetorno, setAgendarRetorno] = useState(true);
+  const [retornoData, setRetornoData] = useState(dataAmanhaYmd);
+  const [retornoTurno, setRetornoTurno] = useState<"manha" | "tarde" | "dia">("manha");
 
   if (!open) return null;
+
+  const mostraRetorno =
+    permitirRetorno && (resultado === "visita" || resultado === "aguardando_peca");
 
   async function confirmar() {
     const fd = new FormData();
     fd.set("resultado", resultado);
     if (visitaCobrada) fd.set("visita_cobrada", "on");
+    if (mostraRetorno && agendarRetorno && retornoData) {
+      fd.set("agendar_retorno", "on");
+      fd.set("retorno_data", retornoData);
+      fd.set("retorno_turno", retornoTurno);
+    }
     try {
       const pos = await obterPosicaoGps();
       fd.set("lat", String(pos.lat));
@@ -37,6 +56,8 @@ export function CheckoutModal({
     await onConfirm(fd);
     onClose();
   }
+
+  const hoje = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
@@ -108,6 +129,46 @@ export function CheckoutModal({
             </div>
           </label>
         </div>
+
+        {mostraRetorno && (
+          <div className="mt-4 rounded-lg border border-brand-100 bg-brand-50/50 p-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800">
+              <input
+                type="checkbox"
+                checked={agendarRetorno}
+                onChange={(e) => setAgendarRetorno(e.target.checked)}
+              />
+              Agendar retorno agora
+            </label>
+            {agendarRetorno && (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">Data</label>
+                  <input
+                    type="date"
+                    value={retornoData}
+                    min={hoje}
+                    onChange={(e) => setRetornoData(e.target.value)}
+                    className="input py-1.5 text-sm"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">Turno</label>
+                  <select
+                    value={retornoTurno}
+                    onChange={(e) => setRetornoTurno(e.target.value as typeof retornoTurno)}
+                    className="input py-1.5 text-sm"
+                  >
+                    <option value="manha">Manhã</option>
+                    <option value="tarde">Tarde</option>
+                    <option value="dia">Dia inteiro</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-5 flex gap-2">
           <button type="button" onClick={onClose} className="btn-secondary flex-1" disabled={pending}>
