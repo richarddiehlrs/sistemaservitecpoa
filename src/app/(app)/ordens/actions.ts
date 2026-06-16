@@ -7,7 +7,7 @@ import { requirePermissao } from "@/lib/auth-guard";
 import { assertOsAtribuida } from "@/lib/os-acesso";
 import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits, hojeYmdLocal } from "@/lib/format";
-import { calcValorTotalCliente } from "@/lib/os-valores";
+import { calcReceitaFaturamentoOs, calcValorTotalCliente } from "@/lib/os-valores";
 import {
   resolverEquipamentosOs,
   salvarVinculosEquipamentosOs,
@@ -466,7 +466,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
     .maybeSingle();
 
   if (osDepois?.aprovado) {
-    await sincronizarFinanceiroOs(supabase, id, total, custoItens);
+    await sincronizarFinanceiroOs(supabase, id, custoItens);
   }
 
   revalidatePath(`/ordens/${id}`);
@@ -573,7 +573,14 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
     throw new Error("Esta OS já possui receita financeira. Edite os valores na OS para sincronizar.");
   }
 
-  const valorReceita = calcValorTotalCliente(
+  const valorFaturamento = calcReceitaFaturamentoOs(
+    Number(os.valor_itens),
+    Number(os.valor_visita),
+    os.abater_visita,
+    Number(os.desconto),
+    Number(os.acrescimo)
+  );
+  const saldoCliente = calcValorTotalCliente(
     Number(os.valor_itens),
     Number(os.valor_visita),
     os.abater_visita,
@@ -600,9 +607,9 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
       categoria_id: catReceita?.id ?? null,
       os_id: os.id,
       cliente_id: os.cliente_id,
-      valor: valorReceita,
-      valor_pago: jaPago ? valorReceita : 0,
-      valor_liquido: jaPago ? valorReceita : null,
+      valor: valorFaturamento,
+      valor_pago: jaPago ? valorFaturamento : 0,
+      valor_liquido: jaPago ? valorFaturamento : null,
       data_competencia: hoje,
       data_vencimento: dataVencimento || hoje,
       data_pagamento: jaPago ? hoje : null,
@@ -611,10 +618,10 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
     },
   ];
 
-  if (valorReceita <= 0) throw new Error("Valor da receita deve ser maior que zero.");
+  if (valorFaturamento <= 0) throw new Error("Valor da receita deve ser maior que zero.");
 
-  if (valorReceita !== Number(os.valor_total)) {
-    await supabase.from("ordens_servico").update({ valor_total: valorReceita }).eq("id", id);
+  if (saldoCliente !== Number(os.valor_total)) {
+    await supabase.from("ordens_servico").update({ valor_total: saldoCliente }).eq("id", id);
   }
 
   // Custo da OS -> despesa sempre pendente (cliente pagar ≠ fornecedor pago)

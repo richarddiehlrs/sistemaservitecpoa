@@ -97,6 +97,26 @@ describe("calcValorTotalCliente", () => {
   });
 });
 
+describe("calcReceitaFaturamentoOs", () => {
+  it("visita abatida: faturamento = subtotal, saldo menor", async () => {
+    const { calcReceitaFaturamentoOs, calcValorTotalCliente } = await import("@/lib/os-valores");
+    expect(calcReceitaFaturamentoOs(600, 100, true, 0, 0)).toBe(600);
+    expect(calcValorTotalCliente(600, 100, true, 0, 0)).toBe(500);
+  });
+
+  it("visita no total quando não abate", async () => {
+    const { calcReceitaFaturamentoOs } = await import("@/lib/os-valores");
+    expect(calcReceitaFaturamentoOs(600, 100, false, 0, 0)).toBe(700);
+  });
+});
+
+describe("saldoEmAberto com visita abatida", () => {
+  it("a receber = faturamento − visita paga", async () => {
+    const { saldoEmAberto } = await import("@/lib/financeiro");
+    expect(saldoEmAberto({ valor: 600, valor_pago: 100, juros: 0, multa: 0 })).toBe(500);
+  });
+});
+
 describe("resumoOrcamentoCliente", () => {
   it("mostra abatimento e label de resta pagar", () => {
     const r = resumoOrcamentoCliente({

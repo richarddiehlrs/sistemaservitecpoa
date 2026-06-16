@@ -212,8 +212,8 @@ export default async function FinanceiroPage({
         <StatCard title="Recebido (caixa)" value={formatCurrency(recebido)} tone="green" icon={<TrendingUp className="h-5 w-5" />} />
         <StatCard title="Pago (caixa)" value={formatCurrency(pago)} tone="red" icon={<TrendingDown className="h-5 w-5" />} />
         <StatCard title="Saldo caixa" value={formatCurrency(saldo)} tone={saldo >= 0 ? "blue" : "red"} icon={<Wallet className="h-5 w-5" />} />
-        <StatCard title="A receber" value={formatCurrency(aReceber)} tone="amber" icon={<Receipt className="h-5 w-5" />} />
-        <StatCard title="A pagar" value={formatCurrency(aPagar)} tone="amber" icon={<Clock className="h-5 w-5" />} />
+        <StatCard title="A receber" value={formatCurrency(aReceber)} tone="amber" icon={<Receipt className="h-5 w-5" />} hint="Saldo em aberto (valor − já recebido)" />
+        <StatCard title="A pagar" value={formatCurrency(aPagar)} tone="amber" icon={<Clock className="h-5 w-5" />} hint="Fornecedores e despesas pendentes" />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -222,14 +222,14 @@ export default async function FinanceiroPage({
           value={formatCurrency(metricasCompetencia.receita)}
           tone="green"
           icon={<TrendingUp className="h-5 w-5" />}
-          hint="Valor faturado no período"
+          hint="Receita bruta (visita abatida não reduz faturamento)"
         />
         <StatCard
           title="Lucro bruto"
           value={formatCurrency(metricasCompetencia.lucroBruto)}
           tone={metricasCompetencia.lucroBruto >= 0 ? "blue" : "red"}
           icon={<PiggyBank className="h-5 w-5" />}
-          hint={`Receita − custo direto • ${metricasCompetencia.margemBruta}%`}
+          hint={`Faturamento − peças/custo OS (${formatCurrency(metricasCompetencia.custoDireto)}) • ${metricasCompetencia.margemBruta}%`}
         />
         <StatCard
           title="Despesas operacionais"
@@ -259,6 +259,8 @@ export default async function FinanceiroPage({
                 <th>Categoria</th>
                 <th>Situação</th>
                 <th className="text-right">Valor</th>
+                <th className="text-right">Pago</th>
+                <th className="text-right">Saldo</th>
                 <th className="text-right">Ações</th>
               </tr>
             </thead>
@@ -306,11 +308,12 @@ export default async function FinanceiroPage({
                           líquido {formatCurrency(l.valor_liquido)}
                         </span>
                       )}
-                      {l.status === "parcial" && (
-                        <span className="block text-[11px] font-normal text-slate-400">
-                          pago {formatCurrency(l.valor_pago)} • resta {formatCurrency(saldoAberto)}
-                        </span>
-                      )}
+                    </td>
+                    <td className="text-right text-slate-600">
+                      {Number(l.valor_pago) > 0 ? formatCurrency(Number(l.valor_pago)) : "—"}
+                    </td>
+                    <td className="text-right font-medium text-amber-700">
+                      {l.status !== "pago" && l.status !== "cancelado" ? formatCurrency(saldoAberto) : "—"}
                     </td>
                     <td className="text-right">
                       <div className="flex items-center justify-end gap-1">

@@ -17,6 +17,35 @@ export function calcValorTotalCliente(
   return Math.max(0, Math.round(total * 100) / 100);
 }
 
+/** Subtotal de serviços/peças antes da visita. */
+export function calcSubtotalServicosOs(
+  valorItens: number,
+  desconto: number,
+  acrescimo: number
+): number {
+  return Math.max(
+    0,
+    Math.round((Number(valorItens) + Number(acrescimo) - Number(desconto)) * 100) / 100
+  );
+}
+
+/**
+ * Valor nominal da receita (competência / faturamento).
+ * Com visita abatida: faturamento = subtotal dos serviços (visita entra como pagamento, não reduz receita).
+ */
+export function calcReceitaFaturamentoOs(
+  valorItens: number,
+  valorVisita: number,
+  abaterVisita: boolean,
+  desconto: number,
+  acrescimo: number
+): number {
+  if (abaterVisita) {
+    return calcSubtotalServicosOs(valorItens, desconto, acrescimo);
+  }
+  return calcValorTotalCliente(valorItens, valorVisita, false, desconto, acrescimo);
+}
+
 export function linhaVisitaValor(
   valorVisita: number,
   abaterVisita: boolean

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calcValorTotalCliente } from "@/lib/os-valores";
+import { calcReceitaFaturamentoOs, calcValorTotalCliente } from "@/lib/os-valores";
 import { hojeYmdLocal } from "@/lib/format";
 import type { Database } from "@/types/database";
 
@@ -229,14 +229,21 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
 
   if (!os || os.status === "cancelada") return false;
 
-  const valorReceita = calcValorTotalCliente(
+  const valorFaturamento = calcReceitaFaturamentoOs(
     Number(os.valor_itens),
     Number(os.valor_visita),
     os.abater_visita,
     Number(os.desconto),
     Number(os.acrescimo)
   );
-  if (valorReceita <= 0) return false;
+  const saldoCliente = calcValorTotalCliente(
+    Number(os.valor_itens),
+    Number(os.valor_visita),
+    os.abater_visita,
+    Number(os.desconto),
+    Number(os.acrescimo)
+  );
+  if (valorFaturamento <= 0) return false;
 
   const { catReceita, catCusto } = await buscarCategoriasFinanceiras(supabase);
   const existente = await buscarReceitaAtivaOs(supabase, osId);
@@ -249,7 +256,7 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
       : "Gerado automaticamente na aprovação do orçamento";
 
   if (existente) {
-    const ok = await atualizarReceitaOs(supabase, existente, valorReceita, obsReceita);
+    const ok = await atualizarReceitaOs(supabase, existente, valorFaturamento, obsReceita);
     if (!ok) return false;
     await inserirCustoOsSeNecessario(
       supabase,
@@ -267,7 +274,7 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
         categoria_id: catReceita?.id ?? null,
         os_id: os.id,
         cliente_id: os.cliente_id,
-        valor: valorReceita,
+        valor: valorFaturamento,
         valor_pago: 0,
         data_competencia: hoje,
         data_vencimento: hoje,
@@ -303,8 +310,8 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
     }
   }
 
-  if (valorReceita !== Number(os.valor_total)) {
-    await supabase.from("ordens_servico").update({ valor_total: valorReceita }).eq("id", osId);
+  if (saldoCliente !== Number(os.valor_total)) {
+    await supabase.from("ordens_servico").update({ valor_total: saldoCliente }).eq("id", osId);
   }
 
   return true;
@@ -412,16 +419,26 @@ export async function cancelarLancamentosOs(supabase: Db, osId: string): Promise
 export async function sincronizarFinanceiroOs(
   supabase: Db,
   osId: string,
-  valorReceita: number,
-  custoTotal: number
+  custoTotal?: number
 ): Promise<void> {
   const { data: os } = await supabase
     .from("ordens_servico")
-    .select("aprovado")
+    .select(
+      "aprovado, valor_itens, valor_visita, abater_visita, desconto, acrescimo, custo_total"
+    )
     .eq("id", osId)
     .maybeSingle();
 
   if (!os?.aprovado) return;
+
+  const valorFaturamento = calcReceitaFaturamentoOs(
+    Number(os.valor_itens),
+    Number(os.valor_visita),
+    os.abater_visita,
+    Number(os.desconto),
+    Number(os.acrescimo)
+  );
+  const custo = custoTotal ?? Number(os.custo_total);
 
   const { data: lancamentos } = await supabase
     .from("lancamentos_financeiros")
@@ -445,17 +462,19 @@ export async function sincronizarFinanceiroOs(
       const pago = Number(l.valor_pago) || 0;
       const valorAtual = Number(l.valor) || 0;
       const quitada =
-        l.status === "pago" && pago + 0.001 >= valorAtual && Math.abs(valorAtual - valorReceita) < 0.01;
+        l.status === "pago" &&
+        pago + 0.001 >= valorAtual &&
+        Math.abs(valorAtual - valorFaturamento) < 0.01;
       if (quitada) continue;
-      if (pago > 0 && valorReceita + 0.001 < pago) continue;
+      if (pago > 0 && valorFaturamento + 0.001 < pago) continue;
 
-      const status = statusReceitaComPagamento(valorReceita, pago);
+      const status = statusReceitaComPagamento(valorFaturamento, pago);
       await supabase
         .from("lancamentos_financeiros")
         .update({
-          valor: valorReceita,
+          valor: valorFaturamento,
           status,
-          valor_liquido: status === "pago" ? valorReceita : null,
+          valor_liquido: status === "pago" ? valorFaturamento : null,
         })
         .eq("id", l.id);
     }
@@ -465,16 +484,16 @@ export async function sincronizarFinanceiroOs(
       l.descricao?.startsWith("Custo OS-") &&
       !despesaProtegida
     ) {
-      if (custoTotal <= 0) {
+      if (custo <= 0) {
         await supabase.from("lancamentos_financeiros").update({ status: "cancelado" }).eq("id", l.id);
       } else {
-        await supabase.from("lancamentos_financeiros").update({ valor: custoTotal }).eq("id", l.id);
+        await supabase.from("lancamentos_financeiros").update({ valor: custo }).eq("id", l.id);
       }
     }
   }
 
   const temCusto = lancamentos.some((l) => l.tipo === "despesa" && l.descricao?.startsWith("Custo OS-"));
-  if (!temCusto && custoTotal > 0) {
+  if (!temCusto && custo > 0) {
     const { data: osMeta } = await supabase
       .from("ordens_servico")
       .select("numero, cliente_id")
@@ -489,7 +508,7 @@ export async function sincronizarFinanceiroOs(
         categoria_id: catCusto?.id ?? null,
         os_id: osId,
         cliente_id: osMeta.cliente_id,
-        valor: custoTotal,
+        valor: custo,
         valor_pago: 0,
         data_competencia: hoje,
         data_vencimento: hoje,

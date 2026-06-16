@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sincronizarAgendamentoOs, sincronizarAgendaStatusOs } from "@/lib/agenda-os";
-import { calcValorTotalCliente } from "@/lib/os-valores";
+import { calcReceitaFaturamentoOs, calcValorTotalCliente } from "@/lib/os-valores";
 import {
   cancelarReceitaPendenteOs,
   criarReceitaPendenteOs,
@@ -53,6 +53,16 @@ function valorCalculado(os: OsRow): number {
   );
 }
 
+function faturamentoOs(os: OsRow): number {
+  return calcReceitaFaturamentoOs(
+    Number(os.valor_itens),
+    Number(os.valor_visita),
+    os.abater_visita,
+    Number(os.desconto),
+    Number(os.acrescimo)
+  );
+}
+
 export function diagnosticarOs(
   os: OsRow,
   ctx: {
@@ -96,10 +106,10 @@ export function diagnosticarOs(
   if (
     os.aprovado &&
     ctx.receitaValor != null &&
-    Math.abs(ctx.receitaValor - total) > 0.01 &&
+    Math.abs(ctx.receitaValor - faturamentoOs(os)) > 0.01 &&
     Math.abs((os.valor_aprovado ?? total) - total) < 0.01
   ) {
-    problemas.push("valor da receita diferente do total da OS");
+    problemas.push("valor da receita diferente do faturamento da OS");
   }
 
   if (
@@ -319,7 +329,7 @@ export async function repararOs(supabase: Db, osId: string): Promise<ReparoResul
   }
 
   if (aprovadoAgora) {
-    await sincronizarFinanceiroOs(supabase, osId, total, Number(row.custo_total) || 0);
+    await sincronizarFinanceiroOs(supabase, osId, Number(row.custo_total) || 0);
     acoes.push("financeiro sincronizado");
   }
 
