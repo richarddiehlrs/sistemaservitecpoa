@@ -1,9 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, HandCoins, X } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { useToast } from "./toast";
+
+function mensagemErro(err: unknown): string {
+  const digest = (err as { digest?: string })?.digest;
+  if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) {
+    throw err;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return "Erro ao registrar pagamento.";
+}
 
 export function RegistrarPagamento({
   lancamento,
@@ -15,18 +25,22 @@ export function RegistrarPagamento({
   const [aberto, setAberto] = useState(false);
   const [pending, startTransition] = useTransition();
   const toast = useToast();
+  const router = useRouter();
 
   const devido = Number(lancamento.valor) + Number(lancamento.juros) + Number(lancamento.multa);
   const saldo = Math.max(0, Math.round((devido - Number(lancamento.valor_pago)) * 100) / 100);
 
-  function handle(formData: FormData) {
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
     startTransition(async () => {
       try {
-        await action(formData);
+        await action(fd);
         toast.push("Pagamento registrado.", "success");
         setAberto(false);
-      } catch (e) {
-        toast.push((e as Error)?.message || "Erro ao registrar.", "error");
+        router.refresh();
+      } catch (err) {
+        toast.push(mensagemErro(err), "error");
       }
     });
   }
@@ -60,7 +74,7 @@ export function RegistrarPagamento({
               <p className="mt-1 font-semibold text-brand-700">Saldo devedor: {formatCurrency(saldo)}</p>
             </div>
 
-            <form action={handle} className="space-y-3">
+            <form onSubmit={submit} className="space-y-3">
               <div>
                 <label className="label">Valor pago agora (R$)</label>
                 <input name="valor" type="number" step="0.01" min="0" defaultValue={saldo.toFixed(2)} required className="input" />

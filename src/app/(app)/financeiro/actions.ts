@@ -119,8 +119,10 @@ export async function registrarPagamento(id: string, formData: FormData) {
   const valorPago = Number(l.valor_pago) + pagamento;
   const devido = Number(l.valor) + juros + multa;
   const status = valorPago + 0.001 >= devido ? "pago" : "parcial";
-  const liquidoBase = Number(l.valor_liquido ?? Number(l.valor) - Number(l.taxa_cartao));
-  const valorLiquido = devido > 0 ? Math.round((valorPago / devido) * liquidoBase * 100) / 100 : liquidoBase;
+  const liquidoBase = Number(l.valor_liquido ?? Number(l.valor) - Number(l.taxa_cartao || 0));
+  const valorLiquidoRaw =
+    devido > 0 ? Math.round((valorPago / devido) * liquidoBase * 100) / 100 : liquidoBase;
+  const valorLiquido = Number.isFinite(valorLiquidoRaw) ? valorLiquidoRaw : liquidoBase;
 
   const { error } = await supabase
     .from("lancamentos_financeiros")

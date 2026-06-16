@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Pencil, X } from "lucide-react";
 import type { CategoriaFinanceira, LancamentoFinanceiro } from "@/types/database";
 import { useToast } from "./toast";
@@ -38,17 +39,23 @@ export function EditarLancamento({
   const [aberto, setAberto] = useState(false);
   const [pending, start] = useTransition();
   const toast = useToast();
+  const router = useRouter();
 
   const cats = categorias.filter((c) => c.tipo === lancamento.tipo);
 
-  function handle(formData: FormData) {
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
     start(async () => {
       try {
-        await action(formData);
+        await action(fd);
         toast.push("Lançamento atualizado.", "success");
         setAberto(false);
-      } catch (e) {
-        toast.push((e as Error)?.message || "Erro ao salvar.", "error");
+        router.refresh();
+      } catch (err) {
+        const digest = (err as { digest?: string })?.digest;
+        if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) throw err;
+        toast.push(err instanceof Error && err.message ? err.message : "Erro ao salvar.", "error");
       }
     });
   }
@@ -74,7 +81,7 @@ export function EditarLancamento({
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form action={handle} className="space-y-4">
+            <form onSubmit={submit} className="space-y-4">
               <input type="hidden" name="tipo" value={lancamento.tipo} />
 
               <div>
