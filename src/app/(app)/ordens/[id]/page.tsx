@@ -16,7 +16,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { LancamentoAcoes } from "@/components/lancamento-acoes";
 import { getConfig } from "@/lib/config";
 import { requireProfile } from "@/lib/auth-guard";
-import { assertOsAtribuida, osAtribuidaAoProfile, podeVerLucroOs } from "@/lib/os-acesso";
+import { osAtribuidaAoProfile, podeVerLucroOs } from "@/lib/os-acesso";
 import { temPermissao } from "@/lib/permissoes";
 import { TURNO_LABEL } from "@/lib/turnos";
 import {
