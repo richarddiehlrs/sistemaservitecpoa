@@ -146,3 +146,18 @@ describe("comissão e produtividade", () => {
     expect(calcLucroOsSimples(100, 150)).toBe(-50);
   });
 });
+
+describe("mensagens WhatsApp cliente", () => {
+  it("inclui link do portal no orçamento pronto", async () => {
+    const { mensagemWhatsAppCliente } = await import("@/lib/mensagens-cliente");
+    const msg = mensagemWhatsAppCliente("orcamento_pronto", {
+      empresa: "Servitec",
+      cliente: "Maria",
+      numero: 7,
+      portalUrl: "https://exemplo.com/os/abc",
+      valorTotal: 350,
+    });
+    expect(msg).toContain("Maria");
+    expect(msg).toContain("https://exemplo.com/os/abc");
+  });
+});

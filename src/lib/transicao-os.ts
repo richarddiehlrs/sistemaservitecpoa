@@ -2,7 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Papel } from "@/lib/permissoes";
 import { sincronizarAgendaStatusOs } from "@/lib/agenda-os";
 import { cancelarLancamentosOs, criarReceitaPendenteOs } from "@/lib/os-financeiro";
-import { notificarMudancaStatusOs } from "@/lib/notificacoes";
+import { notificarMudancaStatusOs, notificarWhatsAppClienteSugerido } from "@/lib/notificacoes";
+import { eventoAutoPorStatus } from "@/lib/mensagens-cliente";
 import { validarTransicaoStatus } from "@/lib/transicao-status";
 import type { Database, StatusOS } from "@/types/database";
 
@@ -93,6 +94,16 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
       clienteNome,
       tecnicoId: osAntes.tecnico_id,
     }).catch(() => {});
+
+    const evento = eventoAutoPorStatus(opts.status);
+    if (evento) {
+      notificarWhatsAppClienteSugerido({
+        osId: opts.osId,
+        numero: osAntes.numero,
+        clienteNome,
+        evento,
+      }).catch(() => {});
+    }
   }
 
   return { mudou: true as const, anterior: osAntes.status };

@@ -13,6 +13,31 @@ function supabaseAdmin() {
 
 export type AprovarPortalResult = AprovarOsResult;
 
+export type NpsPortalResult = { ok: true } | { ok: false; erro: string };
+
+export async function registrarNpsPortal(
+  token: string,
+  nota: number,
+  comentario?: string | null
+): Promise<NpsPortalResult> {
+  const supabase = supabaseAdmin();
+  if (!supabase) {
+    return { ok: false, erro: "Serviço temporariamente indisponível." };
+  }
+
+  const { data, error } = await supabase.rpc("registrar_nps_portal", {
+    p_token: token,
+    p_nota: nota,
+    p_comentario: comentario ?? null,
+  });
+
+  if (error) return { ok: false, erro: error.message };
+
+  const res = data as { ok?: boolean; erro?: string } | null;
+  if (!res?.ok) return { ok: false, erro: res?.erro || "Não foi possível registrar." };
+  return { ok: true };
+}
+
 /**
  * Aprovação atômica no portal: OS + histórico + agenda + financeiro + notificações.
  */

@@ -1,6 +1,7 @@
 import { MapPin, MessageCircle, Phone } from "lucide-react";
 import { linkMapa, linkMapaEndereco } from "@/lib/geo";
-import { formatHora, formatNumeroOS, formatTelefone, onlyDigits } from "@/lib/format";
+import { formatHora, formatTelefone, onlyDigits } from "@/lib/format";
+import { mensagemWhatsAppCliente } from "@/lib/mensagens-cliente";
 import { EMPRESA } from "@/lib/utils";
 
 type Props = {
@@ -21,12 +22,20 @@ function telefoneComDDI(telefone: string | null | undefined): string {
 }
 
 function mensagemVisitaCampo(p: Props): string {
-  const hora = p.horaInicio ? formatHora(p.horaInicio) : "hoje";
-  const os = p.osNumero != null ? ` (${formatNumeroOS(p.osNumero)})` : "";
-  return (
-    `Olá ${p.clienteNome || ""}! Sou ${p.tecnicoNome || "o técnico"} da ${EMPRESA.nome}. ` +
-    `Estou a caminho para o atendimento agendado para ${hora}${os}.`
-  );
+  if (p.osNumero == null) {
+    const hora = p.horaInicio ? formatHora(p.horaInicio) : "hoje";
+    return (
+      `Olá ${p.clienteNome || ""}! Sou ${p.tecnicoNome || "o técnico"} da ${EMPRESA.nome}. ` +
+      `Estou a caminho para o atendimento agendado para ${hora}.`
+    );
+  }
+  return mensagemWhatsAppCliente("tecnico_caminho", {
+    empresa: EMPRESA.nome,
+    cliente: p.clienteNome,
+    numero: p.osNumero,
+    horaInicio: p.horaInicio,
+    tecnico: p.tecnicoNome,
+  });
 }
 
 export function CampoVisitaAcoes(props: Props) {

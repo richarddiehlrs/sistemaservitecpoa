@@ -9,7 +9,7 @@ import {
   Wrench,
   XCircle,
 } from "lucide-react";
-import { formatDate, formatDateTime, STATUS_OS_LABEL, STATUS_OS_COLOR } from "@/lib/format";
+import { formatDate, formatDateTime, formatHora, STATUS_OS_LABEL, STATUS_OS_COLOR } from "@/lib/format";
 import { TURNO_LABEL } from "@/lib/turnos";
 import { cn } from "@/lib/utils";
 
@@ -93,6 +93,7 @@ export function PortalAcompanhamento({
   turno,
   tecnico,
   historico = [],
+  proximoAgendamento,
 }: {
   status: string;
   aprovado?: boolean;
@@ -101,6 +102,11 @@ export function PortalAcompanhamento({
   turno?: string | null;
   tecnico?: string | null;
   historico?: HistoricoItem[];
+  proximoAgendamento?: {
+    data?: string;
+    hora_inicio?: string | null;
+    turno?: string | null;
+  } | null;
 }) {
   const cancelada = status === "cancelada";
   const etapaAtual = indiceEtapaAtual(status, aprovado);
@@ -123,6 +129,11 @@ export function PortalAcompanhamento({
     if (idx === 6) dataPorEtapa.concluido = h.created_at;
   }
   if (aprovado && dataAprovacao) dataPorEtapa.aprovado = dataAprovacao;
+
+  const dataVisitaExibir =
+    proximoAgendamento?.data || dataPrevisao;
+  const turnoVisitaExibir = proximoAgendamento?.turno || turno;
+  const horaVisitaExibir = proximoAgendamento?.hora_inicio || null;
 
   return (
     <div className="card mb-4 overflow-hidden p-5">
@@ -193,10 +204,13 @@ export function PortalAcompanhamento({
                       Técnico compareceu, mas não foi possível realizar o atendimento.
                     </p>
                   )}
-                  {atual && etapa.key === "roteiro" && dataPrevisao && (
+                  {atual && etapa.key === "roteiro" && dataVisitaExibir && (
                     <p className="mt-1 text-xs text-slate-600">
-                      Visita prevista: {formatDate(dataPrevisao)}
-                      {turno && TURNO_LABEL[turno] ? ` • ${TURNO_LABEL[turno]}` : ""}
+                      Visita prevista: {formatDate(dataVisitaExibir)}
+                      {turnoVisitaExibir && TURNO_LABEL[turnoVisitaExibir]
+                        ? ` • ${TURNO_LABEL[turnoVisitaExibir]}`
+                        : ""}
+                      {horaVisitaExibir ? ` • ${formatHora(horaVisitaExibir)}` : ""}
                     </p>
                   )}
                   {atual && etapa.key === "atendimento" && tecnico && (

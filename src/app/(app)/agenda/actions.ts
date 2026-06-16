@@ -10,6 +10,7 @@ import { statusPosCheckout, statusPermiteCheckin, type CheckoutResultado } from 
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import { sincronizarFinanceiroOs } from "@/lib/os-financeiro";
 import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
+import { notificarWhatsAppClienteSugerido } from "@/lib/notificacoes";
 
 function str(v: FormDataEntryValue | null): string | null {
   const s = v == null ? "" : String(v).trim();
@@ -274,7 +275,7 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
     const { data: os } = await supabase
       .from("ordens_servico")
       .select(
-        "status, aprovado, tipo_atendimento, valor_visita, valor_itens, abater_visita, desconto, acrescimo, custo_total, cliente_id, numero, tecnico, tecnico_id, data_previsao, turno"
+        "status, aprovado, tipo_atendimento, valor_visita, valor_itens, abater_visita, desconto, acrescimo, custo_total, cliente_id, numero, tecnico, tecnico_id, data_previsao, turno, clientes(nome)"
       )
       .eq("id", ag.os_id)
       .single();
@@ -356,6 +357,15 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
           tecnico,
           tecnico_id,
         });
+
+        // @ts-expect-error relação
+        const clienteNome = os.clientes?.nome as string | undefined;
+        notificarWhatsAppClienteSugerido({
+          osId: ag.os_id,
+          numero: os.numero,
+          clienteNome,
+          evento: "retorno_agendado",
+        }).catch(() => {});
       }
     }
   }

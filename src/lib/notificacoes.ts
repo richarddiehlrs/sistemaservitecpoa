@@ -305,3 +305,25 @@ export async function notificarMudancaStatusOs(opts: {
     await criarNotificacaoUsuario(opts.tecnicoId, payload);
   }
 }
+
+/** Lembra atendente de enviar WhatsApp ao cliente após mudança de status. */
+export async function notificarWhatsAppClienteSugerido(opts: {
+  osId: string;
+  numero: number;
+  clienteNome?: string | null;
+  evento: import("@/lib/mensagens-cliente").EventoWhatsAppCliente;
+}) {
+  const { formatNumeroOS } = await import("@/lib/format");
+  const { EVENTOS_WHATSAPP } = await import("@/lib/mensagens-cliente");
+  const meta = EVENTOS_WHATSAPP[opts.evento];
+
+  await notificarAdminsAtendentes({
+    tipo: "os_status",
+    titulo: `WhatsApp: ${meta.label}`,
+    mensagem: `${formatNumeroOS(opts.numero)} • ${opts.clienteNome || "Cliente"} — enviar mensagem ao cliente`,
+    url: `/ordens/${opts.osId}#whatsapp-cliente`,
+    prioridade: "normal",
+    ref_tipo: "os_whatsapp",
+    ref_id: opts.osId,
+  });
+}

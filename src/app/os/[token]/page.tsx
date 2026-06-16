@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { OsAprovar } from "@/components/os-aprovar";
 import { PortalQrCodes } from "@/components/portal-qr-codes";
 import { PortalAcompanhamento } from "@/components/portal-visita";
+import { PortalRetornoAgendado } from "@/components/portal-retorno-agendado";
+import { PortalNps } from "@/components/portal-nps";
 import { PrintButton } from "@/components/print-button";
 import {
   formatCurrency,
@@ -48,6 +50,14 @@ export default async function PortalOsPage({
     Number(os.acrescimo)
   );
   const visitaLinha = linhaVisitaValor(Number(os.valor_visita), os.abater_visita);
+  const proximoAgendamento = os.proximo_agendamento as {
+    data?: string;
+    hora_inicio?: string | null;
+    turno?: string | null;
+    endereco?: string | null;
+  } | null;
+  const nps = os.nps as { nota?: number; comentario?: string | null } | null;
+  const mostrarNps = ["concluida", "entregue"].includes(os.status);
 
   return (
     <div className="min-h-screen bg-slate-100 py-8">
@@ -131,6 +141,8 @@ export default async function PortalOsPage({
           {os.servico && <Bloco titulo="Serviço executado" valor={os.servico} />}
         </div>
 
+        <PortalRetornoAgendado agendamento={proximoAgendamento} />
+
         <PortalAcompanhamento
           status={os.status}
           aprovado={Boolean(os.aprovado)}
@@ -139,6 +151,7 @@ export default async function PortalOsPage({
           turno={os.turno}
           tecnico={os.tecnico}
           historico={historico}
+          proximoAgendamento={proximoAgendamento}
         />
 
         {/* Cliente ausente */}
@@ -226,6 +239,14 @@ export default async function PortalOsPage({
           empresaNome={empresa.nome || "Assistência Técnica"}
           valorTotal={valorTotal}
         />
+
+        {mostrarNps && (
+          <PortalNps
+            token={token}
+            notaInicial={nps?.nota ?? null}
+            comentarioInicial={nps?.comentario ?? null}
+          />
+        )}
 
         {/* Aprovação */}
         {podeAprovar ? (

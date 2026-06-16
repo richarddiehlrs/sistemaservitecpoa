@@ -6,6 +6,7 @@ import { PageHeader, StatusBadge } from "@/components/ui";
 import { ImageIcon, PenLine, Link2 } from "lucide-react";
 import { OsStatusControl } from "@/components/os-status-control";
 import { OsShare } from "@/components/os-share";
+import { WhatsAppStatusCliente } from "@/components/whatsapp-status-cliente";
 import { OsFotos } from "@/components/os-fotos";
 import { OsAssinatura } from "@/components/os-assinatura";
 import { OsAssinaturaTecnico } from "@/components/os-assinatura-tecnico";
@@ -355,6 +356,22 @@ export default async function OrdemDetalhePage({
               empresaNome={config.nome}
               portalUrl={portalUrl}
             />
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <WhatsAppStatusCliente
+                telefone={cliente?.telefone}
+                clienteNome={cliente?.nome}
+                numero={os.numero}
+                status={os.status}
+                valorTotal={valorTotal}
+                portalUrl={portalUrl}
+                dataPrevisao={os.data_previsao}
+                turno={os.turno}
+                horaInicio={agendamentos?.[0]?.hora_inicio}
+                tecnico={os.tecnico}
+                empresaNome={config.nome}
+                msgTemplate={config.msg_whatsapp}
+              />
+            </div>
             {portalUrl && (
               <div className="mt-3 border-t border-slate-100 pt-3">
                 <p className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
