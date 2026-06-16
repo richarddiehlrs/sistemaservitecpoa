@@ -23,7 +23,7 @@ export function CheckoutModal({
 }) {
   const [resultado, setResultado] = useState<Resultado>("visita");
   const [visitaCobrada, setVisitaCobrada] = useState(false);
-  const [agendarRetorno, setAgendarRetorno] = useState(true);
+  const [agendarRetorno, setAgendarRetorno] = useState(false);
   const [retornoData, setRetornoData] = useState(amanhaYmdLocal);
   const [retornoTurno, setRetornoTurno] = useState<"manha" | "tarde" | "dia">("manha");
   const toast = useToast();
@@ -147,6 +147,9 @@ export function CheckoutModal({
               />
               Agendar retorno agora
             </label>
+            <p className="mt-1 text-xs text-slate-500">
+              Desmarcado: retorno fica sem data — você define depois no ERP ou na agenda.
+            </p>
             {agendarRetorno && (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <div>

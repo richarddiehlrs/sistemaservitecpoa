@@ -1,8 +1,10 @@
 "use server";
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { executarAprovacaoOs, type AprovarOsResult } from "@/lib/aprovacao-os";
+import { notificarOsAprovada } from "@/lib/notificacoes";
+import type { AprovarOsResult } from "@/lib/aprovacao-os";
 import type { Database } from "@/types/database";
+import { createClient } from "@/lib/supabase/server";
 
 function supabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -14,6 +16,16 @@ function supabaseAdmin() {
 export type AprovarPortalResult = AprovarOsResult;
 
 export type NpsPortalResult = { ok: true } | { ok: false; erro: string };
+
+type PortalAprovarRpc = {
+  ok?: boolean;
+  erro?: string;
+  ja_aprovada?: boolean;
+  os_id?: string;
+  numero?: number;
+  tecnico_id?: string | null;
+  cliente_nome?: string | null;
+};
 
 export async function registrarNpsPortal(
   token: string,
@@ -39,33 +51,43 @@ export async function registrarNpsPortal(
 }
 
 /**
- * Aprovação atômica no portal: OS + histórico + agenda + financeiro + notificações.
+ * Aprovação atômica no portal via RPC security definer (não depende de service role para ler a OS).
  */
 export async function aprovarOrcamentoPortal(
   token: string,
   assinatura: string | null,
   obs: string | null
 ): Promise<AprovarPortalResult> {
-  const supabase = supabaseAdmin();
-  if (!supabase) {
-    return {
-      ok: false,
-      erro: "Serviço temporariamente indisponível. Entre em contato com a loja.",
-    };
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("portal_aprovar_orcamento", {
+    p_token: token,
+    p_assinatura: assinatura,
+    p_obs: obs,
+  });
+
+  if (error) {
+    return { ok: false, erro: error.message || "Não foi possível aprovar." };
   }
 
-  const { data: os } = await supabase
-    .from("ordens_servico")
-    .select("id")
-    .eq("aprovacao_token", token)
-    .maybeSingle();
+  const res = (data ?? {}) as PortalAprovarRpc;
 
-  if (!os) return { ok: false, erro: "OS não encontrada." };
+  if (!res.ok) {
+    return { ok: false, erro: res.erro || "Não foi possível aprovar." };
+  }
 
-  return executarAprovacaoOs(supabase, {
-    osId: os.id,
-    assinatura,
-    obs,
-    origem: "portal do cliente",
-  });
+  if (res.ja_aprovada) {
+    return { ok: true, jaAprovada: true };
+  }
+
+  if (res.os_id && res.numero != null) {
+    notificarOsAprovada({
+      osId: res.os_id,
+      numero: res.numero,
+      clienteNome: res.cliente_nome ?? undefined,
+      tecnicoId: res.tecnico_id,
+    }).catch(() => {});
+  }
+
+  return { ok: true };
 }

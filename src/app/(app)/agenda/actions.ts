@@ -513,6 +513,7 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
     const agendarRetorno = formData?.get("agendar_retorno") === "on";
     const retornoData = str(formData?.get("retorno_data"));
     const retornoTurno = str(formData?.get("retorno_turno")) || "manha";
+    const resultadoCheckout = (String(formData?.get("resultado") || "visita") as CheckoutResultado);
 
     if (agendarRetorno && retornoData) {
       const { data: osRetorno } = await supabase
@@ -551,6 +552,29 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
           clienteNome,
           evento: "retorno_agendado",
         }).catch(() => {});
+      }
+    } else if (
+      !agendarRetorno &&
+      (resultadoCheckout === "visita" || resultadoCheckout === "aguardando_peca")
+    ) {
+      const { data: osSemData } = await supabase
+        .from("ordens_servico")
+        .select("tipo_atendimento")
+        .eq("id", ag.os_id)
+        .single();
+
+      if (osSemData?.tipo_atendimento === "domicilio") {
+        const { error: limpaData } = await supabase
+          .from("ordens_servico")
+          .update({ data_previsao: null, turno: null })
+          .eq("id", ag.os_id);
+        assertSupabaseOk(limpaData, "Não foi possível limpar a data de retorno");
+
+        await supabase
+          .from("agendamentos")
+          .update({ status: "cancelado" })
+          .eq("os_id", ag.os_id)
+          .in("status", ["agendado", "confirmado"]);
       }
     }
   }
