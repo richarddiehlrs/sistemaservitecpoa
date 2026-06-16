@@ -117,8 +117,13 @@ export function CheckoutModal({
             <div>
               <p className="font-medium text-slate-900">Serviço executado</p>
               <p className="text-xs text-slate-500">
-                Reparo concluído nesta visita — conclui se o orçamento já estiver aprovado
+                Reparo concluído nesta visita — conclui a OS se o orçamento já estiver aprovado
               </p>
+              {resultado === "servico_concluido" && (
+                <p className="mt-1 text-[10px] text-amber-700">
+                  Sem aprovação do cliente, a OS vai para aguardando aprovação (não conclui).
+                </p>
+              )}
             </div>
           </label>
 

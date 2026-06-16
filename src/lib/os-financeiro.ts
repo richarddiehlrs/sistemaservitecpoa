@@ -310,6 +310,27 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
   return true;
 }
 
+/** Sincroniza receita/custo da OS via RPC (ignora RLS — uso no check-out do técnico). */
+export async function sincronizarReceitaOsInterno(
+  supabase: Db,
+  osId: string,
+  observacao?: string
+): Promise<void> {
+  const { data, error } = await supabase.rpc("criar_receita_os_interno", {
+    p_os_id: osId,
+    p_observacao: observacao ?? null,
+  });
+
+  if (error) {
+    throw new Error(`Não foi possível atualizar o financeiro: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error(
+      "Não foi possível registrar o financeiro da OS. Verifique se há valores no orçamento."
+    );
+  }
+}
+
 /** Cancela receita e custo automáticos pendentes (mantém despesas de campo e quitados). */
 export async function cancelarReceitaPendenteOs(supabase: Db, osId: string): Promise<void> {
   const { data: lancamentos } = await supabase

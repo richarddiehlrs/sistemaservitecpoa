@@ -17,7 +17,7 @@ import {
   checkinBloqueadoPorAprovacao,
   mensagemCheckinBloqueado,
 } from "@/lib/checkin-os";
-import { criarReceitaPendenteOs, registrarReceitaVisitaCheckout } from "@/lib/os-financeiro";
+import { registrarReceitaVisitaCheckout, sincronizarReceitaOsInterno } from "@/lib/os-financeiro";
 
 async function garantirAtribuicaoCampo(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -486,6 +486,14 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
             ? "Check-out: aguardando peça"
             : "Check-out: serviço executado nesta visita";
 
+      if (proximo === "concluida") {
+        await sincronizarReceitaOsInterno(
+          supabase,
+          ag.os_id,
+          "Serviço concluído — saldo em aberto para recebimento"
+        );
+      }
+
       if (proximo) {
         await transicionarStatusOs(supabase, {
           osId: ag.os_id,
@@ -495,13 +503,6 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
           sistema: true,
           papel: profile.papel,
         });
-
-        if (proximo === "concluida" && os.aprovado) {
-          const financeOk = await criarReceitaPendenteOs(supabase, ag.os_id);
-          if (!financeOk) {
-            throw new Error("Não foi possível registrar o saldo do serviço no financeiro.");
-          }
-        }
       }
     }
   }
@@ -592,5 +593,7 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
   revalidatePath("/agenda");
   revalidatePath("/campo");
   revalidatePath("/financeiro");
+  revalidatePath("/dashboard");
+  revalidatePath("/painel");
   if (ag.os_id) revalidatePath(`/ordens/${ag.os_id}`);
 }
