@@ -222,12 +222,15 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
   const { data: os } = await supabase
     .from("ordens_servico")
     .select(
-      "id, numero, cliente_id, status, valor_itens, valor_visita, abater_visita, desconto, acrescimo, valor_total, custo_total, forma_pagamento"
+      "id, numero, cliente_id, status, valor_itens, valor_visita, abater_visita, desconto, acrescimo, valor_total, custo_total, forma_pagamento, motivo_atendimento"
     )
     .eq("id", osId)
     .single();
 
   if (!os || os.status === "cancelada") return false;
+  if ((os as { motivo_atendimento?: string }).motivo_atendimento === "retorno_garantia") {
+    return false;
+  }
 
   const valorFaturamento = calcReceitaFaturamentoOs(
     Number(os.valor_itens),
@@ -364,6 +367,25 @@ export async function registrarPagamentoReceitaOsCheckout(
   }
 }
 
+/** Custo de garantia na conclusão — receita só via pagamento manual. */
+export async function sincronizarFinanceiroRetornoGarantia(
+  supabase: Db,
+  osId: string,
+  observacao?: string
+): Promise<void> {
+  const { data, error } = await supabase.rpc("sincronizar_financeiro_retorno_garantia", {
+    p_os_id: osId,
+    p_observacao: observacao ?? null,
+  });
+
+  if (error) {
+    throw new Error(`Não foi possível registrar o custo de garantia: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error("Não foi possível sincronizar o financeiro do retorno em garantia.");
+  }
+}
+
 /** Cancela receita e custo automáticos pendentes (mantém despesas de campo e quitados). */
 export async function cancelarReceitaPendenteOs(supabase: Db, osId: string): Promise<void> {
   const { data: lancamentos } = await supabase
@@ -450,12 +472,13 @@ export async function sincronizarFinanceiroOs(
   const { data: os } = await supabase
     .from("ordens_servico")
     .select(
-      "aprovado, valor_itens, valor_visita, abater_visita, desconto, acrescimo, custo_total"
+      "aprovado, valor_itens, valor_visita, abater_visita, desconto, acrescimo, custo_total, motivo_atendimento"
     )
     .eq("id", osId)
     .maybeSingle();
 
   if (!os?.aprovado) return;
+  if (os.motivo_atendimento === "retorno_garantia") return;
 
   const valorFaturamento = calcReceitaFaturamentoOs(
     Number(os.valor_itens),

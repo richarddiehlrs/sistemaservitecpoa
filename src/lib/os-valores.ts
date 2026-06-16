@@ -72,6 +72,7 @@ export type OsResumoCheckout = {
   abaterVisita: boolean;
   saldoCliente: number;
   faturamento: number;
+  retornoGarantia?: boolean;
 };
 
 export function resumoFinanceiroOs(os: {
@@ -80,6 +81,7 @@ export function resumoFinanceiroOs(os: {
   abater_visita: boolean;
   desconto: number;
   acrescimo: number;
+  motivo_atendimento?: string | null;
 }): OsResumoCheckout {
   const valorItens = Number(os.valor_itens) || 0;
   const valorVisita = Number(os.valor_visita) || 0;
@@ -91,6 +93,7 @@ export function resumoFinanceiroOs(os: {
     abaterVisita,
     saldoCliente: calcValorTotalCliente(valorItens, valorVisita, abaterVisita, desconto, acrescimo),
     faturamento: calcReceitaFaturamentoOs(valorItens, valorVisita, abaterVisita, desconto, acrescimo),
+    retornoGarantia: os.motivo_atendimento === "retorno_garantia",
   };
 }
 

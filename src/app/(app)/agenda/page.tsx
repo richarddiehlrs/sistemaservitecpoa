@@ -72,7 +72,7 @@ export default async function AgendaPage({
   const supabase = await createClient();
   let queryAgenda = supabase
     .from("agendamentos")
-    .select("*, clientes(nome, telefone), ordens_servico(numero, status, valor_itens, valor_visita, abater_visita, desconto, acrescimo)")
+    .select("*, clientes(nome, telefone), ordens_servico(numero, status, valor_itens, valor_visita, abater_visita, desconto, acrescimo, motivo_atendimento)")
     .gte("data", ymd(segunda))
     .lte("data", ymd(domingo))
     .order("hora_inicio", { ascending: true });
@@ -281,6 +281,7 @@ function CardAgendamento({
     abater_visita?: boolean;
     desconto?: number;
     acrescimo?: number;
+    motivo_atendimento?: string;
   } | null;
   const cancelado = a.status === "cancelado";
   const realizado = a.status === "realizado";
@@ -354,6 +355,7 @@ function CardAgendamento({
                     abater_visita: Boolean(os.abater_visita),
                     desconto: Number(os.desconto) || 0,
                     acrescimo: Number(os.acrescimo) || 0,
+                    motivo_atendimento: os.motivo_atendimento,
                   })
                 : null
             }

@@ -84,6 +84,8 @@ export type OrdemServico = {
   valor_aprovado: number | null;
   forma_pagamento: string | null;
   garantia_dias: number;
+  motivo_atendimento?: "normal" | "retorno_garantia";
+  os_origem_id?: string | null;
   observacoes: string | null;
   turno: "manha" | "tarde" | "dia" | null;
   custo_total: number;
@@ -411,6 +413,10 @@ export type Database = {
           p_forma_pagamento?: string | null;
           p_observacao?: string | null;
         };
+        Returns: boolean;
+      };
+      sincronizar_financeiro_retorno_garantia: {
+        Args: { p_os_id: string; p_observacao?: string | null };
         Returns: boolean;
       };
     };

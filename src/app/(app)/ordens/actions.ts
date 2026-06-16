@@ -31,6 +31,7 @@ import {
   notificarClienteAusente,
 } from "@/lib/notificacoes";
 import type { StatusOS, TipoAtendimento } from "@/types/database";
+import { podeAbrirRetornoGarantia } from "@/lib/os-garantia";
 
 function lerTipoAtendimento(formData: FormData): TipoAtendimento {
   const t = str(formData.get("tipo_atendimento"));
@@ -805,6 +806,126 @@ export async function registrarClienteAusente(id: string, formData: FormData) {
   revalidatePath("/campo");
   revalidatePath("/agenda");
   revalidatePath("/imprimir/os/" + id);
+}
+
+/** Abre nova OS de retorno em garantia vinculada à original (dentro do prazo). */
+export async function abrirRetornoGarantia(osOrigemId: string, formData: FormData) {
+  await requirePermissao("ordens_editar");
+  const supabase = await createClient();
+
+  const { data: origem } = await supabase
+    .from("ordens_servico")
+    .select(
+      "id, numero, cliente_id, equipamento_id, tipo_atendimento, tecnico, tecnico_id, forma_pagamento, garantia_dias, data_conclusao, status, defeito_relatado, diagnostico, servico_executado"
+    )
+    .eq("id", osOrigemId)
+    .single();
+
+  if (!origem) throw new Error("OS original não encontrada.");
+
+  const check = podeAbrirRetornoGarantia(origem as never);
+  if (!check.ok) throw new Error(check.motivo || "Não é possível abrir retorno em garantia.");
+
+  const { data: retornoAberto } = await supabase
+    .from("ordens_servico")
+    .select("id, numero")
+    .eq("os_origem_id", osOrigemId)
+    .in("status", [
+      "aberta",
+      "em_analise",
+      "aguardando_aprovacao",
+      "aprovada",
+      "em_roteiro",
+      "em_execucao",
+      "aguardando_peca",
+      "cliente_ausente",
+      "garantia",
+    ])
+    .maybeSingle();
+
+  if (retornoAberto) {
+    throw new Error(
+      `Já existe retorno em aberto: OS-${String(retornoAberto.numero).padStart(5, "0")}.`
+    );
+  }
+
+  const dataVisita = str(formData.get("data_previsao")) || hojeYmdLocal();
+  const turno = (str(formData.get("turno")) || "manha") as "manha" | "tarde" | "dia";
+  const defeito = str(formData.get("defeito_relatado")) || origem.defeito_relatado || "Retorno em garantia";
+  const obsExtra = str(formData.get("observacoes"));
+  const numeroFmt = `OS-${String(origem.numero).padStart(5, "0")}`;
+
+  const { data: nova, error } = await supabase
+    .from("ordens_servico")
+    .insert({
+      cliente_id: origem.cliente_id,
+      equipamento_id: origem.equipamento_id,
+      tipo_atendimento: origem.tipo_atendimento,
+      motivo_atendimento: "retorno_garantia",
+      os_origem_id: origem.id,
+      status: origem.tipo_atendimento === "domicilio" ? "em_roteiro" : "garantia",
+      defeito_relatado: defeito,
+      diagnostico: origem.diagnostico,
+      servico_executado: null,
+      tecnico_id: origem.tecnico_id,
+      tecnico: origem.tecnico,
+      prioridade: "alta",
+      data_previsao: origem.tipo_atendimento === "domicilio" ? dataVisita : null,
+      turno: origem.tipo_atendimento === "domicilio" ? turno : null,
+      valor_visita: 0,
+      abater_visita: false,
+      desconto: 0,
+      acrescimo: 0,
+      valor_itens: 0,
+      custo_total: 0,
+      valor_total: 0,
+      valor_aprovado: 0,
+      aprovado: true,
+      data_aprovacao: new Date().toISOString(),
+      forma_pagamento: origem.forma_pagamento,
+      garantia_dias: origem.garantia_dias,
+      observacoes: obsExtra || `Retorno em garantia da ${numeroFmt}`,
+    })
+    .select("id, numero")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  await supabase.from("os_status_historico").insert({
+    os_id: nova!.id,
+    status: origem.tipo_atendimento === "domicilio" ? "em_roteiro" : "garantia",
+    observacao: `Retorno em garantia aberto — referência ${numeroFmt}`,
+  });
+
+  if (origem.tipo_atendimento === "domicilio" && origem.tecnico_id) {
+    await sincronizarAgendamentoOs(supabase, {
+      osId: nova!.id,
+      clienteId: origem.cliente_id,
+      numero: nova!.numero,
+      data: dataVisita,
+      turno,
+      tecnico: origem.tecnico || "",
+      tecnico_id: origem.tecnico_id,
+    });
+  }
+
+  await transicionarStatusOs(supabase, {
+    osId: origem.id,
+    status: "garantia",
+    observacao: `Retorno em garantia aberto — nova OS ${nova!.numero}`,
+    origem: "retorno-garantia",
+    sistema: true,
+    papel: "admin",
+    skipNotificacao: true,
+  });
+
+  revalidatePath(`/ordens/${osOrigemId}`);
+  revalidatePath("/ordens");
+  revalidatePath("/agenda");
+  revalidatePath("/campo");
+  revalidatePath("/painel");
+  revalidatePath("/financeiro");
+  redirect(`/ordens/${nova!.id}/editar`);
 }
 
 export async function excluirOrdem(id: string) {

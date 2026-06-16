@@ -33,7 +33,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
   ] = await Promise.all([
     supabase
       .from("agendamentos")
-      .select("*, clientes(nome, telefone), ordens_servico(numero, valor_itens, valor_visita, abater_visita, desconto, acrescimo)")
+      .select("*, clientes(nome, telefone), ordens_servico(numero, valor_itens, valor_visita, abater_visita, desconto, acrescimo, motivo_atendimento)")
       .eq("data", hoje)
       .or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${tecnico}%`)
       .neq("status", "cancelado")
@@ -122,6 +122,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
           desconto: Number(a.ordens_servico.desconto) || 0,
           // @ts-expect-error relação
           acrescimo: Number(a.ordens_servico.acrescimo) || 0,
+          motivo_atendimento: a.ordens_servico.motivo_atendimento,
         })
       : null,
   }));

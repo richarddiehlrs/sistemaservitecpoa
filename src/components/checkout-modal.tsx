@@ -102,16 +102,26 @@ export function CheckoutModal({
           Informe o que foi feito nesta visita. Isso define o próximo passo da ordem de serviço.
         </p>
 
-        {osResumo && osResumo.faturamento > 0 && (
+        {osResumo && (osResumo.faturamento > 0 || osResumo.retornoGarantia) && (
           <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <p>
-              Faturamento: <strong className="text-slate-900">{formatCurrency(faturamentoExibicao)}</strong>
-            </p>
-            {osResumo.abaterVisita && osResumo.valorVisita > 0 && (
-              <p className="mt-1">
-                Visita abatida: {formatCurrency(osResumo.valorVisita)} • Saldo cliente:{" "}
-                <strong className="text-slate-900">{formatCurrency(saldoExibicao)}</strong>
+            {osResumo.retornoGarantia ? (
+              <p>
+                <strong className="text-orange-800">Retorno em garantia</strong> — custo vira prejuízo.
+                Informe abaixo o que o cliente pagou (deixe 0 se gratuito).
               </p>
+            ) : (
+              <>
+                <p>
+                  Faturamento:{" "}
+                  <strong className="text-slate-900">{formatCurrency(faturamentoExibicao)}</strong>
+                </p>
+                {osResumo.abaterVisita && osResumo.valorVisita > 0 && (
+                  <p className="mt-1">
+                    Visita abatida: {formatCurrency(osResumo.valorVisita)} • Saldo cliente:{" "}
+                    <strong className="text-slate-900">{formatCurrency(saldoExibicao)}</strong>
+                  </p>
+                )}
+              </>
             )}
           </div>
         )}
@@ -197,11 +207,15 @@ export function CheckoutModal({
                     <div className="mt-2">
                       <label className="mb-1 block text-[11px] font-medium text-slate-600">
                         Valor recebido agora
-                        {saldoExibicao > 0 && (
-                          <span className="font-normal text-slate-400">
-                            {" "}
-                            — saldo {formatCurrency(saldoExibicao)}
-                          </span>
+                        {osResumo?.retornoGarantia ? (
+                          <span className="font-normal text-slate-400"> — 0 se garantia sem cobrança</span>
+                        ) : (
+                          saldoExibicao > 0 && (
+                            <span className="font-normal text-slate-400">
+                              {" "}
+                              — saldo {formatCurrency(saldoExibicao)}
+                            </span>
+                          )
                         )}
                       </label>
                       <input
@@ -211,7 +225,13 @@ export function CheckoutModal({
                         value={valorRecebido}
                         onChange={(e) => setValorRecebido(e.target.value)}
                         className="input py-1.5 text-sm"
-                        placeholder={saldoExibicao > 0 ? String(saldoExibicao) : "0,00"}
+                        placeholder={
+                          osResumo?.retornoGarantia
+                            ? "0,00"
+                            : saldoExibicao > 0
+                              ? String(saldoExibicao)
+                              : "0,00"
+                        }
                       />
                     </div>
                   )}

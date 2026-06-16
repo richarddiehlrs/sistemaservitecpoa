@@ -12,8 +12,10 @@ import { calcValorTotalCliente } from "@/lib/os-valores";
 import {
   registrarPagamentoReceitaOsCheckout,
   registrarReceitaVisitaCheckout,
+  sincronizarFinanceiroRetornoGarantia,
   sincronizarReceitaOsInterno,
 } from "@/lib/os-financeiro";
+import { isRetornoGarantia } from "@/lib/os-garantia";
 import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
 import { requererReaprovacaoSeValoresMudaram } from "@/lib/aprovacao-os";
 import { notificarWhatsAppClienteSugerido } from "@/lib/notificacoes";
@@ -491,11 +493,25 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
             : "Check-out: serviço executado nesta visita";
 
       if (proximo === "concluida") {
-        await sincronizarReceitaOsInterno(
-          supabase,
-          ag.os_id,
-          "Serviço concluído — receita registrada"
-        );
+        const { data: osFin } = await supabase
+          .from("ordens_servico")
+          .select("motivo_atendimento, forma_pagamento")
+          .eq("id", ag.os_id)
+          .single();
+
+        if (isRetornoGarantia(osFin ?? {})) {
+          await sincronizarFinanceiroRetornoGarantia(
+            supabase,
+            ag.os_id,
+            "Retorno em garantia concluído — custo registrado; pagamento manual"
+          );
+        } else {
+          await sincronizarReceitaOsInterno(
+            supabase,
+            ag.os_id,
+            "Serviço concluído — receita registrada"
+          );
+        }
 
         const clientePagou = formData?.get("cliente_pagou_agora") === "on";
         if (clientePagou) {
@@ -525,7 +541,9 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
               ag.os_id,
               valorPagamento,
               osPagamento?.forma_pagamento ?? os.forma_pagamento,
-              "Pagamento recebido no check-out — serviço concluído"
+              isRetornoGarantia(osFin ?? {})
+                ? "Pagamento no retorno em garantia"
+                : "Pagamento recebido no check-out — serviço concluído"
             );
           }
         }

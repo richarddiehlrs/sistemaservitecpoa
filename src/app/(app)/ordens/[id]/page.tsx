@@ -31,6 +31,8 @@ import {
 } from "@/lib/format";
 import { carregarEquipamentosOs, textoEquipamentos } from "@/lib/os-equipamentos";
 import { calcValorTotalCliente } from "@/lib/os-valores";
+import { dataFimGarantiaOs, isRetornoGarantia, podeAbrirRetornoGarantia } from "@/lib/os-garantia";
+import { AbrirRetornoGarantia } from "@/components/abrir-retorno-garantia";
 import { podeAprovarOrcamentoPortal } from "@/lib/portal-aprovacao";
 import { OrcamentoResumoCliente } from "@/components/orcamento-resumo-cliente";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
@@ -38,7 +40,7 @@ import { calcLucroOs } from "@/lib/metricas-financeiras";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
 import { transicoesPermitidas } from "@/lib/transicao-status";
 import type { StatusOS } from "@/types/database";
-import { alterarStatusForm, excluirOrdem, lancarFinanceiro, registrarClienteAusente } from "../actions";
+import { alterarStatusForm, abrirRetornoGarantia, excluirOrdem, lancarFinanceiro, registrarClienteAusente } from "../actions";
 import { OsEtiquetaPrompt } from "@/components/os-etiqueta-prompt";
 
 export const dynamic = "force-dynamic";
@@ -154,6 +156,21 @@ export default async function OrdemDetalhePage({
       (l) => l.tipo === "receita" && !["cancelado", "pago"].includes(l.status)
     );
   const ehOficina = os.tipo_atendimento === "oficina";
+  const retornoGarantia = isRetornoGarantia(os);
+  const abrirRetorno = podeAbrirRetornoGarantia(os as never);
+  const fimGarantia = dataFimGarantiaOs(os);
+  const podeAbrirRetornoGarantiaBtn =
+    !ehTecnico && temPermissao(profile.papel, "ordens_editar") && abrirRetorno.ok;
+
+  let osOrigemNumero: number | null = null;
+  if (os.os_origem_id) {
+    const { data: origem } = await supabase
+      .from("ordens_servico")
+      .select("numero")
+      .eq("id", os.os_origem_id)
+      .maybeSingle();
+    osOrigemNumero = origem?.numero ?? null;
+  }
 
   return (
     <div>
@@ -172,10 +189,24 @@ export default async function OrdemDetalhePage({
           O orçamento foi alterado após a última aprovação. Solicite nova assinatura do cliente antes de concluir.
         </div>
       )}
-      {etiqueta === "1" && ehOficina && <OsEtiquetaPrompt osId={id} />}
+      {retornoGarantia && (
+        <div className="mb-4 rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+          <strong>Retorno em garantia</strong>
+          {osOrigemNumero != null && (
+            <>
+              {" "}
+              — vinculada à{" "}
+              <Link href={`/ordens/${os.os_origem_id}`} className="font-medium underline">
+                OS {formatNumeroOS(osOrigemNumero)}
+              </Link>
+            </>
+          )}
+          . Custo registrado como prejuízo; informe o pagamento do cliente ao concluir no check-out ou no financeiro.
+        </div>
+      )}
       <PageHeader
         title={`Ordem ${formatNumeroOS(os.numero)}`}
-        subtitle={`Aberta em ${formatDateTime(os.data_abertura)}${ehOficina ? " · Oficina" : ""}`}
+        subtitle={`Aberta em ${formatDateTime(os.data_abertura)}${ehOficina ? " · Oficina" : ""}${retornoGarantia ? " · Retorno garantia" : ""}`}
         action={
           <div className="flex flex-wrap gap-2">
             {ehOficina && (
@@ -600,6 +631,16 @@ export default async function OrdemDetalhePage({
               <p className="text-sm text-slate-500">Sem lançamento financeiro. Aprovação gera receita pendente automaticamente.</p>
             )}
           </div>
+
+          {podeAbrirRetornoGarantiaBtn && fimGarantia && (
+            <div className="card p-5">
+              <AbrirRetornoGarantia
+                osId={id}
+                action={abrirRetornoGarantia}
+                fimGarantiaLabel={fimGarantia.toLocaleDateString("pt-BR")}
+              />
+            </div>
+          )}
 
           {/* Histórico */}
           <div className="card p-5">

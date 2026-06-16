@@ -13,6 +13,7 @@ import { LancamentoAcoes } from "@/components/lancamento-acoes";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
 import { calcMetricasCaixa, calcMetricasCompetencia } from "@/lib/metricas-financeiras";
+import { calcPrejuizoGarantiaPeriodo } from "@/lib/os-garantia";
 import {
   criarLancamento,
   registrarPagamento,
@@ -49,7 +50,7 @@ export default async function FinanceiroPage({
 
   let query = supabase
     .from("lancamentos_financeiros")
-    .select("*, categorias_financeiras(nome), clientes(nome, telefone)")
+    .select("*, categorias_financeiras(nome, grupo_dre), clientes(nome, telefone)")
     .gte("data_competencia", periodo.inicio)
     .lte("data_competencia", periodo.fim)
     .order("data_vencimento", { ascending: true });
@@ -57,7 +58,7 @@ export default async function FinanceiroPage({
   if (tipo) query = query.eq("tipo", tipo);
   if (status) query = query.eq("status", status);
 
-  const [{ data: lancamentos }, { data: lancamentosCaixa }, { data: categorias }, config] = await Promise.all([
+  const [{ data: lancamentos }, { data: lancamentosCaixa }, { data: categorias }, { data: osRetorno }, config] = await Promise.all([
     query,
     supabase
       .from("lancamentos_financeiros")
@@ -67,6 +68,7 @@ export default async function FinanceiroPage({
       .gte("data_pagamento", periodo.inicio)
       .lte("data_pagamento", periodo.fim),
     supabase.from("categorias_financeiras").select("*").order("nome"),
+    supabase.from("ordens_servico").select("id").eq("motivo_atendimento", "retorno_garantia"),
     getConfig(),
   ]);
 
@@ -87,6 +89,8 @@ export default async function FinanceiroPage({
 
   const metricasCaixa = calcMetricasCaixa(caixaAtivos);
   const metricasCompetencia = calcMetricasCompetencia(ativos);
+  const osRetornoIds = new Set((osRetorno || []).map((o) => o.id));
+  const prejuizoGarantia = calcPrejuizoGarantiaPeriodo(ativos, osRetornoIds);
 
   const inadimplentes = receitas
     .filter((l) => l.status !== "pago" && l.data_vencimento && l.data_vencimento < hoje)
@@ -246,6 +250,18 @@ export default async function FinanceiroPage({
           hint={`Margem ${metricasCompetencia.margemLiquida}% • Caixa: ${formatCurrency(metricasCaixa.lucroLiquido)}`}
         />
       </div>
+
+      {prejuizoGarantia.prejuizo > 0 && (
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard
+            title="Prejuízo (garantia)"
+            value={formatCurrency(prejuizoGarantia.prejuizo)}
+            tone="red"
+            icon={<TrendingDown className="h-5 w-5" />}
+            hint={`Custo retornos ${formatCurrency(prejuizoGarantia.custo)} − recebido ${formatCurrency(prejuizoGarantia.receitaPaga)} • ${prejuizoGarantia.osIds.length} OS`}
+          />
+        </div>
+      )}
 
       <div className="mt-6 card overflow-x-auto">
         {listaFiltrada.length === 0 ? (
