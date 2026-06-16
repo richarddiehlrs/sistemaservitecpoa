@@ -81,6 +81,7 @@ export type OrdemServico = {
   acrescimo: number;
   valor_itens: number;
   valor_total: number;
+  valor_aprovado: number | null;
   forma_pagamento: string | null;
   garantia_dias: number;
   observacoes: string | null;

@@ -1,9 +1,10 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, LogOut, Loader2 } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
+import { CheckoutModal } from "@/components/checkout-modal";
 
 export function CheckinButtons({
   agendamento,
@@ -15,6 +16,7 @@ export function CheckinButtons({
   checkoutAction: (formData: FormData) => Promise<void>;
 }) {
   const [pending, start] = useTransition();
+  const [modalCheckout, setModalCheckout] = useState(false);
   const router = useRouter();
 
   if (agendamento.status === "cancelado" || agendamento.status === "realizado") return null;
@@ -42,31 +44,43 @@ export function CheckinButtons({
   }
 
   return (
-    <div className="flex shrink-0 gap-1">
-      {podeCheckin && (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => executar(checkinAction)}
-          className="btn-primary px-2 py-1.5 text-xs"
-          title="Check-in com localização GPS"
-        >
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-          Check-in
-        </button>
-      )}
-      {podeCheckout && (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => executar(checkoutAction)}
-          className="btn-secondary px-2 py-1.5 text-xs"
-          title="Check-out com localização GPS"
-        >
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
-          Check-out
-        </button>
-      )}
-    </div>
+    <>
+      <div className="flex shrink-0 gap-1">
+        {podeCheckin && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => executar(checkinAction)}
+            className="btn-primary px-2 py-1.5 text-xs"
+            title="Check-in com localização GPS"
+          >
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
+            Check-in
+          </button>
+        )}
+        {podeCheckout && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setModalCheckout(true)}
+            className="btn-secondary px-2 py-1.5 text-xs"
+            title="Check-out — informar resultado da visita"
+          >
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+            Check-out
+          </button>
+        )}
+      </div>
+
+      <CheckoutModal
+        open={modalCheckout}
+        onClose={() => setModalCheckout(false)}
+        onConfirm={async (fd) => {
+          await checkoutAction(fd);
+          router.refresh();
+        }}
+        pending={pending}
+      />
+    </>
   );
 }

@@ -6,7 +6,7 @@ import type { StatusOS } from "@/types/database";
 const TRANSICOES_OPERACAO: Partial<Record<StatusOS, StatusOS[]>> = {
   aberta: ["em_analise", "cancelada"],
   em_analise: ["aguardando_aprovacao", "aguardando_peca", "aprovada", "cancelada", "aberta"],
-  aguardando_aprovacao: ["aprovada", "em_analise", "cancelada"],
+  aguardando_aprovacao: ["aprovada", "em_analise", "em_roteiro", "cancelada"],
   aprovada: ["em_roteiro", "em_execucao", "aguardando_peca", "concluida", "cancelada"],
   em_roteiro: ["em_execucao", "cliente_ausente", "concluida", "cancelada"],
   em_execucao: [
@@ -30,12 +30,13 @@ const TRANSICOES_TECNICO: Partial<Record<StatusOS, StatusOS[]>> = {
   em_execucao: ["aguardando_aprovacao", "aguardando_peca", "cliente_ausente", "concluida"],
   aguardando_peca: ["em_execucao", "concluida"],
   aprovada: ["em_execucao", "em_roteiro"],
+  aguardando_aprovacao: ["em_roteiro"],
 };
 
 /** Transições automáticas do sistema (check-in, check-out, etc.) — não exigem papel. */
 const TRANSICOES_SISTEMA: Partial<Record<StatusOS, StatusOS[]>> = {
   em_roteiro: ["em_execucao", "cliente_ausente"],
-  em_execucao: ["aguardando_aprovacao", "concluida", "cliente_ausente"],
+  em_execucao: ["aguardando_aprovacao", "concluida", "cliente_ausente", "aguardando_peca"],
 };
 
 export function transicoesPermitidas(de: StatusOS, papel: Papel): StatusOS[] {
@@ -62,15 +63,30 @@ export function validarTransicaoStatus(
   }
 }
 
+/** Resultado informado pelo técnico no check-out. */
+export type CheckoutResultado = "visita" | "servico_concluido" | "aguardando_peca";
+
 /** Status após check-out de visita domicílio. */
-export function statusPosCheckout(os: {
-  status: StatusOS;
-  aprovado: boolean;
-  tipo_atendimento: string;
-}): StatusOS | null {
+export function statusPosCheckout(
+  os: {
+    status: StatusOS;
+    aprovado: boolean;
+    tipo_atendimento: string;
+  },
+  resultado: CheckoutResultado = "visita"
+): StatusOS | null {
   if (os.tipo_atendimento !== "domicilio") return null;
   if (os.status !== "em_execucao") return null;
-  return os.aprovado ? "concluida" : "aguardando_aprovacao";
+
+  switch (resultado) {
+    case "aguardando_peca":
+      return "aguardando_peca";
+    case "servico_concluido":
+      return os.aprovado ? "concluida" : "aguardando_aprovacao";
+    case "visita":
+    default:
+      return "aguardando_aprovacao";
+  }
 }
 
 export const STATUS_OS_BLOQUEADO_EDICAO: StatusOS[] = ["concluida", "entregue", "cancelada"];

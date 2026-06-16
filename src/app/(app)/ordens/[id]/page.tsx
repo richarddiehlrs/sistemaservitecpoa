@@ -128,10 +128,24 @@ export default async function OrdemDetalhePage({
     ehTecnico &&
     !["cliente_ausente", "cancelada", "entregue", "concluida"].includes(os.status);
 
+  const podeAprovarOrcamento =
+    !os.aprovado &&
+    os.status !== "cancelada" &&
+    os.status !== "cliente_ausente" &&
+    !["concluida", "entregue"].includes(os.status);
+  const valorMudouAposAprovacao =
+    os.aprovado &&
+    os.valor_aprovado != null &&
+    Math.abs(valorTotal - Number(os.valor_aprovado)) > 0.01;
   const ehOficina = os.tipo_atendimento === "oficina";
 
   return (
     <div>
+      {valorMudouAposAprovacao && (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          O orçamento foi alterado após a última aprovação. Solicite nova assinatura do cliente antes de concluir.
+        </div>
+      )}
       {etiqueta === "1" && ehOficina && <OsEtiquetaPrompt osId={id} />}
       <PageHeader
         title={`Ordem ${formatNumeroOS(os.numero)}`}
@@ -366,7 +380,12 @@ export default async function OrdemDetalhePage({
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
               <PenLine className="h-4 w-4" /> Assinatura do cliente
             </h3>
-            <OsAssinatura osId={id} assinaturaAtual={os.assinatura_cliente} />
+            <OsAssinatura
+              osId={id}
+              assinaturaAtual={os.assinatura_cliente}
+              podeAprovar={podeAprovarOrcamento}
+              aprovado={os.aprovado}
+            />
           </div>
 
           {/* Agenda vinculada (automática) */}

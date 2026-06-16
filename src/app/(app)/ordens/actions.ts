@@ -11,6 +11,7 @@ import {
   resolverEquipamentosOs,
   salvarVinculosEquipamentosOs,
 } from "@/lib/os-equipamentos";
+import { executarAprovacaoOs, requererReaprovacaoSeValoresMudaram } from "@/lib/aprovacao-os";
 import {
   sincronizarFinanceiroOs,
   temLancamentoAtivoOs,
@@ -286,7 +287,9 @@ export async function atualizarOrdem(id: string, formData: FormData) {
 
   const { data: osAtual } = await supabase
     .from("ordens_servico")
-    .select("numero, cliente_id, tecnico_id, status")
+    .select(
+      "numero, cliente_id, tecnico_id, status, aprovado, valor_aprovado, valor_itens, valor_visita, abater_visita, desconto, acrescimo"
+    )
     .eq("id", id)
     .single();
 
@@ -381,6 +384,22 @@ export async function atualizarOrdem(id: string, formData: FormData) {
       str(formData.get("equipamentos_json"))
     );
     await salvarVinculosEquipamentosOs(supabase, id, equipamentoIds);
+
+    await requererReaprovacaoSeValoresMudaram(
+      supabase,
+      id,
+      {
+        aprovado: Boolean(osAtual.aprovado),
+        valor_aprovado: osAtual.valor_aprovado != null ? Number(osAtual.valor_aprovado) : null,
+        status: osAtual.status as StatusOS,
+        valor_itens: Number(osAtual.valor_itens),
+        valor_visita: Number(osAtual.valor_visita),
+        abater_visita: Boolean(osAtual.abater_visita),
+        desconto: Number(osAtual.desconto),
+        acrescimo: Number(osAtual.acrescimo),
+      },
+      total
+    );
   }
 
   await sincronizarFinanceiroOs(supabase, id, total, custoItens);
@@ -521,6 +540,46 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
   revalidatePath("/dre");
   revalidatePath("/financeiro/fluxo");
   redirect(`/ordens/${id}`);
+}
+
+export async function aprovarOrcamentoComAssinatura(
+  id: string,
+  assinatura: string | null,
+  obs: string | null
+) {
+  const profile = await requirePermissao("ordens_editar");
+  const supabase = await createClient();
+
+  if (profile.papel === "tecnico") {
+    const { data: os } = await supabase
+      .from("ordens_servico")
+      .select("tecnico_id, tecnico")
+      .eq("id", id)
+      .single();
+    if (!os) throw new Error("Ordem não encontrada.");
+    const nome = nomeTecnico(profile);
+    const atribuido =
+      os.tecnico_id === profile.id ||
+      (os.tecnico?.toLowerCase().includes(nome.toLowerCase()) ?? false);
+    if (!atribuido) throw new Error("Esta ordem não está atribuída a você.");
+  }
+
+  const result = await executarAprovacaoOs(supabase, {
+    osId: id,
+    assinatura,
+    obs,
+    origem: profile.papel === "tecnico" ? "técnico no local" : "ERP",
+  });
+
+  if (!result.ok) throw new Error(result.erro);
+
+  revalidatePath(`/ordens/${id}`);
+  revalidatePath("/ordens");
+  revalidatePath("/financeiro");
+  revalidatePath("/dashboard");
+  revalidatePath("/campo");
+  revalidatePath("/agenda");
+  revalidatePath("/painel");
 }
 
 export async function salvarAssinatura(id: string, dataUrl: string) {

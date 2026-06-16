@@ -6,7 +6,7 @@ import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { horarioTurno } from "@/lib/turnos";
 import { transicionarStatusOs } from "@/lib/transicao-os";
-import { statusPosCheckout } from "@/lib/transicao-status";
+import { statusPosCheckout, type CheckoutResultado } from "@/lib/transicao-status";
 
 function str(v: FormDataEntryValue | null): string | null {
   const s = v == null ? "" : String(v).trim();
@@ -217,24 +217,44 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
   if (error) throw new Error(error.message);
 
   if (ag?.os_id) {
+    const resultado = (String(formData?.get("resultado") || "visita") as CheckoutResultado);
+    const visitaCobrada = formData?.get("visita_cobrada") === "on";
+
     const { data: os } = await supabase
       .from("ordens_servico")
-      .select("status, aprovado, tipo_atendimento")
+      .select("status, aprovado, tipo_atendimento, valor_visita")
       .eq("id", ag.os_id)
       .single();
 
     if (os) {
-      const proximo = statusPosCheckout({
-        status: os.status as never,
-        aprovado: Boolean(os.aprovado),
-        tipo_atendimento: os.tipo_atendimento ?? "domicilio",
-      });
+      if (visitaCobrada && Number(os.valor_visita) > 0) {
+        await supabase
+          .from("ordens_servico")
+          .update({ abater_visita: true })
+          .eq("id", ag.os_id);
+      }
+
+      const proximo = statusPosCheckout(
+        {
+          status: os.status as never,
+          aprovado: Boolean(os.aprovado),
+          tipo_atendimento: os.tipo_atendimento ?? "domicilio",
+        },
+        resultado
+      );
+
+      const obsCheckout =
+        resultado === "visita"
+          ? "Check-out: visita/diagnóstico — retorno pode ser necessário"
+          : resultado === "aguardando_peca"
+            ? "Check-out: aguardando peça"
+            : "Check-out: serviço executado nesta visita";
 
       if (proximo) {
         await transicionarStatusOs(supabase, {
           osId: ag.os_id,
           status: proximo,
-          observacao: "Check-out da visita realizado pelo técnico",
+          observacao: obsCheckout,
           origem: "check-out",
           sistema: true,
           papel: profile.papel,

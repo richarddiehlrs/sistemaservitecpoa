@@ -179,9 +179,14 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
                   />
                 </div>
                 {a.os_id && (
-                  <Link href={`/ordens/${a.os_id}`} className="mt-2 inline-block text-xs font-medium text-brand-600 hover:underline">
-                    Abrir ordem de serviço →
-                  </Link>
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    <Link href={`/ordens/${a.os_id}`} className="text-xs font-medium text-brand-600 hover:underline">
+                      Abrir ordem →
+                    </Link>
+                    <Link href={`/ordens/${a.os_id}/editar`} className="text-xs font-medium text-brand-600 hover:underline">
+                      Editar valores / peças →
+                    </Link>
+                  </div>
                 )}
               </div>
             ))}
