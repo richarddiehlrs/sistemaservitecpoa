@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/ui";
 import { OrdemForm } from "@/components/ordem-form";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
-import { assertOsAtribuida } from "@/lib/os-acesso";
+import { osAtribuidaAoProfile } from "@/lib/os-acesso";
 import { nomeTecnico } from "@/lib/permissoes";
 import { mapTecnicos } from "@/lib/tecnicos";
 import { carregarEquipamentosOs } from "@/lib/os-equipamentos";
@@ -32,8 +32,8 @@ export default async function EditarOrdemPage({
 
   if (!os) notFound();
 
-  if (ehTecnico) {
-    assertOsAtribuida(profile, { tecnico_id: os.tecnico_id, tecnico: os.tecnico });
+  if (ehTecnico && !osAtribuidaAoProfile(profile, { tecnico_id: os.tecnico_id, tecnico: os.tecnico })) {
+    redirect("/campo?erro=os_nao_atribuida");
   }
 
   if (

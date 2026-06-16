@@ -125,7 +125,13 @@ export async function cancelarReceitaPendenteOs(supabase: Db, osId: string): Pro
     const custoOs = l.tipo === "despesa" && l.descricao?.startsWith("Custo OS-");
     const receitaPendente = l.tipo === "receita" && ["pendente", "parcial"].includes(l.status);
     if (receitaPendente || (custoOs && l.status === "pendente")) {
-      await supabase.from("lancamentos_financeiros").update({ status: "cancelado" }).eq("id", l.id);
+      const { error } = await supabase
+        .from("lancamentos_financeiros")
+        .update({ status: "cancelado" })
+        .eq("id", l.id);
+      if (error) {
+        throw new Error(`Não foi possível atualizar o financeiro da OS: ${error.message}`);
+      }
     }
   }
 }

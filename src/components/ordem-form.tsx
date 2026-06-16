@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { Loader2, Plus, Search, Trash2, UserCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { buscarCep } from "@/lib/cep";
@@ -338,6 +339,7 @@ export function OrdemForm({
       try {
         await action(formData);
       } catch (e) {
+        if (isRedirectError(e)) throw e;
         setErroSalvar(e instanceof Error ? e.message : "Erro ao salvar a ordem de serviço.");
       }
     });

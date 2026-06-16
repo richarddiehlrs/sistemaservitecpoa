@@ -483,24 +483,40 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
           papel: profile.papel,
         });
       }
+    }
+  }
 
-      const agendarRetorno = formData?.get("agendar_retorno") === "on";
-      const retornoData = str(formData?.get("retorno_data"));
-      const retornoTurno = str(formData?.get("retorno_turno")) || "manha";
+  const { error: errAgenda } = await supabase.from("agendamentos").update(checkoutUpdates).eq("id", id);
+  assertSupabaseOk(errAgenda, "Não foi possível finalizar a visita");
 
-      if (agendarRetorno && retornoData && os.tipo_atendimento === "domicilio") {
-        const tecnico_id = os.tecnico_id || profile.id;
-        const tecnico = os.tecnico || nomeTecnico(profile);
+  if (ag.os_id) {
+    const agendarRetorno = formData?.get("agendar_retorno") === "on";
+    const retornoData = str(formData?.get("retorno_data"));
+    const retornoTurno = str(formData?.get("retorno_turno")) || "manha";
 
-        await supabase
+    if (agendarRetorno && retornoData) {
+      const { data: osRetorno } = await supabase
+        .from("ordens_servico")
+        .select(
+          "tipo_atendimento, valor_visita, valor_itens, abater_visita, desconto, acrescimo, custo_total, cliente_id, numero, tecnico, tecnico_id, clientes(nome)"
+        )
+        .eq("id", ag.os_id)
+        .single();
+
+      if (osRetorno?.tipo_atendimento === "domicilio") {
+        const tecnico_id = osRetorno.tecnico_id || profile.id;
+        const tecnico = osRetorno.tecnico || nomeTecnico(profile);
+
+        const { error: updPrev } = await supabase
           .from("ordens_servico")
           .update({ data_previsao: retornoData, turno: retornoTurno as never })
           .eq("id", ag.os_id);
+        assertSupabaseOk(updPrev, "Não foi possível agendar retorno");
 
         await sincronizarAgendamentoOs(supabase, {
           osId: ag.os_id,
-          clienteId: os.cliente_id,
-          numero: os.numero,
+          clienteId: osRetorno.cliente_id,
+          numero: osRetorno.numero,
           data: retornoData,
           turno: retornoTurno,
           tecnico,
@@ -508,19 +524,16 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
         });
 
         // @ts-expect-error relação
-        const clienteNome = os.clientes?.nome as string | undefined;
+        const clienteNome = osRetorno.clientes?.nome as string | undefined;
         notificarWhatsAppClienteSugerido({
           osId: ag.os_id,
-          numero: os.numero,
+          numero: osRetorno.numero,
           clienteNome,
           evento: "retorno_agendado",
         }).catch(() => {});
       }
     }
   }
-
-  const { error } = await supabase.from("agendamentos").update(checkoutUpdates).eq("id", id);
-  if (error) throw new Error(error.message);
 
   if (lat != null && lng != null) {
     await salvarPosicaoTecnico(supabase, profile, {

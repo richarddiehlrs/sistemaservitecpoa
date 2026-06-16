@@ -111,9 +111,13 @@ function calcTotais(
 }
 
 function lerItens(formData: FormData): ItemInput[] {
-  return JSON.parse(String(formData.get("itens_json") || "[]")).filter(
-    (i: ItemInput) => i.descricao && i.descricao.trim()
-  );
+  try {
+    return JSON.parse(String(formData.get("itens_json") || "[]")).filter(
+      (i: ItemInput) => i.descricao && i.descricao.trim()
+    );
+  } catch {
+    throw new Error("Lista de itens inválida. Recarregue a página e tente novamente.");
+  }
 }
 
 async function resolverCliente(
@@ -385,9 +389,11 @@ export async function atualizarOrdem(id: string, formData: FormData) {
     }
   }
 
-  await supabase.from("os_itens").delete().eq("os_id", id);
+  const { error: delItensErr } = await supabase.from("os_itens").delete().eq("os_id", id);
+  if (delItensErr) throw new Error(`Não foi possível atualizar itens: ${delItensErr.message}`);
+
   if (itens.length > 0) {
-    await supabase.from("os_itens").insert(
+    const { error: insItensErr } = await supabase.from("os_itens").insert(
       itens.map((i) => ({
         os_id: id,
         tipo: i.tipo,
@@ -397,6 +403,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
         custo_unitario: Number(i.custo_unitario) || 0,
       }))
     );
+    if (insItensErr) throw new Error(`Não foi possível salvar itens: ${insItensErr.message}`);
   }
 
   if (osAtual) {
@@ -446,6 +453,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
         observacao: "Orçamento enviado — aguardando aprovação do cliente",
         origem: "orcamento",
         sistema: true,
+        papel: profile.papel,
         skipNotificacao: false,
       });
     }
