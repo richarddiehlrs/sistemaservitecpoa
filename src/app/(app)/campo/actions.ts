@@ -7,13 +7,10 @@ import { assertOsAtribuida } from "@/lib/os-acesso";
 import { salvarPosicaoTecnico } from "@/lib/posicao-tecnico";
 import { nomeTecnico } from "@/lib/permissoes";
 import { notificarDespesaCampo } from "@/lib/notificacoes";
-import { hojeYmdLocal } from "@/lib/format";
+import { hojeYmdLocal, parseNumForm } from "@/lib/format";
 
 function num(v: FormDataEntryValue | null): number {
-  if (v == null) return 0;
-  const s = String(v).replace(/\./g, "").replace(",", ".").trim();
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
+  return parseNumForm(v);
 }
 
 function str(v: FormDataEntryValue | null): string | null {

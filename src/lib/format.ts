@@ -6,6 +6,16 @@ export function formatCurrency(value: number | null | undefined): string {
   });
 }
 
+/** Converte valor de FormData: "1.234,56" (BR) ou "56.00" (input type=number). */
+export function parseNumForm(v: FormDataEntryValue | null): number {
+  if (v == null) return 0;
+  const raw = String(v).trim();
+  if (!raw) return 0;
+  const s = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
 // Valor monetário por extenso (pt-BR). Ex.: 1.234,50 -> "mil duzentos e trinta e quatro reais e cinquenta centavos".
 export function valorPorExtenso(value: number | null | undefined): string {
   const n = Math.round(Number(value ?? 0) * 100) / 100;

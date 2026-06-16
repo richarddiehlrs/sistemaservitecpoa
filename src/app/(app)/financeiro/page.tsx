@@ -336,7 +336,7 @@ export default async function FinanceiroPage({
                         {l.status !== "pago" && l.status !== "cancelado" && (
                           <RegistrarPagamento
                             lancamento={{ id: l.id, descricao: l.descricao, valor: l.valor, valor_pago: l.valor_pago, juros: l.juros, multa: l.multa }}
-                            action={registrarPagamento.bind(null, l.id)}
+                            action={registrarPagamento}
                           />
                         )}
                         {l.tipo === "receita" && vencido && (

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { assertOsAtribuida } from "@/lib/os-acesso";
 import { nomeTecnico } from "@/lib/permissoes";
-import { onlyDigits, hojeYmdLocal } from "@/lib/format";
+import { onlyDigits, hojeYmdLocal, parseNumForm } from "@/lib/format";
 import { calcReceitaFaturamentoOs, calcValorTotalCliente } from "@/lib/os-valores";
 import {
   resolverEquipamentosOs,
@@ -69,10 +69,7 @@ type ItemInput = {
 };
 
 function num(v: FormDataEntryValue | null): number {
-  if (v == null) return 0;
-  const s = String(v).replace(/\./g, "").replace(",", ".").trim();
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
+  return parseNumForm(v);
 }
 
 function str(v: FormDataEntryValue | null): string | null {

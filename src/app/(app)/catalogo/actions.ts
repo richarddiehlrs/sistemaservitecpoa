@@ -2,12 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { parseNumForm } from "@/lib/format";
 
 function num(v: FormDataEntryValue | null): number {
-  if (v == null) return 0;
-  const s = String(v).replace(/\./g, "").replace(",", ".").trim();
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
+  return parseNumForm(v);
 }
 
 export async function salvarServico(formData: FormData) {

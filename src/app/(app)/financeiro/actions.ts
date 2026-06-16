@@ -3,14 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
-import { hojeYmdLocal, ymdLocal } from "@/lib/format";
+import { hojeYmdLocal, parseNumForm, ymdLocal } from "@/lib/format";
 import { saldoEmAberto } from "@/lib/financeiro";
 
+export type FinanceiroActionResult = { ok: true } | { ok: false; error: string };
+
 function num(v: FormDataEntryValue | null): number {
-  if (v == null) return 0;
-  const s = String(v).replace(/\./g, "").replace(",", ".").trim();
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
+  return parseNumForm(v);
 }
 function int(v: FormDataEntryValue | null, def = 0): number {
   const n = parseInt(String(v ?? ""), 10);
@@ -89,20 +88,25 @@ export async function criarLancamento(formData: FormData) {
 }
 
 // Registra pagamento total ou parcial, com juros/multa.
-export async function registrarPagamento(id: string, formData: FormData) {
+export async function registrarPagamento(formData: FormData): Promise<FinanceiroActionResult> {
   await requirePermissao("financeiro");
+  const id = String(formData.get("lancamento_id") || "").trim();
+  if (!id) return { ok: false, error: "Lançamento inválido." };
+
   const supabase = await createClient();
   const hoje = hojeYmdLocal();
 
-  const { data: l } = await supabase
+  const { data: l, error: errSel } = await supabase
     .from("lancamentos_financeiros")
     .select("valor, valor_pago, juros, multa, taxa_cartao, valor_liquido")
     .eq("id", id)
     .single();
-  if (!l) throw new Error("Lançamento não encontrado.");
+  if (errSel || !l) return { ok: false, error: "Lançamento não encontrado." };
 
   const pagamento = num(formData.get("valor"));
-  if (pagamento <= 0) throw new Error("Informe um valor de pagamento maior que zero.");
+  if (pagamento <= 0) {
+    return { ok: false, error: "Informe um valor de pagamento maior que zero." };
+  }
 
   const jurosNovos = num(formData.get("juros"));
   const multaNovos = num(formData.get("multa"));
@@ -111,7 +115,10 @@ export async function registrarPagamento(id: string, formData: FormData) {
 
   const saldo = saldoEmAberto(l);
   if (pagamento > saldo + 0.001) {
-    throw new Error(`Pagamento excede o saldo em aberto (${saldo.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}).`);
+    return {
+      ok: false,
+      error: `Pagamento excede o saldo em aberto (${saldo.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}).`,
+    };
   }
 
   const juros = Number(l.juros) + jurosNovos;
@@ -136,8 +143,9 @@ export async function registrarPagamento(id: string, formData: FormData) {
       status,
     })
     .eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) return { ok: false, error: error.message };
   revalidarFinanceiro();
+  return { ok: true };
 }
 
 export async function marcarPago(id: string) {

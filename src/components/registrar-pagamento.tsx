@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, HandCoins, X } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { useToast } from "./toast";
+import type { FinanceiroActionResult } from "@/app/(app)/financeiro/actions";
 
 function mensagemErro(err: unknown): string {
   const digest = (err as { digest?: string })?.digest;
@@ -20,7 +21,7 @@ export function RegistrarPagamento({
   action,
 }: {
   lancamento: { id: string; descricao: string; valor: number; valor_pago: number; juros: number; multa: number };
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<FinanceiroActionResult>;
 }) {
   const [aberto, setAberto] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -35,7 +36,11 @@ export function RegistrarPagamento({
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
       try {
-        await action(fd);
+        const res = await action(fd);
+        if (!res.ok) {
+          toast.push(res.error, "error");
+          return;
+        }
         toast.push("Pagamento registrado.", "success");
         setAberto(false);
         router.refresh();
@@ -75,6 +80,7 @@ export function RegistrarPagamento({
             </div>
 
             <form onSubmit={submit} className="space-y-3">
+              <input type="hidden" name="lancamento_id" value={lancamento.id} />
               <div>
                 <label className="label">Valor pago agora (R$)</label>
                 <input name="valor" type="number" step="0.01" min="0" defaultValue={saldo.toFixed(2)} required className="input" />
