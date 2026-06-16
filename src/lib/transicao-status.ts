@@ -41,6 +41,7 @@ const TRANSICOES_SISTEMA: Partial<Record<StatusOS, StatusOS[]>> = {
   aprovada: ["em_execucao", "aguardando_aprovacao"],
   em_analise: ["em_execucao", "aguardando_aprovacao"],
   aberta: ["em_execucao", "aguardando_aprovacao"],
+  aguardando_aprovacao: ["em_execucao"],
   garantia: ["em_execucao"],
 };
 

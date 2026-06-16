@@ -7,7 +7,7 @@ import { nomeTecnico } from "@/lib/permissoes";
 import { horarioTurno } from "@/lib/turnos";
 import { hojeYmdLocal } from "@/lib/format";
 import { transicionarStatusOs } from "@/lib/transicao-os";
-import { statusPosCheckout, statusPermiteCheckin, type CheckoutResultado } from "@/lib/transicao-status";
+import { statusPosCheckout, type CheckoutResultado } from "@/lib/transicao-status";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import {
   registrarPagamentoReceitaOsCheckout,
@@ -21,8 +21,7 @@ import { requererReaprovacaoSeValoresMudaram } from "@/lib/aprovacao-os";
 import { notificarWhatsAppClienteSugerido } from "@/lib/notificacoes";
 import { salvarPosicaoTecnico } from "@/lib/posicao-tecnico";
 import {
-  checkinBloqueadoPorAprovacao,
-  mensagemCheckinBloqueado,
+  validarCheckinOs,
 } from "@/lib/checkin-os";
 
 async function garantirAtribuicaoCampo(
@@ -98,19 +97,60 @@ function validarCheckoutAgenda(ag: AgEstado): void {
   if (ag.checkout_at) throw new Error("Check-out já registrado nesta visita.");
 }
 
+async function contarVisitasRealizadasOs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  osId: string
+): Promise<number> {
+  const { count } = await supabase
+    .from("agendamentos")
+    .select("id", { count: "exact", head: true })
+    .eq("os_id", osId)
+    .eq("status", "realizado");
+  return count ?? 0;
+}
+
+async function liberarVisitasEmAtendimentoAntigas(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profileId: string,
+  hoje: string
+): Promise<void> {
+  await supabase
+    .from("agendamentos")
+    .update({
+      status: "confirmado",
+      checkin_at: null,
+      checkin_por: null,
+      checkin_lat: null,
+      checkin_lng: null,
+    })
+    .eq("tecnico_id", profileId)
+    .eq("status", "em_atendimento")
+    .lt("data", hoje);
+}
+
 async function assertUmaVisitaEmAtendimento(
   supabase: Awaited<ReturnType<typeof createClient>>,
   profileId: string,
   agendamentoId: string
 ): Promise<void> {
-  const { count } = await supabase
+  const hoje = hojeYmdLocal();
+  await liberarVisitasEmAtendimentoAntigas(supabase, profileId, hoje);
+
+  const { data: travada } = await supabase
     .from("agendamentos")
-    .select("id", { count: "exact", head: true })
+    .select("id, titulo, data, os_id, ordens_servico(numero)")
     .eq("tecnico_id", profileId)
     .eq("status", "em_atendimento")
-    .neq("id", agendamentoId);
-  if ((count ?? 0) > 0) {
-    throw new Error("Finalize a visita em andamento antes de iniciar outra.");
+    .neq("id", agendamentoId)
+    .maybeSingle();
+
+  if (travada) {
+    // @ts-expect-error relação
+    const numero = travada.ordens_servico?.numero as number | undefined;
+    const ref = numero != null ? `OS-${String(numero).padStart(5, "0")}` : travada.titulo;
+    throw new Error(
+      `Finalize a visita em andamento (${ref}, ${travada.data}) antes de iniciar outra.`
+    );
   }
 }
 
@@ -291,16 +331,20 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
         .select("status")
         .eq("os_id", ag.os_id);
 
-      const histStatuses = (histRows || []).map((h) => h.status);
-
-      if (!osCheckin || !statusPermiteCheckin(osCheckin.status as never)) {
-        throw new Error(mensagemCheckinBloqueado(osCheckin?.status as never));
+      if (!osCheckin) {
+        throw new Error("Ordem de serviço vinculada não encontrada.");
       }
 
-      if (checkinBloqueadoPorAprovacao(osCheckin as never, histStatuses)) {
-        throw new Error(
-          "Esta OS aguarda aprovação do cliente antes de iniciar o atendimento. Reagende após a aprovação."
-        );
+      const histStatuses = (histRows || []).map((h) => h.status);
+      const visitasRealizadas = await contarVisitasRealizadasOs(supabase, ag.os_id);
+
+      const checkinOk = validarCheckinOs(
+        osCheckin as never,
+        histStatuses,
+        visitasRealizadas
+      );
+      if (!checkinOk.ok) {
+        throw new Error(checkinOk.motivo);
       }
 
       const extras: Record<string, string> = {};
@@ -388,7 +432,11 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
       let statusOs = os.status as string;
 
       if (statusOs !== "em_execucao") {
-        if (["em_roteiro", "aprovada", "aguardando_peca"].includes(statusOs)) {
+        const visitaAtiva = ag.status === "em_atendimento";
+        if (
+          ["em_roteiro", "aprovada", "aguardando_peca"].includes(statusOs) ||
+          (statusOs === "aguardando_aprovacao" && visitaAtiva)
+        ) {
           await transicionarStatusOs(supabase, {
             osId: ag.os_id,
             status: "em_execucao",

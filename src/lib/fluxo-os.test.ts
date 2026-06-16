@@ -70,9 +70,9 @@ describe("validarTransicaoStatus", () => {
     expect(() => validarTransicaoStatus("em_execucao", "cancelada", "tecnico")).toThrow();
   });
 
-  it("sistema permite reaprovacao de em_roteiro", () => {
+  it("sistema permite check-in de aguardando_aprovacao na 1ª visita", () => {
     expect(() =>
-      validarTransicaoStatus("em_roteiro", "aguardando_aprovacao", "atendente", { sistema: true })
+      validarTransicaoStatus("aguardando_aprovacao", "em_execucao", "tecnico", { sistema: true })
     ).not.toThrow();
   });
 });
@@ -228,12 +228,13 @@ describe("comissão e produtividade", () => {
 });
 
 describe("checkin e aprovação", () => {
-  it("bloqueia check-in após orçamento enviado sem aprovação", async () => {
+  it("bloqueia check-in após orçamento enviado sem aprovação (retorno)", async () => {
     const { checkinBloqueadoPorAprovacao } = await import("@/lib/checkin-os");
     expect(
       checkinBloqueadoPorAprovacao(
         { status: "em_roteiro", aprovado: false },
-        ["aberta", "aguardando_aprovacao"]
+        ["aberta", "aguardando_aprovacao"],
+        1
       )
     ).toBe(true);
   });
@@ -241,7 +242,29 @@ describe("checkin e aprovação", () => {
   it("permite check-in na primeira visita em roteiro", async () => {
     const { checkinBloqueadoPorAprovacao } = await import("@/lib/checkin-os");
     expect(
-      checkinBloqueadoPorAprovacao({ status: "em_roteiro", aprovado: false }, ["aberta"])
+      checkinBloqueadoPorAprovacao({ status: "em_roteiro", aprovado: false }, ["aberta"], 0)
+    ).toBe(false);
+  });
+
+  it("permite 1ª visita mesmo com orçamento enviado antes da ida", async () => {
+    const { validarCheckinOs } = await import("@/lib/checkin-os");
+    expect(
+      validarCheckinOs(
+        { status: "aguardando_aprovacao", aprovado: false },
+        ["aberta", "aguardando_aprovacao"],
+        0
+      ).ok
+    ).toBe(true);
+  });
+
+  it("bloqueia retorno sem aprovação", async () => {
+    const { validarCheckinOs } = await import("@/lib/checkin-os");
+    expect(
+      validarCheckinOs(
+        { status: "aguardando_aprovacao", aprovado: false },
+        ["aberta", "aguardando_aprovacao"],
+        1
+      ).ok
     ).toBe(false);
   });
 
@@ -250,7 +273,8 @@ describe("checkin e aprovação", () => {
     expect(
       checkinBloqueadoPorAprovacao(
         { status: "em_roteiro", aprovado: true },
-        ["aguardando_aprovacao", "aprovada"]
+        ["aguardando_aprovacao", "aprovada"],
+        1
       )
     ).toBe(false);
   });
