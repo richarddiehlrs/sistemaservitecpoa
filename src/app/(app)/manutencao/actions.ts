@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { filtrarAgendamentosOrfaos, filtrarLancamentosOrfaos } from "@/lib/orfaos";
+import { listarOsInconsistentes, repararOs, repararTodasOs } from "@/lib/reparar-os";
 
 async function idsOsValidos(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data } = await supabase.from("ordens_servico").select("id");
@@ -70,6 +71,24 @@ export async function limparTodosOrfaos() {
   }
 
   revalidarManutencao();
+}
+
+export async function repararOsInconsistente(osId: string) {
+  await requirePermissao("ordens_excluir");
+  const supabase = await createClient();
+  const resultado = await repararOs(supabase, osId);
+  revalidarManutencao();
+  revalidatePath(`/ordens/${osId}`);
+  return resultado;
+}
+
+export async function repararTodasOsInconsistentes() {
+  await requirePermissao("ordens_excluir");
+  const supabase = await createClient();
+  const resultados = await repararTodasOs(supabase);
+  revalidarManutencao();
+  revalidatePath("/ordens");
+  return resultados;
 }
 
 function revalidarManutencao() {

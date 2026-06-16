@@ -169,7 +169,7 @@ export async function criarOrdem(formData: FormData) {
   const acrescimo = num(formData.get("acrescimo"));
   const { valorItens, custoItens, total } = calcTotais(itens, valorVisita, abaterVisita, desconto, acrescimo);
 
-  const status = (str(formData.get("status")) as StatusOS) || (tipo === "oficina" ? "em_analise" : "aberta");
+  const status = (str(formData.get("status")) as StatusOS) || (tipo === "oficina" ? "em_analise" : "em_roteiro");
   const turno = str(formData.get("turno"));
   const dataVisita = str(formData.get("data_previsao"));
   const { tecnico_id, tecnico } = await resolverTecnicoParaOs(supabase, formData, profile, tipo);

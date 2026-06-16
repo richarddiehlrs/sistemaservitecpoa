@@ -137,6 +137,33 @@ export async function notificarAdminsAtendentes(payload: PayloadNotificacao) {
   return notificarPorPapel(["admin", "atendente"], payload);
 }
 
+export type AlertaDispensado = {
+  ref_tipo: string;
+  ref_id?: string | null;
+};
+
+/** Registra alertas operacionais como vistos/dispensados pelo usuário. */
+export async function dispensarAlertasUsuario(userId: string, items: AlertaDispensado[]) {
+  const supabase = supabaseAdmin();
+  if (!supabase || !items.length) return;
+
+  const agora = new Date().toISOString();
+  const rows = items.map((item) => ({
+    user_id: userId,
+    tipo: "sistema" as const,
+    titulo: "Alerta dispensado",
+    mensagem: "Ocultado pelo usuário",
+    lida: true,
+    lida_em: agora,
+    ref_tipo: item.ref_tipo,
+    ref_id: item.ref_id ?? null,
+    prioridade: "baixa" as const,
+  }));
+
+  const { error } = await supabase.from("notificacoes").insert(rows);
+  if (error) console.error("[notificacoes] dispensar:", error.message);
+}
+
 export async function notificarOsNova(opts: {
   tecnicoId: string;
   osId: string;

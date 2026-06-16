@@ -32,6 +32,8 @@ import {
 import {
   marcarNotificacaoLida,
   marcarTodasNotificacoesLidas,
+  limparTodosAlertas,
+  type AlertaDispensadoInput,
 } from "@/app/(app)/notificacoes/actions";
 
 type OsAlerta = {
@@ -73,6 +75,7 @@ type NotificacaoRow = {
   lida: boolean;
   created_at: string;
   ref_id?: string | null;
+  ref_tipo?: string | null;
 };
 
 type DespesaCampo = {
@@ -132,7 +135,7 @@ export function Notifications({
     if (!userId) return;
     const { data } = await supabase
       .from("notificacoes")
-      .select("id, tipo, titulo, mensagem, url, prioridade, lida, created_at, ref_id")
+      .select("id, tipo, titulo, mensagem, url, prioridade, lida, created_at, ref_id, ref_tipo")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(25);
@@ -397,44 +400,59 @@ export function Notifications({
   }, [supabase, userId]);
 
   const hoje = hojeYmd();
-  const contasReceber = contas.filter((c) => c.tipo === "receita");
-  const contasPagar = contas.filter((c) => c.tipo === "despesa");
-  const contasVencidas = contas.filter((c) => c.data_vencimento < hoje);
   const visitasPendentes = agenda.filter((a) => a.status === "agendado" || a.status === "confirmado");
-  const eventosNaoLidos = eventos.filter((e) => !e.lida).length;
 
-  function jaTemEvento(tipo: string, refId: string) {
-    return eventos.some((e) => !e.lida && e.ref_id === refId && e.tipo === tipo);
+  function alertaOculto(refTipo: string, refId?: string | null) {
+    return eventos.some((e) => {
+      if (e.tipo === "sistema" && e.ref_tipo === refTipo) {
+        if (refId == null || refId === "") return e.ref_id == null;
+        return e.ref_id === refId;
+      }
+      return !e.lida && e.ref_id === refId && e.tipo === refTipo;
+    });
   }
 
-  function jaTemEventoOs(osId: string, tipos: string[]) {
-    return eventos.some((e) => !e.lida && e.ref_id === osId && tipos.includes(e.tipo));
+  function alertaOsOculto(osId: string, tipos: string[]) {
+    return tipos.some((t) => alertaOculto(t, osId));
   }
 
+  const atrasadasFiltradas = atrasadas.filter((o) => !alertaOculto("os_atraso", o.id));
+  const oficinaParadaFiltrada = oficinaParada.filter((o) => !alertaOculto("oficina_parada", o.id));
   const aguardandoFiltrado = aguardandoAprovacao.filter(
-    (o) => !jaTemEventoOs(o.id, ["os_status", "os_aprovada"])
+    (o) => !alertaOsOculto(o.id, ["os_status", "os_aprovada"])
   );
   const aprovadasFiltradas = aprovadasExecucao.filter(
-    (o) => !jaTemEventoOs(o.id, ["os_aprovada", "os_status"])
+    (o) => !alertaOsOculto(o.id, ["os_aprovada", "os_status"])
   );
-  const clienteAusenteFiltrado = clienteAusente.filter((o) => !jaTemEvento("cliente_ausente", o.id));
-  const despesasCampoFiltradas = despesasCampo.filter((d) => !jaTemEvento("despesa_campo", d.id));
+  const clienteAusenteFiltrado = clienteAusente.filter((o) => !alertaOculto("cliente_ausente", o.id));
+  const despesasCampoFiltradas = despesasCampo.filter((d) => !alertaOculto("despesa_campo", d.id));
+  const contasFiltradas = contas.filter((c) => !alertaOculto("financeiro", c.id));
+  const visitasPendentesFiltradas = visitasPendentes.filter((a) => !alertaOculto("agenda_hoje", a.id));
+  const agendaFiltrada = agenda.filter((a) => !alertaOculto("agenda_hoje", a.id));
+  const metaOculta = metaAlerta ? alertaOculto("meta_faturamento", null) : true;
+
+  const contasReceber = contasFiltradas.filter((c) => c.tipo === "receita");
+  const contasPagar = contasFiltradas.filter((c) => c.tipo === "despesa");
+  const contasVencidas = contasFiltradas.filter((c) => c.data_vencimento < hoje);
+
+  const eventosNaoLidos = eventos.filter((e) => e.tipo !== "sistema" && !e.lida).length;
+  const eventosVisiveis = eventos.filter((e) => e.tipo !== "sistema");
 
   const criticos =
     eventosNaoLidos +
-    atrasadas.length +
+    atrasadasFiltradas.length +
     aguardandoFiltrado.length +
     clienteAusenteFiltrado.length +
     aprovadasFiltradas.length +
     contasVencidas.length +
-    oficinaParada.length;
+    oficinaParadaFiltrada.length;
 
   const total =
     criticos +
-    visitasPendentes.length +
-    contas.filter((c) => c.data_vencimento >= hoje).length +
+    visitasPendentesFiltradas.length +
+    contasFiltradas.filter((c) => c.data_vencimento >= hoje).length +
     despesasCampoFiltradas.length +
-    (metaAlerta ? 1 : 0);
+    (metaAlerta && !metaOculta ? 1 : 0);
 
   const destinoAgenda = ehTecnico ? "/campo" : "/agenda";
 
@@ -449,6 +467,27 @@ export function Notifications({
     }
     setOpen(false);
     if (n.url) router.push(n.url);
+  }
+
+  async function limparAlertas() {
+    const items: AlertaDispensadoInput[] = [];
+
+    atrasadas.forEach((o) => items.push({ ref_tipo: "os_atraso", ref_id: o.id }));
+    oficinaParada.forEach((o) => items.push({ ref_tipo: "oficina_parada", ref_id: o.id }));
+    aguardandoAprovacao.forEach((o) => items.push({ ref_tipo: "os_status", ref_id: o.id }));
+    aprovadasExecucao.forEach((o) => items.push({ ref_tipo: "os_aprovada", ref_id: o.id }));
+    clienteAusente.forEach((o) => items.push({ ref_tipo: "cliente_ausente", ref_id: o.id }));
+    despesasCampo.forEach((d) => items.push({ ref_tipo: "despesa_campo", ref_id: d.id }));
+    contas.forEach((c) => items.push({ ref_tipo: "financeiro", ref_id: c.id }));
+    visitasPendentes.forEach((a) => items.push({ ref_tipo: "agenda_hoje", ref_id: a.id }));
+    if (metaAlerta) items.push({ ref_tipo: "meta_faturamento", ref_id: null });
+
+    try {
+      await limparTodosAlertas(items);
+      await carregarEventos();
+    } catch {
+      /* silencioso */
+    }
   }
 
   async function marcarTodas() {
@@ -494,6 +533,16 @@ export function Notifications({
                       : `${total} item(ns) para acompanhar`}
                 </p>
               </div>
+              {total > 0 && (
+                <button
+                  type="button"
+                  onClick={limparAlertas}
+                  className="shrink-0 text-[10px] font-medium text-slate-600 hover:text-brand-600 hover:underline"
+                  title="Ocultar todos os alertas até a situação mudar"
+                >
+                  Limpar alertas
+                </button>
+              )}
               {eventosNaoLidos > 0 && (
                 <button
                   type="button"
@@ -508,9 +557,9 @@ export function Notifications({
           </div>
 
           <div className="max-h-[28rem] overflow-y-auto">
-            {eventos.length > 0 && (
+            {eventosVisiveis.length > 0 && (
               <Secao titulo="Eventos recentes" icon={<Bell className="h-4 w-4 text-brand-500" />} count={eventosNaoLidos}>
-                {eventos.map((n) => (
+                {eventosVisiveis.map((n) => (
                   <button
                     key={n.id}
                     type="button"
@@ -530,10 +579,10 @@ export function Notifications({
             <Secao
               titulo="OS com visita atrasada"
               icon={<AlertCircle className="h-4 w-4 text-red-500" />}
-              vazio={atrasadas.length === 0}
-              count={atrasadas.length}
+              vazio={atrasadasFiltradas.length === 0}
+              count={atrasadasFiltradas.length}
             >
-              {atrasadas.map((o) => (
+              {atrasadasFiltradas.map((o) => (
                 <ItemLink key={o.id} href={`/ordens/${o.id}`} onClose={() => setOpen(false)}>
                   <span className="font-medium text-slate-800">{formatNumeroOS(o.numero)}</span>{" "}
                   <span className="text-slate-500">{o.clientes?.nome || ""}</span>
@@ -546,10 +595,10 @@ export function Notifications({
               <Secao
                 titulo={`Oficina parada (+${diasOficina}d)`}
                 icon={<Wrench className="h-4 w-4 text-orange-500" />}
-                vazio={oficinaParada.length === 0}
-                count={oficinaParada.length}
+                vazio={oficinaParadaFiltrada.length === 0}
+                count={oficinaParadaFiltrada.length}
               >
-                {oficinaParada.map((o) => (
+                {oficinaParadaFiltrada.map((o) => (
                   <ItemLink key={o.id} href={`/ordens/${o.id}`} onClose={() => setOpen(false)}>
                     <span className="font-medium text-slate-800">{formatNumeroOS(o.numero)}</span>{" "}
                     <span className="text-slate-500">{o.clientes?.nome || ""}</span>
@@ -628,10 +677,10 @@ export function Notifications({
             <Secao
               titulo={ehTecnico ? "Minhas visitas hoje" : "Visitas pendentes hoje"}
               icon={<CalendarClock className="h-4 w-4 text-brand-500" />}
-              vazio={agenda.length === 0}
-              count={visitasPendentes.length || agenda.length}
+              vazio={agendaFiltrada.length === 0}
+              count={visitasPendentesFiltradas.length || agendaFiltrada.length}
             >
-              {agenda.map((a) => (
+              {agendaFiltrada.map((a) => (
                 <ItemLink
                   key={a.id}
                   href={a.os_id ? `/ordens/${a.os_id}` : destinoAgenda}
@@ -686,7 +735,7 @@ export function Notifications({
               </>
             )}
 
-            {metaAlerta && (
+            {metaAlerta && !metaOculta && (
               <Secao titulo="Meta de faturamento" icon={<Target className="h-4 w-4 text-amber-500" />} count={1}>
                 <ItemLink href="/dashboard" onClose={() => setOpen(false)}>
                   <span className="text-slate-700">

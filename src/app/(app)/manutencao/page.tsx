@@ -1,15 +1,18 @@
 import Link from "next/link";
-import { AlertTriangle, Trash2 } from "lucide-react";
+import { AlertTriangle, Trash2, Wrench } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, StatusBadge } from "@/components/ui";
 import { ConfirmButton } from "@/components/confirm-button";
-import { formatCurrency, formatDate, STATUS_AGENDAMENTO_LABEL } from "@/lib/format";
+import { formatCurrency, formatDate, formatNumeroOS, STATUS_AGENDAMENTO_LABEL } from "@/lib/format";
 import { filtrarAgendamentosOrfaos, filtrarLancamentosOrfaos } from "@/lib/orfaos";
+import { listarOsInconsistentes } from "@/lib/reparar-os";
 import {
   excluirAgendamentoOrfao,
   excluirLancamentoOrfao,
   limparTodosOrfaos,
+  repararOsInconsistente,
+  repararTodasOsInconsistentes,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +21,8 @@ export default async function ManutencaoPage() {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
 
-  const [{ data: osLista }, { data: agendamentos }, { data: lancamentos }] = await Promise.all([
+  const [{ data: osLista }, { data: agendamentos }, { data: lancamentos }, osInconsistentes] =
+    await Promise.all([
     supabase.from("ordens_servico").select("id"),
     supabase
       .from("agendamentos")
@@ -28,6 +32,7 @@ export default async function ManutencaoPage() {
       .from("lancamentos_financeiros")
       .select("id, descricao, tipo, valor, status, data_competencia, os_id")
       .order("data_competencia", { ascending: false }),
+    listarOsInconsistentes(supabase),
   ]);
 
   const osIds = new Set((osLista || []).map((o) => o.id));
@@ -39,22 +44,89 @@ export default async function ManutencaoPage() {
     <div>
       <PageHeader
         title="Manutenção de dados"
-        subtitle="Remova manualmente visitas e lançamentos órfãos (de OS excluídas antes da limpeza automática)"
+        subtitle="Corrija ordens com fluxo inconsistente e remova visitas/lançamentos órfãos"
         action={
-          total > 0 ? (
-            <ConfirmButton
-              action={limparTodosOrfaos}
-              className="btn-danger"
-              title="Limpar todos os órfãos"
-              message={`Deseja excluir ${agOrfaos.length} agendamento(s) e ${lancOrfaos.length} lançamento(s) órfãos?`}
-              confirmLabel="Limpar tudo"
-              successMsg="Dados órfãos removidos."
-            >
-              <Trash2 className="h-4 w-4" /> Limpar tudo ({total})
-            </ConfirmButton>
-          ) : undefined
+          <div className="flex flex-wrap gap-2">
+            {osInconsistentes.length > 0 && (
+              <ConfirmButton
+                action={repararTodasOsInconsistentes}
+                className="btn-primary"
+                title="Reparar todas as OS"
+                message={`Deseja corrigir automaticamente ${osInconsistentes.length} ordem(ns) com inconsistências? Status, financeiro e agenda serão alinhados.`}
+                confirmLabel="Reparar todas"
+                successMsg={`${osInconsistentes.length} OS reparada(s).`}
+              >
+                <Wrench className="h-4 w-4" /> Reparar OS ({osInconsistentes.length})
+              </ConfirmButton>
+            )}
+            {total > 0 ? (
+              <ConfirmButton
+                action={limparTodosOrfaos}
+                className="btn-danger"
+                title="Limpar todos os órfãos"
+                message={`Deseja excluir ${agOrfaos.length} agendamento(s) e ${lancOrfaos.length} lançamento(s) órfãos?`}
+                confirmLabel="Limpar tudo"
+                successMsg="Dados órfãos removidos."
+              >
+                <Trash2 className="h-4 w-4" /> Limpar órfãos ({total})
+              </ConfirmButton>
+            ) : null}
+          </div>
         }
       />
+
+      <div className="card mb-6 overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <h2 className="font-semibold text-slate-900">
+            OS com fluxo inconsistente ({osInconsistentes.length})
+          </h2>
+          <Link href="/ordens" className="text-sm text-brand-600 hover:underline">
+            Ver ordens
+          </Link>
+        </div>
+        {osInconsistentes.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-slate-400">
+            Nenhuma ordem com problema detectado. Status, aprovação, financeiro e agenda estão alinhados.
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {osInconsistentes.map((o) => (
+              <div key={o.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link href={`/ordens/${o.id}`} className="font-semibold text-brand-700 hover:underline">
+                      {formatNumeroOS(o.numero)}
+                    </Link>
+                    <StatusBadge status={o.status} />
+                    {o.aprovado && (
+                      <span className="badge bg-green-100 text-green-800 text-[10px]">Aprovada</span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-slate-600">
+                    {/* @ts-expect-error relação */}
+                    {o.clientes?.nome || "Cliente"} • {o.tipo_atendimento}
+                  </p>
+                  <ul className="mt-2 list-inside list-disc text-xs text-amber-800">
+                    {o.problemas.map((p) => (
+                      <li key={p}>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+                <ConfirmButton
+                  action={repararOsInconsistente.bind(null, o.id)}
+                  className="btn-secondary text-xs"
+                  title="Reparar esta OS"
+                  message={`Corrigir automaticamente ${formatNumeroOS(o.numero)}?`}
+                  confirmLabel="Reparar"
+                  successMsg={`${formatNumeroOS(o.numero)} reparada.`}
+                >
+                  <Wrench className="h-4 w-4" /> Reparar
+                </ConfirmButton>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {total === 0 ? (
         <div className="card flex items-center gap-3 p-6 text-slate-600">

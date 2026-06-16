@@ -33,3 +33,26 @@ export async function marcarTodasNotificacoesLidas() {
   if (error) throw new Error(error.message);
   revalidatePath("/", "layout");
 }
+
+export type AlertaDispensadoInput = {
+  ref_tipo: string;
+  ref_id?: string | null;
+};
+
+/** Marca eventos como lidos e oculta alertas operacionais do sino. */
+export async function limparTodosAlertas(items: AlertaDispensadoInput[]) {
+  const profile = await requireProfile();
+  const supabase = await createClient();
+  const agora = new Date().toISOString();
+
+  await supabase
+    .from("notificacoes")
+    .update({ lida: true, lida_em: agora })
+    .eq("user_id", profile.id)
+    .eq("lida", false);
+
+  const { dispensarAlertasUsuario } = await import("@/lib/notificacoes");
+  await dispensarAlertasUsuario(profile.id, items);
+
+  revalidatePath("/", "layout");
+}

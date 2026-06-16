@@ -842,10 +842,24 @@ export function OrdemForm({
             {!modoEdicao && (
               <div className="sm:col-span-2">
                 <label className="label">Status inicial</label>
-                <select name="status" className="input" defaultValue="aberta">
-                  <option value="aberta">Aberta</option>
-                  <option value="em_analise">Em análise</option>
-                  <option value="aguardando_aprovacao">Aguardando aprovação</option>
+                <select
+                  name="status"
+                  className="input"
+                  defaultValue={ehDomicilio ? "em_roteiro" : "em_analise"}
+                >
+                  {ehDomicilio ? (
+                    <>
+                      <option value="em_roteiro">Em roteiro (visita agendada)</option>
+                      <option value="aberta">Aberta</option>
+                      <option value="em_analise">Em análise</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="em_analise">Em análise</option>
+                      <option value="aberta">Aberta</option>
+                      <option value="aguardando_aprovacao">Aguardando aprovação</option>
+                    </>
+                  )}
                 </select>
               </div>
             )}
