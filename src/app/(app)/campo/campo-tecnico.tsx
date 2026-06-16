@@ -8,6 +8,7 @@ import { STATUS_OS_ABERTAS, ordenarOsPendentes } from "@/lib/os-status";
 import { STATUS_AGENDA_PENDENTE, STATUS_OS_ATRASO, hojeYmd } from "@/lib/alertas";
 import { DespesaCampoForm } from "@/components/despesa-campo-form";
 import { CheckinButtons } from "@/components/checkin-buttons";
+import { CampoVisitaAcoes } from "@/components/campo-visita-acoes";
 import { CompartilharGps } from "@/components/compartilhar-gps";
 import { tecnicoDoProfile } from "@/lib/auth-guard";
 import type { Profile } from "@/types/database";
@@ -23,7 +24,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
   const [{ data: agendaHoje }, { data: despesas }, { data: osAbertas }] = await Promise.all([
     supabase
       .from("agendamentos")
-      .select("*, clientes(nome, telefone)")
+      .select("*, clientes(nome, telefone), ordens_servico(numero)")
       .eq("data", hoje)
       .or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${tecnico}%`)
       .neq("status", "cancelado")
@@ -91,7 +92,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       </div>
 
       {/* Alertas rápidos */}
-      <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div id="alertas" className="mb-6 grid scroll-mt-20 grid-cols-2 gap-2 sm:grid-cols-4">
         <AlertaCard
           href="/ordens"
           label="Visitas hoje"
@@ -171,11 +172,31 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
                         <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {a.endereco}
                       </p>
                     )}
+                    <CampoVisitaAcoes
+                      telefone={
+                        // @ts-expect-error relação
+                        a.clientes?.telefone
+                      }
+                      endereco={a.endereco}
+                      checkinLat={a.checkin_lat}
+                      checkinLng={a.checkin_lng}
+                      clienteNome={
+                        // @ts-expect-error relação
+                        a.clientes?.nome
+                      }
+                      tecnicoNome={profile.nome || tecnico}
+                      horaInicio={a.hora_inicio}
+                      osNumero={
+                        // @ts-expect-error relação
+                        a.ordens_servico?.numero ?? null
+                      }
+                    />
                   </div>
                   <CheckinButtons
                     agendamento={a}
                     checkinAction={checkinAgendamento.bind(null, a.id)}
                     checkoutAction={checkoutAgendamento.bind(null, a.id)}
+                    permitirRetorno={Boolean(a.os_id)}
                   />
                 </div>
                 {a.os_id && (

@@ -3,6 +3,11 @@ export function linkMapa(lat: number, lng: number): string {
   return `https://www.google.com/maps?q=${lat},${lng}`;
 }
 
+/** Link para buscar endereço no Google Maps. */
+export function linkMapaEndereco(endereco: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}`;
+}
+
 export function formatCoordenadas(lat: number, lng: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
