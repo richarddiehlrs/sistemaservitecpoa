@@ -18,6 +18,9 @@ export const STATUS_OFICINA_PARADA = ["em_analise", "aguardando_peca"] as const;
 /** Aviso de garantia expirando (dias antes do fim). */
 export const DIAS_AVISO_GARANTIA = 15;
 
+/** Meta de faturamento: alerta se realizado < X% da meta no mês. */
+export const META_ALERTA_PERCENTUAL = 70;
+
 export function hojeYmd(): string {
   return hojeYmdLocal();
 }
