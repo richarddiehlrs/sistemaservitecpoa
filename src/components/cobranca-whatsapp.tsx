@@ -1,7 +1,7 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
-import { onlyDigits, formatCurrency, formatDate } from "@/lib/format";
+import { linkWhatsApp, mensagemCobranca } from "@/lib/whatsapp";
 
 export function CobrancaWhatsApp({
   telefone,
@@ -18,16 +18,11 @@ export function CobrancaWhatsApp({
   vencimento?: string | null;
   empresa: string;
 }) {
-  const tel = onlyDigits(telefone || "");
-  const ddi = tel.length >= 10 ? (tel.startsWith("55") ? tel : `55${tel}`) : "";
-  if (!ddi) return null;
-
-  const msg =
-    `Olá ${cliente || ""}! Aqui é da ${empresa}. ` +
-    `Identificamos um valor em aberto: ${descricao} — ${formatCurrency(valor)}` +
-    (vencimento ? `, com vencimento em ${formatDate(vencimento)}` : "") +
-    `. Pode nos enviar o comprovante assim que efetuar o pagamento? Obrigado!`;
-  const href = `https://wa.me/${ddi}?text=${encodeURIComponent(msg)}`;
+  const href = linkWhatsApp(
+    telefone,
+    mensagemCobranca({ cliente, descricao, valor, vencimento, empresa })
+  );
+  if (!href) return null;
 
   return (
     <a

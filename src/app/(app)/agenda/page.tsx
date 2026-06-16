@@ -9,9 +9,11 @@ import { TURNOS } from "@/lib/turnos";
 import { CheckinButtons } from "@/components/checkin-buttons";
 import { ExcluirAgendamentoButton } from "@/components/excluir-agendamento-button";
 import { TecnicosMapa, LinkMapaCheckin } from "@/components/tecnicos-mapa";
+import { AgendaForm } from "@/components/agenda-form";
 import { requireProfile } from "@/lib/auth-guard";
 import { nomeTecnico, temPermissao } from "@/lib/permissoes";
-import { checkinAgendamento, checkoutAgendamento, excluirAgendamento } from "./actions";
+import { STATUS_OS_ABERTAS } from "@/lib/os-status";
+import { checkinAgendamento, checkoutAgendamento, criarAgendamento, excluirAgendamento } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,21 @@ function turnoDe(a: { turno?: string | null; hora_inicio?: string | null }): "ma
   if (a.turno === "manha" || a.turno === "dia") return "manha";
   if (a.hora_inicio && a.hora_inicio >= "13:00") return "tarde";
   return "manha";
+}
+
+function enderecoCliente(cli: {
+  logradouro?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+} | null): string | undefined {
+  if (!cli) return undefined;
+  const s = [cli.logradouro, cli.numero, cli.complemento, cli.bairro, cli.cidade && `${cli.cidade}/${cli.uf ?? ""}`]
+    .filter(Boolean)
+    .join(", ");
+  return s || undefined;
 }
 
 const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
@@ -70,7 +87,10 @@ export default async function AgendaPage({
   const verGps = profile.papel !== "tecnico";
   const ehAdminOuAtendente = profile.papel === "admin" || profile.papel === "atendente";
 
-  const [{ data: agendamentos }, { data: posicoes }, { data: perfisTecnicos }] = await Promise.all([
+  const podeCriarAgenda = ehAdminOuAtendente && temPermissao(profile.papel, "agenda_criar");
+
+  const [{ data: agendamentos }, { data: posicoes }, { data: perfisTecnicos }, { data: osParaAgenda }] =
+    await Promise.all([
     queryAgenda,
     verGps
       ? supabase
@@ -82,10 +102,33 @@ export default async function AgendaPage({
     ehAdminOuAtendente
       ? supabase.from("profiles").select("*").eq("papel", "tecnico").eq("ativo", true).order("nome")
       : Promise.resolve({ data: [] as never[] }),
+    podeCriarAgenda
+      ? supabase
+          .from("ordens_servico")
+          .select(
+            "id, numero, cliente_id, tecnico_id, tecnico, clientes(nome, logradouro, numero, complemento, bairro, cidade, uf)"
+          )
+          .eq("tipo_atendimento", "domicilio")
+          .in("status", [...STATUS_OS_ABERTAS])
+          .order("numero", { ascending: false })
+          .limit(40)
+      : Promise.resolve({ data: [] as never[] }),
   ]);
 
   const tecnicos = mapTecnicos(perfisTecnicos || []);
   const podeCheckin = temPermissao(profile.papel, "agenda_checkin");
+  const osOpcoes = (osParaAgenda || []).map((o) => {
+    // @ts-expect-error relação
+    const cli = o.clientes;
+    return {
+      id: o.id,
+      label: `${formatNumeroOS(o.numero)} — ${cli?.nome || ""}`,
+      cliente_id: o.cliente_id,
+      tecnico_id: o.tecnico_id,
+      tecnico: o.tecnico,
+      endereco: enderecoCliente(cli),
+    };
+  });
 
   const semanaAnterior = ymd(addDias(segunda, -7));
   const proximaSemana = ymd(addDias(segunda, 7));
@@ -105,6 +148,14 @@ export default async function AgendaPage({
         action={
           ehAdminOuAtendente ? (
             <div className="flex flex-wrap gap-2">
+              {podeCriarAgenda && (
+                <AgendaForm
+                  action={criarAgendamento}
+                  dataPadrao={hojeStr}
+                  tecnicos={tecnicos}
+                  osOpcoes={osOpcoes}
+                />
+              )}
               <Link href="/manutencao" className="btn-secondary">
                 Limpar órfãos
               </Link>

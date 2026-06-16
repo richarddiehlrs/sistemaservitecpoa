@@ -69,25 +69,61 @@ export async function criarAgendamento(formData: FormData) {
   const horas = horarioTurno(turno);
   const { tecnico_id, tecnico } = await resolverTecnicoAgenda(supabase, formData);
   const osId = str(formData.get("os_id"));
+  const data = str(formData.get("data")) || new Date().toISOString().slice(0, 10);
 
-  const { error } = await supabase.from("agendamentos").insert({
-    titulo: String(formData.get("titulo") || "").trim() || "Atendimento",
-    tipo: (str(formData.get("tipo")) as never) || "visita",
-    turno: (turno as never),
-    data: str(formData.get("data")) || new Date().toISOString().slice(0, 10),
-    hora_inicio: str(formData.get("hora_inicio")) || horas.inicio,
-    hora_fim: str(formData.get("hora_fim")) || horas.fim,
-    tecnico,
-    tecnico_id,
-    endereco: str(formData.get("endereco")),
-    cliente_id: str(formData.get("cliente_id")),
-    os_id: osId,
-    status: (str(formData.get("status")) as never) || "agendado",
-    observacoes: str(formData.get("observacoes")),
-  });
-  if (error) throw new Error(error.message);
+  if (osId) {
+    const { data: os } = await supabase
+      .from("ordens_servico")
+      .select("cliente_id, numero, tipo_atendimento")
+      .eq("id", osId)
+      .single();
+    if (!os) throw new Error("Ordem de serviço não encontrada.");
+    if (os.tipo_atendimento !== "domicilio") {
+      throw new Error("Só é possível vincular agendamento a OS domicílio.");
+    }
+
+    await supabase
+      .from("ordens_servico")
+      .update({
+        data_previsao: data,
+        turno: (turno as never) || "manha",
+        tecnico_id,
+        tecnico,
+      })
+      .eq("id", osId);
+
+    await sincronizarAgendamentoOs(supabase, {
+      osId,
+      clienteId: os.cliente_id,
+      numero: os.numero,
+      data,
+      turno: turno || "dia",
+      tecnico,
+      tecnico_id,
+    });
+  } else {
+    const { error } = await supabase.from("agendamentos").insert({
+      titulo: String(formData.get("titulo") || "").trim() || "Atendimento",
+      tipo: (str(formData.get("tipo")) as never) || "visita",
+      turno: turno as never,
+      data,
+      hora_inicio: str(formData.get("hora_inicio")) || horas.inicio,
+      hora_fim: str(formData.get("hora_fim")) || horas.fim,
+      tecnico,
+      tecnico_id,
+      endereco: str(formData.get("endereco")),
+      cliente_id: str(formData.get("cliente_id")),
+      os_id: null,
+      status: (str(formData.get("status")) as never) || "agendado",
+      observacoes: str(formData.get("observacoes")),
+    });
+    if (error) throw new Error(error.message);
+  }
 
   revalidatePath("/agenda");
+  revalidatePath("/campo");
+  revalidatePath("/painel");
+  if (osId) revalidatePath(`/ordens/${osId}`);
 }
 
 export async function alterarStatusAgendamento(id: string, status: string) {

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
 import { MetaCard } from "@/components/meta-card";
+import { DashboardTecnicos, type MetricaTecnico } from "@/components/dashboard-tecnicos";
 import { salvarMeta } from "@/app/(app)/financeiro/actions";
 import { saldoEmAberto } from "@/lib/financeiro";
 import { calcMetricasCaixa } from "@/lib/metricas-financeiras";
@@ -23,6 +24,7 @@ import {
   META_ALERTA_PERCENTUAL,
   limiteFinanceiroYmd,
 } from "@/lib/alertas";
+import { nomeTecnico } from "@/lib/permissoes";
 import { STATUS_OS_ABERTAS } from "@/lib/os-status";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +44,41 @@ function ultimosMeses(n: number) {
   return arr;
 }
 
+function fimSemanaYmd(base = new Date()) {
+  const d = new Date(base);
+  const offset = 6 - ((d.getDay() + 6) % 7);
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
+function metricasPorTecnico(
+  perfis: { id: string; nome?: string | null; email?: string | null }[],
+  osList: { tecnico_id: string | null; tecnico: string | null }[],
+  agendaSemana: { tecnico_id: string | null; status: string; data: string }[],
+  agendaRealizados: { tecnico_id: string | null }[],
+  despesas: { criado_por: string | null }[],
+  hojeStr: string
+): MetricaTecnico[] {
+  const pendente = (s: string) => ["agendado", "confirmado", "em_atendimento"].includes(s);
+
+  return perfis.map((p) => {
+    const nome = nomeTecnico(p);
+    const matchOs = (o: { tecnico_id: string | null; tecnico: string | null }) =>
+      o.tecnico_id === p.id || (o.tecnico && o.tecnico.toLowerCase().includes(nome.toLowerCase()));
+    const matchAg = (a: { tecnico_id: string | null }) => a.tecnico_id === p.id;
+
+    return {
+      id: p.id,
+      nome,
+      osAbertas: osList.filter(matchOs).length,
+      visitasHoje: agendaSemana.filter((a) => matchAg(a) && a.data === hojeStr && pendente(a.status)).length,
+      visitasSemana: agendaSemana.filter((a) => matchAg(a) && pendente(a.status)).length,
+      realizadosMes: agendaRealizados.filter(matchAg).length,
+      despesasCampo: despesas.filter((d) => d.criado_por === p.id).length,
+    };
+  });
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const inicioMes = new Date();
@@ -56,6 +93,8 @@ export default async function DashboardPage() {
   const limiteFin = limiteFinanceiroYmd();
   const limiteOficina = new Date();
   limiteOficina.setDate(limiteOficina.getDate() - DIAS_OFICINA_PARADA_PADRAO);
+  const fimSemana = fimSemanaYmd();
+  const inicioMesStr = inicioMes.toISOString().slice(0, 10);
 
   const [
     { count: totalClientes },
@@ -74,6 +113,11 @@ export default async function DashboardPage() {
     { count: contasPagar },
     { count: clienteAusente },
     { data: lancMes },
+    { data: perfisTecnicos },
+    { data: osPorTecnico },
+    { data: agendaSemanaTec },
+    { data: agendaRealizadosMes },
+    { data: despesasCampoTec },
   ] = await Promise.all([
     supabase.from("clientes").select("id", { count: "exact", head: true }),
     supabase
@@ -154,6 +198,24 @@ export default async function DashboardPage() {
       .neq("status", "cancelado")
       .gte("data_pagamento", inicioMes.toISOString().slice(0, 10))
       .in("status", ["pago", "parcial"]),
+    supabase.from("profiles").select("id, nome, email").eq("papel", "tecnico").eq("ativo", true).order("nome"),
+    supabase.from("ordens_servico").select("tecnico_id, tecnico").in("status", [...STATUS_OS_ABERTAS]),
+    supabase
+      .from("agendamentos")
+      .select("tecnico_id, status, data")
+      .gte("data", hojeStr)
+      .lte("data", fimSemana),
+    supabase
+      .from("agendamentos")
+      .select("tecnico_id")
+      .eq("status", "realizado")
+      .gte("data", inicioMesStr),
+    supabase
+      .from("lancamentos_financeiros")
+      .select("criado_por")
+      .eq("tipo", "despesa")
+      .eq("origem", "campo")
+      .eq("status", "pendente"),
   ]);
 
   const receitaMes = (recebimentos || []).reduce((s, r) => s + Number(r.valor_pago), 0);
@@ -186,6 +248,15 @@ export default async function DashboardPage() {
   const statusItems = Object.entries(statusCount)
     .map(([k, v]) => ({ label: STATUS_OS_LABEL[k] || k, value: v }))
     .sort((a, b) => b.value - a.value);
+
+  const metricasTecnicos = metricasPorTecnico(
+    perfisTecnicos || [],
+    osPorTecnico || [],
+    agendaSemanaTec || [],
+    agendaRealizadosMes || [],
+    despesasCampoTec || [],
+    hojeStr
+  );
 
   return (
     <div>
@@ -304,6 +375,8 @@ export default async function DashboardPage() {
       <div className="mt-6">
         <MetaCard ano={anoAtual} mes={mesAtual} meta={meta} realizado={receitaMes} action={salvarMeta} />
       </div>
+
+      <DashboardTecnicos tecnicos={metricasTecnicos} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Últimas OS */}

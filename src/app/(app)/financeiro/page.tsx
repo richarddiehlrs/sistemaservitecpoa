@@ -7,6 +7,7 @@ import { PageHeader, StatCard, EmptyState } from "@/components/ui";
 import { LancamentoForm } from "@/components/lancamento-form";
 import { RegistrarPagamento } from "@/components/registrar-pagamento";
 import { CobrancaWhatsApp } from "@/components/cobranca-whatsapp";
+import { CobrancaWhatsAppLote } from "@/components/cobranca-whatsapp-lote";
 import { ConfirmButton } from "@/components/confirm-button";
 import { LancamentoAcoes } from "@/components/lancamento-acoes";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -157,6 +158,21 @@ export default async function FinanceiroPage({
               <h3 className="font-semibold text-red-800">Inadimplência — contas a receber vencidas</h3>
               <p className="text-sm text-red-600">{inadimplentes.length} título(s) • Total em aberto: {formatCurrency(totalInadimplencia)}</p>
             </div>
+            <CobrancaWhatsAppLote
+              empresa={config.nome}
+              items={inadimplentes.map((l) => {
+                // @ts-expect-error relação
+                const cli = l.clientes;
+                return {
+                  id: l.id,
+                  telefone: cli?.telefone,
+                  cliente: cli?.nome,
+                  descricao: l.descricao,
+                  valor: l.saldo,
+                  vencimento: l.data_vencimento,
+                };
+              })}
+            />
           </div>
           <div className="space-y-2">
             {inadimplentes.slice(0, 5).map((l) => {
