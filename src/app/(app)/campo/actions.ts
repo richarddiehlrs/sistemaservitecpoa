@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { notificarDespesaCampo } from "@/lib/notificacoes";
+import { hojeYmdLocal } from "@/lib/format";
 
 function num(v: FormDataEntryValue | null): number {
   if (v == null) return 0;
@@ -21,7 +22,7 @@ function str(v: FormDataEntryValue | null): string | null {
 export async function lancarDespesaCampo(formData: FormData) {
   const profile = await requirePermissao("despesas_campo");
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
   const tecnico = nomeTecnico(profile);
 
   const tipo = String(formData.get("tipo_despesa") || "outro");

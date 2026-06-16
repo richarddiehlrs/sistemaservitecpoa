@@ -147,6 +147,55 @@ describe("comissão e produtividade", () => {
   });
 });
 
+describe("checkin e aprovação", () => {
+  it("bloqueia check-in após orçamento enviado sem aprovação", async () => {
+    const { checkinBloqueadoPorAprovacao } = await import("@/lib/checkin-os");
+    expect(
+      checkinBloqueadoPorAprovacao(
+        { status: "em_roteiro", aprovado: false },
+        ["aberta", "aguardando_aprovacao"]
+      )
+    ).toBe(true);
+  });
+
+  it("permite check-in na primeira visita em roteiro", async () => {
+    const { checkinBloqueadoPorAprovacao } = await import("@/lib/checkin-os");
+    expect(
+      checkinBloqueadoPorAprovacao({ status: "em_roteiro", aprovado: false }, ["aberta"])
+    ).toBe(false);
+  });
+
+  it("permite check-in após aprovação", async () => {
+    const { checkinBloqueadoPorAprovacao } = await import("@/lib/checkin-os");
+    expect(
+      checkinBloqueadoPorAprovacao(
+        { status: "em_roteiro", aprovado: true },
+        ["aguardando_aprovacao", "aprovada"]
+      )
+    ).toBe(false);
+  });
+});
+
+describe("portal aprovação", () => {
+  it("só permite aprovar em status corretos", async () => {
+    const { podeAprovarOrcamentoPortal } = await import("@/lib/portal-aprovacao");
+    expect(
+      podeAprovarOrcamentoPortal({
+        aprovado: false,
+        status: "aguardando_aprovacao",
+        valorTotal: 200,
+      })
+    ).toBe(true);
+    expect(
+      podeAprovarOrcamentoPortal({
+        aprovado: false,
+        status: "em_execucao",
+        valorTotal: 200,
+      })
+    ).toBe(false);
+  });
+});
+
 describe("mensagens WhatsApp cliente", () => {
   it("inclui link do portal no orçamento pronto", async () => {
     const { mensagemWhatsAppCliente } = await import("@/lib/mensagens-cliente");

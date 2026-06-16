@@ -65,12 +65,21 @@ export function parseDataLocal(value: string | Date): Date {
 }
 
 /** Data de hoje no fuso local, formato YYYY-MM-DD (para inputs type="date"). */
-export function hojeYmdLocal(): string {
-  const d = new Date();
+export function ymdLocal(d: Date = new Date()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+export function hojeYmdLocal(): string {
+  return ymdLocal();
+}
+
+export function amanhaYmdLocal(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return ymdLocal(d);
 }
 
 export function formatDate(value: string | Date | null | undefined): string {

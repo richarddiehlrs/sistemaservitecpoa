@@ -3,12 +3,12 @@ import { MapPin, Wrench, Clock, Navigation, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { TecnicosMapa, LinkMapaCheckin } from "@/components/tecnicos-mapa";
-import { formatCurrency, formatDate, formatHora, formatNumeroOS, formatTelefone, TIPO_AGENDAMENTO_LABEL } from "@/lib/format";
+import { formatCurrency, formatDate, formatHora, formatNumeroOS, formatTelefone, hojeYmdLocal, TIPO_AGENDAMENTO_LABEL } from "@/lib/format";
 import { linkMapa } from "@/lib/geo";
 
 export async function CampoCentral() {
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
   const limiteGps = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
   const [

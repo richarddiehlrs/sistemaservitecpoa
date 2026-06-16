@@ -34,6 +34,7 @@ function parseCliente(formData: FormData) {
 }
 
 export async function criarCliente(formData: FormData) {
+  await requirePermissao("clientes_criar");
   const dados = parseCliente(formData);
   if (!dados.nome) return;
 
@@ -51,6 +52,7 @@ export async function criarCliente(formData: FormData) {
 }
 
 export async function atualizarCliente(id: string, formData: FormData) {
+  await requirePermissao("clientes_criar");
   const dados = parseCliente(formData);
   if (!dados.nome) return;
 

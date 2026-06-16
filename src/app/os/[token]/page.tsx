@@ -17,6 +17,7 @@ import {
   STATUS_OS_LABEL,
 } from "@/lib/format";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
+import { podeAprovarOrcamentoPortal } from "@/lib/portal-aprovacao";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,11 @@ export default async function PortalOsPage({
   const equips: { tipo?: string; marca?: string; modelo?: string; numero_serie?: string; voltagem?: string }[] =
     os.equipamentos || [];
   const ehClienteAusente = os.status === "cliente_ausente";
-  const podeAprovar = !os.aprovado && os.status !== "cancelada" && !ehClienteAusente;
+  const podeAprovar = podeAprovarOrcamentoPortal({
+    aprovado: Boolean(os.aprovado),
+    status: os.status,
+    valorTotal,
+  });
   const valorTotal = calcValorTotalCliente(
     Number(os.valor_itens),
     Number(os.valor_visita),
@@ -90,9 +95,16 @@ export default async function PortalOsPage({
             </div>
             <div className="text-right">
               {os.aprovado ? (
-                <span className="badge inline-flex items-center gap-1 bg-green-100 text-green-700">
-                  <CheckCircle2 className="h-4 w-4" /> Aprovado
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="badge inline-flex items-center gap-1 bg-green-100 text-green-700">
+                    <CheckCircle2 className="h-4 w-4" /> Orçamento aprovado
+                  </span>
+                  {!["concluida", "entregue", "cancelada"].includes(os.status) && (
+                    <span className="text-xs text-slate-500">
+                      {STATUS_OS_LABEL[os.status] || os.status}
+                    </span>
+                  )}
+                </div>
               ) : (
                 <span className="badge inline-flex items-center gap-1 bg-amber-100 text-amber-700">
                   <Clock className="h-4 w-4" /> {STATUS_OS_LABEL[os.status] || os.status}

@@ -39,14 +39,14 @@ export function AppShell({
     });
   }
 
-  const papel = (role as Papel) || "admin";
+  const papel = (role as Papel) || "tecnico";
   const ehTecnico = papel === "tecnico";
 
   return (
     <ToastProvider>
       <RegisterSW />
       <Suspense fallback={null}>
-        <RouteGuard role={(role as Papel) || "admin"} />
+        <RouteGuard role={(role as Papel) || "tecnico"} />
       </Suspense>
       <div className="flex h-screen overflow-hidden bg-[#f6f8fb]">
         {/* Sidebar desktop */}
@@ -69,7 +69,7 @@ export function AppShell({
             collapsed={collapsed}
             onToggleSidebar={toggleCollapsed}
             onOpenMobile={() => setMobileOpen(true)}
-            papel={(role as Papel) || "admin"}
+            papel={(role as Papel) || "tecnico"}
             userId={userId}
             userNome={userNome}
           />

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
-import { onlyDigits } from "@/lib/format";
+import { onlyDigits, hojeYmdLocal } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import {
   resolverEquipamentosOs,
@@ -345,6 +345,19 @@ export async function atualizarOrdem(id: string, formData: FormData) {
       });
     } else if (tipo === "oficina") {
       await supabase.from("agendamentos").delete().eq("os_id", id);
+      if (
+        osAtual &&
+        ["em_roteiro", "em_execucao", "cliente_ausente"].includes(osAtual.status)
+      ) {
+        await transicionarStatusOs(supabase, {
+          osId: id,
+          status: "em_analise",
+          observacao: "Tipo alterado para oficina — visita domicílio removida",
+          origem: "erp",
+          sistema: true,
+          papel: profile.papel,
+        });
+      }
     }
 
     if (tipo === "domicilio" && tecnico_id && tecnico_id !== osAtual.tecnico_id) {
@@ -508,7 +521,7 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
   const dataVencimento = str(formData.get("data_vencimento"));
   const formaPagamento = str(formData.get("forma_pagamento")) || os.forma_pagamento;
   const numeroFmt = `OS-${String(os.numero).padStart(5, "0")}`;
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
 
   const [{ data: catReceita }, { data: catCusto }] = await Promise.all([
     supabase.from("categorias_financeiras").select("id").eq("nome", "Serviços de assistência técnica").limit(1).single(),

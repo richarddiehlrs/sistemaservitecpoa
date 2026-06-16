@@ -80,8 +80,7 @@ function etapaConcluida(
         "aguardando_aprovacao",
         "aguardando_peca",
         "concluida",
-        "entregue",
-        "aprovada"
+        "entregue"
       );
     case "peca":
       return (

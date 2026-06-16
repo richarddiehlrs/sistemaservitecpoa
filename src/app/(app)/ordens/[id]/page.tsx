@@ -30,6 +30,7 @@ import {
 } from "@/lib/format";
 import { carregarEquipamentosOs, textoEquipamentos } from "@/lib/os-equipamentos";
 import { calcValorTotalCliente, linhaVisitaValor } from "@/lib/os-valores";
+import { podeAprovarOrcamentoPortal } from "@/lib/portal-aprovacao";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
 import { calcLucroOs } from "@/lib/metricas-financeiras";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
@@ -129,11 +130,11 @@ export default async function OrdemDetalhePage({
     ehTecnico &&
     !["cliente_ausente", "cancelada", "entregue", "concluida"].includes(os.status);
 
-  const podeAprovarOrcamento =
-    !os.aprovado &&
-    os.status !== "cancelada" &&
-    os.status !== "cliente_ausente" &&
-    !["concluida", "entregue"].includes(os.status);
+  const podeAprovarOrcamento = podeAprovarOrcamentoPortal({
+    aprovado: Boolean(os.aprovado),
+    status: os.status,
+    valorTotal,
+  });
   const jaFoiAprovada = (historico || []).some((h) => h.status === "aprovada");
   const valorMudouAposAprovacao =
     os.aprovado &&

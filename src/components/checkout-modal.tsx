@@ -3,14 +3,9 @@
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
+import { amanhaYmdLocal, hojeYmdLocal } from "@/lib/format";
 
 type Resultado = "visita" | "servico_concluido" | "aguardando_peca";
-
-function dataAmanhaYmd(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
 
 export function CheckoutModal({
   open,
@@ -28,7 +23,7 @@ export function CheckoutModal({
   const [resultado, setResultado] = useState<Resultado>("visita");
   const [visitaCobrada, setVisitaCobrada] = useState(false);
   const [agendarRetorno, setAgendarRetorno] = useState(true);
-  const [retornoData, setRetornoData] = useState(dataAmanhaYmd);
+  const [retornoData, setRetornoData] = useState(amanhaYmdLocal);
   const [retornoTurno, setRetornoTurno] = useState<"manha" | "tarde" | "dia">("manha");
 
   if (!open) return null;
@@ -57,7 +52,7 @@ export function CheckoutModal({
     onClose();
   }
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">

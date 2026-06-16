@@ -10,6 +10,14 @@ type Db = SupabaseClient<Database>;
 /** Status que passam para `aprovada` ao aprovar orçamento (execução mantém status atual). */
 export const STATUS_APROVA_PARA: StatusOS[] = ["aberta", "em_analise", "aguardando_aprovacao"];
 
+/** Status que voltam para aguardando_aprovacao quando o orçamento muda após aprovação. */
+export const STATUS_REAPROVA_ORCAMENTO: StatusOS[] = [
+  "aprovada",
+  "em_execucao",
+  "em_roteiro",
+  "aguardando_peca",
+];
+
 export function statusAposAprovacao(statusAtual: StatusOS): StatusOS {
   if (statusAtual === "em_execucao" || statusAtual === "em_roteiro" || statusAtual === "aguardando_peca") {
     return statusAtual;
@@ -37,7 +45,7 @@ export function calcValorAprovadoOs(os: {
   );
 }
 
-/** Aprovação atômica: OS + histórico + agenda + financeiro + notificações. */
+/** Aprovação: OS + histórico + agenda + financeiro + notificações (com rollback se financeiro falhar). */
 export async function executarAprovacaoOs(
   supabase: Db,
   opts: {
@@ -50,7 +58,7 @@ export async function executarAprovacaoOs(
   const { data: os } = await supabase
     .from("ordens_servico")
     .select(
-      "id, numero, aprovado, status, tecnico_id, valor_itens, valor_visita, abater_visita, desconto, acrescimo, clientes(nome)"
+      "id, numero, aprovado, status, tecnico_id, valor_itens, valor_visita, abater_visita, desconto, acrescimo, valor_total, clientes(nome)"
     )
     .eq("id", opts.osId)
     .maybeSingle();
@@ -64,6 +72,7 @@ export async function executarAprovacaoOs(
   // @ts-expect-error relação embutida
   const clienteNome = os.clientes?.nome as string | undefined;
   const valorAprovado = calcValorAprovadoOs(os);
+  const statusOriginal = os.status as StatusOS;
 
   if (valorAprovado <= 0) {
     return { ok: false, erro: "Informe os valores (serviços/peças ou visita) antes de aprovar." };
@@ -74,7 +83,7 @@ export async function executarAprovacaoOs(
     return { ok: true, jaAprovada: true };
   }
 
-  const novoStatus = statusAposAprovacao(os.status as StatusOS);
+  const novoStatus = statusAposAprovacao(statusOriginal);
 
   const update: Record<string, unknown> = {
     aprovado: true,
@@ -106,7 +115,7 @@ export async function executarAprovacaoOs(
 
   await supabase.from("os_status_historico").insert({
     os_id: os.id,
-    status: "aprovada",
+    status: novoStatus,
     observacao: `Orçamento aprovado (${opts.origem})`,
   });
 
@@ -114,8 +123,27 @@ export async function executarAprovacaoOs(
 
   const financeOk = await criarReceitaPendenteOs(supabase, os.id);
   if (!financeOk) {
-    console.warn("[aprovacao-os] Receita não criada para OS", os.id);
-    return { ok: false, erro: "Orçamento salvo, mas não foi possível gerar a receita no financeiro." };
+    console.warn("[aprovacao-os] Receita não criada — revertendo aprovação OS", os.id);
+    await supabase
+      .from("ordens_servico")
+      .update({
+        aprovado: false,
+        data_aprovacao: null,
+        valor_aprovado: null,
+        observacao_aprovacao: null,
+        status: statusOriginal,
+        valor_total: Number(os.valor_total),
+        ...(opts.assinatura ? { assinatura_cliente: null } : {}),
+      })
+      .eq("id", os.id);
+
+    await supabase.from("os_status_historico").insert({
+      os_id: os.id,
+      status: statusOriginal,
+      observacao: "Aprovação revertida: não foi possível gerar receita no financeiro",
+    });
+
+    return { ok: false, erro: "Não foi possível gerar a receita no financeiro. A aprovação foi desfeita." };
   }
 
   await notificarOsAprovada({
@@ -165,7 +193,7 @@ export async function requererReaprovacaoSeValoresMudaram(
     })
     .eq("id", osId);
 
-  if (["aprovada", "em_execucao"].includes(antes.status)) {
+  if (STATUS_REAPROVA_ORCAMENTO.includes(antes.status)) {
     const { data: osMeta } = await supabase
       .from("ordens_servico")
       .select("numero, clientes(nome)")

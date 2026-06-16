@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcValorTotalCliente } from "@/lib/os-valores";
+import { hojeYmdLocal } from "@/lib/format";
 import type { Database } from "@/types/database";
 
 type Db = SupabaseClient<Database>;
@@ -18,9 +19,9 @@ export async function temReceitaAtivaOs(supabase: Db, osId: string): Promise<boo
 /** @deprecated Use temReceitaAtivaOs — mantido para compatibilidade. */
 export const temLancamentoAtivoOs = temReceitaAtivaOs;
 
-/** Cria receita pendente quando o orçamento é aprovado (portal ou ERP). */
+/** Cria receita pendente quando o orçamento é aprovado (portal ou ERP). Idempotente. */
 export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promise<boolean> {
-  if (await temReceitaAtivaOs(supabase, osId)) return false;
+  if (await temReceitaAtivaOs(supabase, osId)) return true;
 
   const { data: os } = await supabase
     .from("ordens_servico")
@@ -46,7 +47,7 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
     supabase.from("categorias_financeiras").select("id").eq("nome", "Compra de peças").limit(1).maybeSingle(),
   ]);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
   const numeroFmt = `OS-${String(os.numero).padStart(5, "0")}`;
 
   const linhas: Record<string, unknown>[] = [
@@ -103,9 +104,21 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
 export async function cancelarReceitaPendenteOs(supabase: Db, osId: string): Promise<void> {
   const { data: lancamentos } = await supabase
     .from("lancamentos_financeiros")
-    .select("id, tipo, descricao, status, origem")
+    .select("id, tipo, descricao, status, origem, valor_pago")
     .eq("os_id", osId)
     .neq("status", "cancelado");
+
+  for (const l of lancamentos || []) {
+    if (
+      l.tipo === "receita" &&
+      l.status === "parcial" &&
+      Number(l.valor_pago) > 0
+    ) {
+      throw new Error(
+        "Não é possível alterar o orçamento: há pagamento parcial registrado nesta OS."
+      );
+    }
+  }
 
   for (const l of lancamentos || []) {
     if (l.origem === "campo" || l.status === "pago") continue;
@@ -202,7 +215,7 @@ export async function sincronizarFinanceiroOs(
       .single();
     if (os) {
       const numeroFmt = `OS-${String(os.numero).padStart(5, "0")}`;
-      const hoje = new Date().toISOString().slice(0, 10);
+      const hoje = hojeYmdLocal();
       await supabase.from("lancamentos_financeiros").insert({
         tipo: "despesa",
         descricao: `Custo ${numeroFmt}`,

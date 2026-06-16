@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, MapPin, Clock, Phone, Sun, Sunset, Wrench, C
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard } from "@/components/ui";
 import { mapTecnicos } from "@/lib/tecnicos";
-import { formatHora, formatNumeroOS, formatTelefone, STATUS_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_COLOR } from "@/lib/format";
+import { formatHora, formatNumeroOS, formatTelefone, hojeYmdLocal, ymdLocal, STATUS_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_COLOR } from "@/lib/format";
 import { TURNOS } from "@/lib/turnos";
 import { CheckinButtons } from "@/components/checkin-buttons";
 import { ExcluirAgendamentoButton } from "@/components/excluir-agendamento-button";
@@ -18,7 +18,7 @@ import { checkinAgendamento, checkoutAgendamento, criarAgendamento, excluirAgend
 export const dynamic = "force-dynamic";
 
 function ymd(d: Date) {
-  return d.toISOString().slice(0, 10);
+  return ymdLocal(d);
 }
 function inicioSemana(base: Date) {
   const d = new Date(base);

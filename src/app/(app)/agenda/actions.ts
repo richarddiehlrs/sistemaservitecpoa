@@ -5,12 +5,17 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { horarioTurno } from "@/lib/turnos";
+import { hojeYmdLocal } from "@/lib/format";
 import { transicionarStatusOs } from "@/lib/transicao-os";
 import { statusPosCheckout, statusPermiteCheckin, type CheckoutResultado } from "@/lib/transicao-status";
 import { calcValorTotalCliente } from "@/lib/os-valores";
-import { sincronizarFinanceiroOs } from "@/lib/os-financeiro";
 import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
+import { requererReaprovacaoSeValoresMudaram } from "@/lib/aprovacao-os";
 import { notificarWhatsAppClienteSugerido } from "@/lib/notificacoes";
+import {
+  checkinBloqueadoPorAprovacao,
+  mensagemCheckinBloqueado,
+} from "@/lib/checkin-os";
 
 function str(v: FormDataEntryValue | null): string | null {
   const s = v == null ? "" : String(v).trim();
@@ -70,7 +75,7 @@ export async function criarAgendamento(formData: FormData) {
   const horas = horarioTurno(turno);
   const { tecnico_id, tecnico } = await resolverTecnicoAgenda(supabase, formData);
   const osId = str(formData.get("os_id"));
-  const data = str(formData.get("data")) || new Date().toISOString().slice(0, 10);
+  const data = str(formData.get("data")) || hojeYmdLocal();
 
   if (osId) {
     const { data: os } = await supabase
@@ -201,17 +206,25 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
     updates.tecnico_id = profile.id;
   }
 
-  const { error } = await supabase.from("agendamentos").update(updates).eq("id", id);
-  if (error) throw new Error(error.message);
-
   if (ag.os_id) {
     const { data: osCheckin } = await supabase
       .from("ordens_servico")
-      .select("status")
+      .select("status, aprovado")
       .eq("id", ag.os_id)
       .single();
 
+    const { data: histRows } = await supabase
+      .from("os_status_historico")
+      .select("status")
+      .eq("os_id", ag.os_id);
+
+    const histStatuses = (histRows || []).map((h) => h.status);
+
     if (!osCheckin || !statusPermiteCheckin(osCheckin.status as never)) {
+      throw new Error(mensagemCheckinBloqueado(osCheckin?.status as never));
+    }
+
+    if (checkinBloqueadoPorAprovacao(osCheckin as never, histStatuses)) {
       throw new Error(
         "Esta OS aguarda aprovação do cliente antes de iniciar o atendimento. Reagende após a aprovação."
       );
@@ -232,6 +245,9 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
       extras,
     });
   }
+
+  const { error: errAgenda } = await supabase.from("agendamentos").update(updates).eq("id", id);
+  if (errAgenda) throw new Error(errAgenda.message);
 
   if (lat != null && lng != null) {
     await salvarPosicaoTecnico(supabase, profile, lat, lng, precisao, true, id);
@@ -265,9 +281,6 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
     .eq("id", id)
     .single();
 
-  const { error } = await supabase.from("agendamentos").update(updates).eq("id", id);
-  if (error) throw new Error(error.message);
-
   if (ag?.os_id) {
     const resultado = (String(formData?.get("resultado") || "visita") as CheckoutResultado);
     const visitaCobrada = formData?.get("visita_cobrada") === "on";
@@ -275,7 +288,7 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
     const { data: os } = await supabase
       .from("ordens_servico")
       .select(
-        "status, aprovado, tipo_atendimento, valor_visita, valor_itens, abater_visita, desconto, acrescimo, custo_total, cliente_id, numero, tecnico, tecnico_id, data_previsao, turno, clientes(nome)"
+        "status, aprovado, tipo_atendimento, valor_visita, valor_itens, abater_visita, desconto, acrescimo, custo_total, cliente_id, numero, tecnico, tecnico_id, data_previsao, turno, valor_aprovado, clientes(nome)"
       )
       .eq("id", ag.os_id)
       .single();
@@ -295,11 +308,20 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
           .eq("id", ag.os_id);
 
         if (os.aprovado) {
-          await sincronizarFinanceiroOs(
+          await requererReaprovacaoSeValoresMudaram(
             supabase,
             ag.os_id,
-            novoTotal,
-            Number(os.custo_total) || 0
+            {
+              aprovado: true,
+              valor_aprovado: os.valor_aprovado,
+              status: os.status as never,
+              valor_itens: Number(os.valor_itens),
+              valor_visita: Number(os.valor_visita),
+              abater_visita: false,
+              desconto: Number(os.desconto),
+              acrescimo: Number(os.acrescimo),
+            },
+            novoTotal
           );
         }
       }
@@ -369,6 +391,9 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
       }
     }
   }
+
+  const { error } = await supabase.from("agendamentos").update(updates).eq("id", id);
+  if (error) throw new Error(error.message);
 
   if (lat != null && lng != null) {
     await salvarPosicaoTecnico(supabase, profile, lat, lng, precisao, false, null);

@@ -63,7 +63,11 @@ export async function sincronizarAgendamentoOs(
       return existente.id;
     }
 
-    if (["realizado", "cancelado", "em_atendimento"].includes(existente.status)) {
+    if (existente.status === "em_atendimento") {
+      throw new Error("Não é possível reagendar: há uma visita em andamento para esta OS.");
+    }
+
+    if (["realizado", "cancelado"].includes(existente.status)) {
       const { data: novo, error } = await supabase
         .from("agendamentos")
         .insert({ ...payload, status: "agendado" })

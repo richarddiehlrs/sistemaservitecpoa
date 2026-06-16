@@ -15,6 +15,7 @@ import {
   formatHora,
   STATUS_OS_LABEL,
   TIPO_AGENDAMENTO_LABEL,
+  ymdLocal,
 } from "@/lib/format";
 import {
   STATUS_AGENDA_PENDENTE,
@@ -48,7 +49,7 @@ function fimSemanaYmd(base = new Date()) {
   const d = new Date(base);
   const offset = 6 - ((d.getDay() + 6) % 7);
   d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+  return ymdLocal(d);
 }
 
 function metricasPorTecnico(
@@ -89,12 +90,12 @@ export default async function DashboardPage() {
   const inicio6m = new Date();
   inicio6m.setMonth(inicio6m.getMonth() - 5, 1);
   inicio6m.setHours(0, 0, 0, 0);
-  const hojeStr = new Date().toISOString().slice(0, 10);
+  const hojeStr = ymdLocal();
   const limiteFin = limiteFinanceiroYmd();
   const limiteOficina = new Date();
   limiteOficina.setDate(limiteOficina.getDate() - DIAS_OFICINA_PARADA_PADRAO);
   const fimSemana = fimSemanaYmd();
-  const inicioMesStr = inicioMes.toISOString().slice(0, 10);
+  const inicioMesStr = ymdLocal(inicioMes);
 
   const [
     { count: totalClientes },
@@ -134,7 +135,7 @@ export default async function DashboardPage() {
       .select("valor_pago")
       .eq("tipo", "receita")
       .in("status", ["pago", "parcial"])
-      .gte("data_pagamento", inicioMes.toISOString().slice(0, 10)),
+      .gte("data_pagamento", ymdLocal(inicioMes)),
     supabase
       .from("lancamentos_financeiros")
       .select("valor, valor_pago, juros, multa")
@@ -144,7 +145,7 @@ export default async function DashboardPage() {
       .from("lancamentos_financeiros")
       .select("tipo, valor_pago, data_pagamento")
       .in("status", ["pago", "parcial"])
-      .gte("data_pagamento", inicio6m.toISOString().slice(0, 10)),
+      .gte("data_pagamento", ymdLocal(inicio6m)),
     supabase.from("ordens_servico").select("status"),
     supabase
       .from("agendamentos")
@@ -196,7 +197,7 @@ export default async function DashboardPage() {
       .from("lancamentos_financeiros")
       .select("tipo, valor, valor_pago, status, categorias_financeiras(grupo_dre)")
       .neq("status", "cancelado")
-      .gte("data_pagamento", inicioMes.toISOString().slice(0, 10))
+      .gte("data_pagamento", ymdLocal(inicioMes))
       .in("status", ["pago", "parcial"]),
     supabase.from("profiles").select("id, nome, email").eq("papel", "tecnico").eq("ativo", true).order("nome"),
     supabase.from("ordens_servico").select("tecnico_id, tecnico").in("status", [...STATUS_OS_ABERTAS]),

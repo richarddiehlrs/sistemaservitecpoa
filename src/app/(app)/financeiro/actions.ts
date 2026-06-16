@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
+import { hojeYmdLocal, ymdLocal } from "@/lib/format";
+import { saldoEmAberto } from "@/lib/financeiro";
 
 function num(v: FormDataEntryValue | null): number {
   if (v == null) return 0;
@@ -29,15 +31,15 @@ function revalidarFinanceiro() {
 }
 
 function addMeses(dataISO: string, n: number): string {
-  const d = new Date(dataISO + "T00:00:00");
+  const d = new Date(dataISO + "T12:00:00");
   d.setMonth(d.getMonth() + n);
-  return d.toISOString().slice(0, 10);
+  return ymdLocal(d);
 }
 
 export async function criarLancamento(formData: FormData) {
   await requirePermissao("financeiro");
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
 
   const tipo = String(formData.get("tipo") || "despesa") as "receita" | "despesa";
   const descricao = String(formData.get("descricao") || "").trim() || "Lançamento";
@@ -90,7 +92,7 @@ export async function criarLancamento(formData: FormData) {
 export async function registrarPagamento(id: string, formData: FormData) {
   await requirePermissao("financeiro");
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
 
   const { data: l } = await supabase
     .from("lancamentos_financeiros")
@@ -100,10 +102,17 @@ export async function registrarPagamento(id: string, formData: FormData) {
   if (!l) throw new Error("Lançamento não encontrado.");
 
   const pagamento = num(formData.get("valor"));
+  if (pagamento <= 0) throw new Error("Informe um valor de pagamento maior que zero.");
+
   const jurosNovos = num(formData.get("juros"));
   const multaNovos = num(formData.get("multa"));
   const forma = str(formData.get("forma_pagamento"));
   const data = str(formData.get("data_pagamento")) || hoje;
+
+  const saldo = saldoEmAberto(l);
+  if (pagamento > saldo + 0.001) {
+    throw new Error(`Pagamento excede o saldo em aberto (${saldo.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}).`);
+  }
 
   const juros = Number(l.juros) + jurosNovos;
   const multa = Number(l.multa) + multaNovos;
@@ -132,13 +141,14 @@ export async function registrarPagamento(id: string, formData: FormData) {
 export async function marcarPago(id: string) {
   await requirePermissao("financeiro");
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
   const { data: l } = await supabase
     .from("lancamentos_financeiros")
     .select("valor, juros, multa")
     .eq("id", id)
     .single();
-  const total = l ? Number(l.valor) + Number(l.juros) + Number(l.multa) : 0;
+  if (!l) throw new Error("Lançamento não encontrado.");
+  const total = Number(l.valor) + Number(l.juros) + Number(l.multa);
   const { error } = await supabase
     .from("lancamentos_financeiros")
     .update({ status: "pago", data_pagamento: hoje, valor_pago: total })
@@ -150,7 +160,7 @@ export async function marcarPago(id: string) {
 export async function atualizarLancamento(id: string, formData: FormData) {
   await requirePermissao("financeiro");
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
 
   const { data: atual } = await supabase
     .from("lancamentos_financeiros")

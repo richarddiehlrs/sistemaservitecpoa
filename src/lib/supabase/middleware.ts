@@ -1,10 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
+import type { Papel } from "@/lib/permissoes";
 
-const PUBLIC_PATHS = ["/login", "/auth", "/os", "/imprimir/portal"];
+const DEFAULT_PUBLIC_PATHS = ["/login", "/auth", "/os", "/imprimir/portal"];
 
-export async function updateSession(request: NextRequest) {
+type SessionOpts = {
+  publicPaths?: string[];
+  guardAppRoutes?: (pathname: string, papel: Papel) => boolean;
+  homePorPapel?: (papel: Papel) => string;
+};
+
+export async function updateSession(request: NextRequest, opts: SessionOpts = {}) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
@@ -33,7 +40,8 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const publicPaths = opts.publicPaths ?? DEFAULT_PUBLIC_PATHS;
+  const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -42,15 +50,34 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && pathname === "/login") {
+  if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("papel")
+      .select("papel, ativo")
       .eq("id", user.id)
       .maybeSingle();
-    const url = request.nextUrl.clone();
-    url.pathname = profile?.papel === "tecnico" ? "/campo" : "/dashboard";
-    return NextResponse.redirect(url);
+
+    if (!profile?.ativo && !isPublic) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("erro", "conta_inativa");
+      return NextResponse.redirect(url);
+    }
+
+    const papel = (profile?.papel ?? "tecnico") as Papel;
+
+    if (pathname === "/login") {
+      const url = request.nextUrl.clone();
+      url.pathname = opts.homePorPapel?.(papel) ?? (papel === "tecnico" ? "/campo" : "/dashboard");
+      return NextResponse.redirect(url);
+    }
+
+    if (!isPublic && opts.guardAppRoutes && !opts.guardAppRoutes(pathname, papel)) {
+      const url = request.nextUrl.clone();
+      url.pathname = opts.homePorPapel?.(papel) ?? (papel === "tecnico" ? "/campo" : "/dashboard");
+      url.searchParams.set("erro", "sem_permissao");
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;
