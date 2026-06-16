@@ -1,3 +1,4 @@
+import { hojeYmdLocal } from "@/lib/format";
 import { STATUS_OS_ABERTAS } from "@/lib/os-status";
 
 /** OS com visita atrasada (exclui cliente ausente — alerta separado). */
@@ -18,11 +19,14 @@ export const STATUS_OFICINA_PARADA = ["em_analise", "aguardando_peca"] as const;
 export const META_ALERTA_PERCENTUAL = 70;
 
 export function hojeYmd(): string {
-  return new Date().toISOString().slice(0, 10);
+  return hojeYmdLocal();
 }
 
 export function limiteFinanceiroYmd(dias = DIAS_AVISO_FINANCEIRO): string {
   const d = new Date();
   d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }

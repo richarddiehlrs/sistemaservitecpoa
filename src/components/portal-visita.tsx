@@ -1,12 +1,12 @@
 import {
+  Calendar,
   CheckCircle2,
   ClipboardList,
   FileText,
   MapPin,
   Package,
-  Truck,
-  UserX,
   Wrench,
+  UserX,
   XCircle,
 } from "lucide-react";
 import { formatDate, formatDateTime, formatHora, STATUS_OS_LABEL, STATUS_OS_COLOR } from "@/lib/format";
@@ -24,31 +24,75 @@ const JORNADA = [
   { key: "registro", label: "Ordem registrada", icon: ClipboardList },
   { key: "orcamento", label: "Orçamento enviado", icon: FileText },
   { key: "aprovado", label: "Orçamento aprovado", icon: CheckCircle2 },
-  { key: "roteiro", label: "Técnico a caminho", icon: Truck },
+  { key: "roteiro", label: "Visita agendada", icon: Calendar },
   { key: "atendimento", label: "Em atendimento", icon: Wrench },
   { key: "peca", label: "Aguardando peça", icon: Package },
   { key: "concluido", label: "Serviço concluído", icon: CheckCircle2 },
 ] as const;
 
-const STATUS_PARA_ETAPA: Record<string, number> = {
-  aberta: 0,
-  em_analise: 0,
-  aguardando_aprovacao: 1,
-  aprovada: 2,
-  em_roteiro: 3,
-  em_execucao: 4,
-  cliente_ausente: 4,
-  aguardando_peca: 5,
-  concluida: 6,
-  entregue: 6,
-  garantia: 6,
-};
+type EtapaKey = (typeof JORNADA)[number]["key"];
 
-function indiceEtapaAtual(status: string, aprovado: boolean): number {
-  if (status === "cancelada") return -1;
-  let base = STATUS_PARA_ETAPA[status] ?? (aprovado ? 2 : 0);
-  if (aprovado && base < 2) base = 2;
-  return base;
+function statusNoHistorico(eventos: HistoricoItem[], ...statuses: string[]): boolean {
+  return eventos.some((h) => statuses.includes(h.status));
+}
+
+/** Etapa atual com base no status real — não pula orçamento/aprovação indevidamente. */
+function etapaAtualKey(status: string, aprovado: boolean): EtapaKey {
+  if (status === "cancelada") return "registro";
+  if (["concluida", "entregue", "garantia"].includes(status)) return "concluido";
+  if (status === "aguardando_peca") return "peca";
+  if (status === "em_execucao" || status === "cliente_ausente") return "atendimento";
+  if (status === "em_roteiro") return "roteiro";
+  if (status === "aprovada") return "aprovado";
+  if (status === "aguardando_aprovacao") return "orcamento";
+  return "registro";
+}
+
+/** Etapa concluída só quando há evidência no fluxo (histórico ou flag de aprovação). */
+function etapaConcluida(
+  key: EtapaKey,
+  status: string,
+  aprovado: boolean,
+  eventos: HistoricoItem[]
+): boolean {
+  switch (key) {
+    case "registro":
+      return true;
+    case "orcamento":
+      return (
+        statusNoHistorico(eventos, "aguardando_aprovacao") && status !== "aguardando_aprovacao"
+      );
+    case "aprovado":
+      return aprovado;
+    case "roteiro":
+      return statusNoHistorico(
+        eventos,
+        "em_execucao",
+        "cliente_ausente",
+        "aguardando_aprovacao",
+        "aguardando_peca",
+        "concluida",
+        "entregue"
+      );
+    case "atendimento":
+      return statusNoHistorico(
+        eventos,
+        "aguardando_aprovacao",
+        "aguardando_peca",
+        "concluida",
+        "entregue",
+        "aprovada"
+      );
+    case "peca":
+      return (
+        statusNoHistorico(eventos, "concluida", "entregue") &&
+        statusNoHistorico(eventos, "aguardando_peca")
+      );
+    case "concluido":
+      return ["concluida", "entregue", "garantia"].includes(status);
+    default:
+      return false;
+  }
 }
 
 function observacaoParaCliente(obs?: string | null): string | null {
@@ -58,6 +102,9 @@ function observacaoParaCliente(obs?: string | null): string | null {
   if (o.includes("check-out") || o.includes("checkout")) return "Visita finalizada pelo técnico.";
   if (o.includes("portal") || o.includes("aprovado pelo cliente")) return "Você aprovou o orçamento.";
   if (o.includes("via erp") || o.includes("atualizado via")) return null;
+  if (o.includes("ordem de serviço aberta") || o.includes("ordem de servico aberta")) {
+    return "Sua ordem foi registrada em nosso sistema.";
+  }
   return obs;
 }
 
@@ -68,7 +115,7 @@ function iconeHistorico(status: string) {
     case "aprovada":
       return CheckCircle2;
     case "em_roteiro":
-      return Truck;
+      return Calendar;
     case "em_execucao":
       return Wrench;
     case "aguardando_peca":
@@ -83,6 +130,13 @@ function iconeHistorico(status: string) {
     default:
       return ClipboardList;
   }
+}
+
+function rotuloHistorico(status: string, obs?: string | null): string {
+  if (status === "aberta" && obs?.toLowerCase().includes("ordem de servi")) {
+    return "Ordem registrada";
+  }
+  return STATUS_OS_LABEL[status] || status;
 }
 
 export function PortalAcompanhamento({
@@ -109,29 +163,32 @@ export function PortalAcompanhamento({
   } | null;
 }) {
   const cancelada = status === "cancelada";
-  const etapaAtual = indiceEtapaAtual(status, aprovado);
+  const atualKey = etapaAtualKey(status, aprovado);
   const ehAusente = status === "cliente_ausente";
 
   const eventos = [...historico].sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   );
 
-  // Datas-chave por etapa (a partir do histórico)
-  const dataPorEtapa: Partial<Record<string, string>> = {};
+  const dataPorEtapa: Partial<Record<EtapaKey, string>> = {};
   for (const h of eventos) {
-    const idx = STATUS_PARA_ETAPA[h.status];
-    if (idx === 0) dataPorEtapa.registro = h.created_at;
-    if (idx === 1) dataPorEtapa.orcamento = h.created_at;
-    if (idx === 2 || h.status === "aprovada") dataPorEtapa.aprovado = h.created_at;
-    if (idx === 3) dataPorEtapa.roteiro = h.created_at;
-    if (idx === 4) dataPorEtapa.atendimento = h.created_at;
-    if (idx === 5) dataPorEtapa.peca = h.created_at;
-    if (idx === 6) dataPorEtapa.concluido = h.created_at;
+    if (h.status === "aberta" || h.status === "em_analise") {
+      dataPorEtapa.registro = h.created_at;
+    }
+    if (h.status === "aguardando_aprovacao") dataPorEtapa.orcamento = h.created_at;
+    if (h.status === "aprovada") dataPorEtapa.aprovado = h.created_at;
+    if (h.status === "em_roteiro") dataPorEtapa.roteiro = h.created_at;
+    if (h.status === "em_execucao" || h.status === "cliente_ausente") {
+      dataPorEtapa.atendimento = h.created_at;
+    }
+    if (h.status === "aguardando_peca") dataPorEtapa.peca = h.created_at;
+    if (h.status === "concluida" || h.status === "entregue") {
+      dataPorEtapa.concluido = h.created_at;
+    }
   }
   if (aprovado && dataAprovacao) dataPorEtapa.aprovado = dataAprovacao;
 
-  const dataVisitaExibir =
-    proximoAgendamento?.data || dataPrevisao;
+  const dataVisitaExibir = proximoAgendamento?.data || dataPrevisao;
   const turnoVisitaExibir = proximoAgendamento?.turno || turno;
   const horaVisitaExibir = proximoAgendamento?.hora_inicio || null;
 
@@ -151,15 +208,16 @@ export function PortalAcompanhamento({
         <ol className="mb-6 space-y-0">
           {JORNADA.map((etapa, i) => {
             const Icon = etapa.icon;
-            const concluida = etapaAtual > i;
-            const atual = etapaAtual === i;
-            const futura = etapaAtual < i;
+            const concluida =
+              etapaConcluida(etapa.key, status, aprovado, eventos) && etapa.key !== atualKey;
+            const atual = atualKey === etapa.key;
+            const futura = !concluida && !atual;
             const tevePeca =
               status === "aguardando_peca" ||
               eventos.some((h) => h.status === "aguardando_peca");
-            if (etapa.key === "peca" && !tevePeca && etapaAtual < 5) return null;
+            if (etapa.key === "peca" && !tevePeca && !concluida && !atual) return null;
 
-            const dataEtapa = dataPorEtapa[etapa.key as keyof typeof dataPorEtapa];
+            const dataEtapa = dataPorEtapa[etapa.key];
 
             return (
               <li key={etapa.key} className="relative flex gap-3 pb-5 last:pb-0">
@@ -176,7 +234,10 @@ export function PortalAcompanhamento({
                     "relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2",
                     concluida && "border-brand-500 bg-brand-500 text-white",
                     atual && !ehAusente && "border-brand-500 bg-brand-50 text-brand-700 ring-4 ring-brand-100",
-                    atual && ehAusente && etapa.key === "atendimento" && "border-rose-500 bg-rose-50 text-rose-700 ring-4 ring-rose-100",
+                    atual &&
+                      ehAusente &&
+                      etapa.key === "atendimento" &&
+                      "border-rose-500 bg-rose-50 text-rose-700 ring-4 ring-rose-100",
                     futura && "border-slate-200 bg-white text-slate-300"
                   )}
                 >
@@ -196,7 +257,7 @@ export function PortalAcompanhamento({
                       </span>
                     )}
                   </p>
-                  {dataEtapa && (concluida || atual) && (
+                  {concluida && dataEtapa && etapa.key !== "roteiro" && (
                     <p className="text-xs text-slate-500">{formatDateTime(dataEtapa)}</p>
                   )}
                   {atual && ehAusente && etapa.key === "atendimento" && (
@@ -204,7 +265,7 @@ export function PortalAcompanhamento({
                       Técnico compareceu, mas não foi possível realizar o atendimento.
                     </p>
                   )}
-                  {atual && etapa.key === "roteiro" && dataVisitaExibir && (
+                  {(atual || concluida) && etapa.key === "roteiro" && dataVisitaExibir && (
                     <p className="mt-1 text-xs text-slate-600">
                       Visita prevista: {formatDate(dataVisitaExibir)}
                       {turnoVisitaExibir && TURNO_LABEL[turnoVisitaExibir]
@@ -253,7 +314,7 @@ export function PortalAcompanhamento({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline justify-between gap-1">
                       <p className="text-sm font-medium text-slate-800">
-                        {STATUS_OS_LABEL[h.status] || h.status}
+                        {rotuloHistorico(h.status, h.observacao)}
                       </p>
                       <time className="text-xs text-slate-400">{formatDateTime(h.created_at)}</time>
                     </div>

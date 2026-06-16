@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Loader2, Plus, Search, X, UserCheck, Wrench } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { formatTelefone } from "@/lib/format";
+import { formatTelefone, hojeYmdLocal } from "@/lib/format";
 import { TecnicoCargaTrabalho } from "@/components/tecnico-carga-trabalho";
 import type { TecnicoOpcao } from "@/lib/tecnicos";
 
@@ -223,7 +223,7 @@ export function AgendaForm({
             <div>
               <label className="label">Data *</label>
               <input type="date" name="data" required className="input"
-                defaultValue={dataPadrao || new Date().toISOString().slice(0, 10)} />
+                defaultValue={dataPadrao || hojeYmdLocal()} />
             </div>
             <div>
               <label className="label">Turno</label>

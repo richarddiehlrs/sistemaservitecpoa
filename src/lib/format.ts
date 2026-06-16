@@ -54,16 +54,40 @@ export function valorPorExtenso(value: number | null | undefined): string {
   return partes.join(" e ");
 }
 
+/** Interpreta "YYYY-MM-DD" como data local (evita dia anterior em UTC-3). */
+export function parseDataLocal(value: string | Date): Date {
+  if (value instanceof Date) return value;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  return new Date(value);
+}
+
+/** Data de hoje no fuso local, formato YYYY-MM-DD (para inputs type="date"). */
+export function hojeYmdLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "-";
-  const d = typeof value === "string" ? new Date(value) : value;
+  const d = typeof value === "string" ? parseDataLocal(value) : value;
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString("pt-BR");
 }
 
 export function formatDateTime(value: string | Date | null | undefined): string {
   if (!value) return "-";
-  const d = typeof value === "string" ? new Date(value) : value;
+  const d =
+    typeof value === "string"
+      ? /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
+        ? parseDataLocal(value)
+        : new Date(value)
+      : value;
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString("pt-BR", {
     day: "2-digit",

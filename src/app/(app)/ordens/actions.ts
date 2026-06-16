@@ -229,7 +229,7 @@ export async function criarOrdem(formData: FormData) {
 
   await supabase.from("os_status_historico").insert({
     os_id: os!.id,
-    status,
+    status: "aberta",
     observacao: "Ordem de serviço aberta",
   });
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus, Search, Trash2, UserCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { buscarCep } from "@/lib/cep";
-import { formatCurrency, formatTelefone } from "@/lib/format";
+import { formatCurrency, formatTelefone, hojeYmdLocal } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import { TecnicoCargaTrabalho } from "@/components/tecnico-carga-trabalho";
 import { SpellCheckInput, SpellCheckTextarea } from "@/components/spell-check-field";
@@ -759,7 +759,7 @@ export function OrdemForm({
                 name="data_previsao"
                 className="input"
                 required={ehDomicilio}
-                defaultValue={ordem?.data_previsao || new Date().toISOString().slice(0, 10)}
+                defaultValue={ordem?.data_previsao || hojeYmdLocal()}
               />
             </div>
             <div>
