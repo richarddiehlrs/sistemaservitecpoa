@@ -242,6 +242,13 @@ describe("portal aprovação", () => {
 });
 
 describe("orcamento e visita", () => {
+  it("statusReceitaComPagamento reflete visita paga e saldo pendente", async () => {
+    const { statusReceitaComPagamento } = await import("@/lib/os-financeiro");
+    expect(statusReceitaComPagamento(80, 80)).toBe("pago");
+    expect(statusReceitaComPagamento(280, 80)).toBe("parcial");
+    expect(statusReceitaComPagamento(200, 0)).toBe("pendente");
+  });
+
   it("abate visita por padrão quando há itens no orçamento", async () => {
     const { resolverAbaterVisita } = await import("@/lib/orcamento-os");
     const fd = new FormData();

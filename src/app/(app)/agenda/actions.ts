@@ -17,6 +17,7 @@ import {
   checkinBloqueadoPorAprovacao,
   mensagemCheckinBloqueado,
 } from "@/lib/checkin-os";
+import { criarReceitaPendenteOs, registrarReceitaVisitaCheckout } from "@/lib/os-financeiro";
 
 async function garantirAtribuicaoCampo(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -398,36 +399,48 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
         }
       }
 
-      if (visitaCobrada && Number(os.valor_visita) > 0 && !os.abater_visita) {
-        const novoTotal = calcValorTotalCliente(
-          Number(os.valor_itens),
-          Number(os.valor_visita),
-          true,
-          Number(os.desconto),
-          Number(os.acrescimo)
-        );
-        const { error: updVisita } = await supabase
-          .from("ordens_servico")
-          .update({ abater_visita: true, valor_total: novoTotal })
-          .eq("id", ag.os_id);
-        assertSupabaseOk(updVisita, "Não foi possível registrar visita paga");
-
-        if (os.aprovado) {
-          await requererReaprovacaoSeValoresMudaram(
-            supabase,
-            ag.os_id,
-            {
-              aprovado: true,
-              valor_aprovado: os.valor_aprovado,
-              status: os.status as never,
-              valor_itens: Number(os.valor_itens),
-              valor_visita: Number(os.valor_visita),
-              abater_visita: false,
-              desconto: Number(os.desconto),
-              acrescimo: Number(os.acrescimo),
-            },
-            novoTotal
+      if (visitaCobrada && Number(os.valor_visita) > 0) {
+        if (!os.abater_visita) {
+          const novoTotal = calcValorTotalCliente(
+            Number(os.valor_itens),
+            Number(os.valor_visita),
+            true,
+            Number(os.desconto),
+            Number(os.acrescimo)
           );
+          const { error: updVisita } = await supabase
+            .from("ordens_servico")
+            .update({ abater_visita: true, valor_total: novoTotal })
+            .eq("id", ag.os_id);
+          assertSupabaseOk(updVisita, "Não foi possível registrar visita paga");
+
+          if (os.aprovado) {
+            await requererReaprovacaoSeValoresMudaram(
+              supabase,
+              ag.os_id,
+              {
+                aprovado: true,
+                valor_aprovado: os.valor_aprovado,
+                status: os.status as never,
+                valor_itens: Number(os.valor_itens),
+                valor_visita: Number(os.valor_visita),
+                abater_visita: false,
+                desconto: Number(os.desconto),
+                acrescimo: Number(os.acrescimo),
+              },
+              novoTotal
+            );
+          }
+        }
+
+        const financeVisitaOk = await registrarReceitaVisitaCheckout(
+          supabase,
+          ag.os_id,
+          Number(os.valor_visita),
+          os.forma_pagamento
+        );
+        if (!financeVisitaOk) {
+          throw new Error("Não foi possível registrar a visita paga no financeiro.");
         }
       } else if (
         !visitaCobrada &&
@@ -482,6 +495,13 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
           sistema: true,
           papel: profile.papel,
         });
+
+        if (proximo === "concluida" && os.aprovado) {
+          const financeOk = await criarReceitaPendenteOs(supabase, ag.os_id);
+          if (!financeOk) {
+            throw new Error("Não foi possível registrar o saldo do serviço no financeiro.");
+          }
+        }
       }
     }
   }
