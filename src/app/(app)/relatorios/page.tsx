@@ -167,7 +167,15 @@ export default async function RelatoriosPage({
 
   return (
     <div>
-      <PageHeader title="Relatórios gerenciais" subtitle={`Desempenho do ano de ${ano}`} />
+      <PageHeader
+        title="Relatórios gerenciais"
+        subtitle={`Desempenho do ano de ${ano}`}
+        action={
+          <Link href="/relatorios/produtividade" className="btn-secondary">
+            Produtividade por técnico
+          </Link>
+        }
+      />
 
       <form className="mb-6 flex items-center gap-2" action="/relatorios" method="get">
         <select name="ano" defaultValue={String(ano)} className="input max-w-[140px]">

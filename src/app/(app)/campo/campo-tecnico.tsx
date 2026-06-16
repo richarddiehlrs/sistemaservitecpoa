@@ -1,18 +1,19 @@
 import Link from "next/link";
-import { MapPin, Wrench, Plus, Clock, AlertTriangle, PenLine, LogIn, Calendar } from "lucide-react";
+import { Wrench, Plus, Clock, AlertTriangle, PenLine, LogIn, Calendar, Trophy } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getConfig } from "@/lib/config";
 import { OsPendentesLista } from "@/components/os-pendentes-lista";
 import { PushAtivar } from "@/components/push-ativar";
 import { PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { STATUS_OS_ABERTAS, ordenarOsPendentes } from "@/lib/os-status";
 import { STATUS_AGENDA_PENDENTE, STATUS_OS_ATRASO, hojeYmd } from "@/lib/alertas";
 import { DespesaCampoForm } from "@/components/despesa-campo-form";
-import { CheckinButtons } from "@/components/checkin-buttons";
-import { CampoVisitaAcoes } from "@/components/campo-visita-acoes";
+import { CampoAgendaDia, type VisitaCampoDia } from "@/components/campo-agenda-dia";
 import { CompartilharGps } from "@/components/compartilhar-gps";
 import { tecnicoDoProfile } from "@/lib/auth-guard";
+import { calcComissaoTecnico, calcLucroOsSimples } from "@/lib/produtividade-tecnico";
 import type { Profile } from "@/types/database";
-import { formatCurrency, formatDate, formatHora, formatNumeroOS, TIPO_AGENDAMENTO_LABEL } from "@/lib/format";
+import { formatCurrency, formatDate, formatNumeroOS } from "@/lib/format";
 import { lancarDespesaCampo, registrarPosicaoTecnico } from "./actions";
 import { checkinAgendamento, checkoutAgendamento } from "../agenda/actions";
 
@@ -20,8 +21,15 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
   const tecnico = tecnicoDoProfile(profile);
   const supabase = await createClient();
   const hoje = hojeYmd();
+  const inicioMes = `${hoje.slice(0, 7)}-01`;
 
-  const [{ data: agendaHoje }, { data: despesas }, { data: osAbertas }] = await Promise.all([
+  const [
+    { data: agendaHoje },
+    { data: despesas },
+    { data: osAbertas },
+    { data: osConcluidasMes },
+    config,
+  ] = await Promise.all([
     supabase
       .from("agendamentos")
       .select("*, clientes(nome, telefone), ordens_servico(numero)")
@@ -43,6 +51,13 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       .in("status", [...STATUS_OS_ABERTAS])
       .order("data_abertura", { ascending: false })
       .limit(30),
+    supabase
+      .from("ordens_servico")
+      .select("valor_total, custo_total")
+      .or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${tecnico}%`)
+      .in("status", ["concluida", "entregue"])
+      .gte("data_abertura", inicioMes),
+    getConfig(),
   ]);
 
   const osPendentes = ordenarOsPendentes(osAbertas || []);
@@ -68,6 +83,33 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
   const totalDespesasMes = (despesas || [])
     .filter((d) => d.data_competencia?.startsWith(hoje.slice(0, 7)))
     .reduce((s, d) => s + Number(d.valor), 0);
+
+  const lucroMes = (osConcluidasMes || []).reduce(
+    (s, o) => s + calcLucroOsSimples(Number(o.valor_total), Number(o.custo_total || 0)),
+    0
+  );
+  const comissaoMes = calcComissaoTecnico(lucroMes, config.comissao_percent);
+
+  const visitasSerializadas: VisitaCampoDia[] = visitasPendentes.map((a) => ({
+    id: a.id,
+    status: a.status,
+    tipo: a.tipo,
+    titulo: a.titulo,
+    hora_inicio: a.hora_inicio,
+    hora_fim: a.hora_fim,
+    endereco: a.endereco,
+    os_id: a.os_id,
+    checkin_lat: a.checkin_lat,
+    checkin_lng: a.checkin_lng,
+    checkin_at: a.checkin_at,
+    checkout_at: a.checkout_at,
+    // @ts-expect-error relação
+    clienteNome: a.clientes?.nome ?? null,
+    // @ts-expect-error relação
+    clienteTelefone: a.clientes?.telefone ?? null,
+    // @ts-expect-error relação
+    osNumero: a.ordens_servico?.numero ?? null,
+  }));
 
   return (
     <div>
@@ -130,90 +172,30 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
         <StatCard title="Despesas do mês" value={formatCurrency(totalDespesasMes)} tone="red" />
       </div>
 
-      {/* Agenda de hoje — prioridade */}
-      <div className="card mb-6 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">Agenda de hoje</h2>
-          <Link href="/agenda" className="text-sm text-brand-600 hover:underline">Ver semana</Link>
-        </div>
-        {visitasPendentes.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-400">Nenhuma visita pendente para hoje.</p>
-        ) : (
-          <div className="space-y-3">
-            {visitasPendentes.map((a) => (
-              <div
-                key={a.id}
-                className={`rounded-xl border p-4 ${
-                  a.status === "em_atendimento"
-                    ? "border-blue-300 bg-blue-50/50"
-                    : "border-slate-200 bg-slate-50"
-                }`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-slate-800">
-                        {formatHora(a.hora_inicio)}{a.hora_fim ? `–${formatHora(a.hora_fim)}` : ""}
-                      </span>
-                      <span className="badge bg-slate-100 text-slate-600 text-[10px]">
-                        {TIPO_AGENDAMENTO_LABEL[a.tipo]}
-                      </span>
-                      {a.status === "em_atendimento" && (
-                        <span className="badge bg-blue-100 text-blue-700 text-[10px]">Em atendimento</span>
-                      )}
-                    </div>
-                    <p className="mt-1 font-medium text-slate-800">{a.titulo}</p>
-                    <p className="text-sm text-slate-500">
-                      {/* @ts-expect-error relação */}
-                      {a.clientes?.nome && a.clientes.nome}
-                    </p>
-                    {a.endereco && (
-                      <p className="mt-1 flex items-start gap-1 text-xs text-slate-400">
-                        <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {a.endereco}
-                      </p>
-                    )}
-                    <CampoVisitaAcoes
-                      telefone={
-                        // @ts-expect-error relação
-                        a.clientes?.telefone
-                      }
-                      endereco={a.endereco}
-                      checkinLat={a.checkin_lat}
-                      checkinLng={a.checkin_lng}
-                      clienteNome={
-                        // @ts-expect-error relação
-                        a.clientes?.nome
-                      }
-                      tecnicoNome={profile.nome || tecnico}
-                      horaInicio={a.hora_inicio}
-                      osNumero={
-                        // @ts-expect-error relação
-                        a.ordens_servico?.numero ?? null
-                      }
-                    />
-                  </div>
-                  <CheckinButtons
-                    agendamento={a}
-                    checkinAction={checkinAgendamento.bind(null, a.id)}
-                    checkoutAction={checkoutAgendamento.bind(null, a.id)}
-                    permitirRetorno={Boolean(a.os_id)}
-                  />
-                </div>
-                {a.os_id && (
-                  <div className="mt-2 flex flex-wrap gap-3">
-                    <Link href={`/ordens/${a.os_id}`} className="text-xs font-medium text-brand-600 hover:underline">
-                      Abrir ordem →
-                    </Link>
-                    <Link href={`/ordens/${a.os_id}/editar`} className="text-xs font-medium text-brand-600 hover:underline">
-                      Editar valores / peças →
-                    </Link>
-                  </div>
-                )}
-              </div>
-            ))}
+      {config.comissao_percent > 0 && (
+        <div className="card mb-6 border-amber-100 bg-amber-50/40 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                <Trophy className="h-4 w-4" /> Comissão estimada ({config.comissao_percent}%)
+              </p>
+              <p className="mt-1 text-xs text-amber-800">
+                {osConcluidasMes?.length || 0} OS concluída(s) no mês • lucro {formatCurrency(lucroMes)}
+              </p>
+            </div>
+            <p className="text-2xl font-bold text-amber-700">{formatCurrency(comissaoMes)}</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      <CampoAgendaDia
+        visitas={visitasSerializadas}
+        hoje={hoje}
+        userId={profile.id}
+        tecnicoNome={profile.nome || tecnico}
+        checkinAgendamento={checkinAgendamento}
+        checkoutAgendamento={checkoutAgendamento}
+      />
 
       {/* OS que precisam de atenção */}
       {(osAtrasadas.length > 0 || semAssinatura.length > 0) && (
