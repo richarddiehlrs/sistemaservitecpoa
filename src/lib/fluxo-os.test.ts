@@ -117,6 +117,21 @@ describe("saldoEmAberto com visita abatida", () => {
   });
 });
 
+describe("resumoFinanceiroOs", () => {
+  it("separa faturamento e saldo com visita abatida", async () => {
+    const { resumoFinanceiroOs } = await import("@/lib/os-valores");
+    const r = resumoFinanceiroOs({
+      valor_itens: 600,
+      valor_visita: 100,
+      abater_visita: true,
+      desconto: 0,
+      acrescimo: 0,
+    });
+    expect(r.faturamento).toBe(600);
+    expect(r.saldoCliente).toBe(500);
+  });
+});
+
 describe("resumoOrcamentoCliente", () => {
   it("mostra abatimento e label de resta pagar", () => {
     const r = resumoOrcamentoCliente({

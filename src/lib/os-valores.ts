@@ -66,7 +66,34 @@ export function linhaVisitaValor(
   };
 }
 
-/** Resumo legível para portal, ERP e impressão. */
+/** Resumo financeiro para check-out do técnico. */
+export type OsResumoCheckout = {
+  valorVisita: number;
+  abaterVisita: boolean;
+  saldoCliente: number;
+  faturamento: number;
+};
+
+export function resumoFinanceiroOs(os: {
+  valor_itens: number;
+  valor_visita: number;
+  abater_visita: boolean;
+  desconto: number;
+  acrescimo: number;
+}): OsResumoCheckout {
+  const valorItens = Number(os.valor_itens) || 0;
+  const valorVisita = Number(os.valor_visita) || 0;
+  const desconto = Number(os.desconto) || 0;
+  const acrescimo = Number(os.acrescimo) || 0;
+  const abaterVisita = Boolean(os.abater_visita);
+  return {
+    valorVisita,
+    abaterVisita,
+    saldoCliente: calcValorTotalCliente(valorItens, valorVisita, abaterVisita, desconto, acrescimo),
+    faturamento: calcReceitaFaturamentoOs(valorItens, valorVisita, abaterVisita, desconto, acrescimo),
+  };
+}
+
 export function resumoOrcamentoCliente(opts: {
   valor_itens: number;
   valor_visita: number;

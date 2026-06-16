@@ -6,6 +6,7 @@ import { MapPin, WifiOff } from "lucide-react";
 import { CheckinButtons } from "@/components/checkin-buttons";
 import { CampoVisitaAcoes } from "@/components/campo-visita-acoes";
 import { formatHora, TIPO_AGENDAMENTO_LABEL } from "@/lib/format";
+import type { OsResumoCheckout } from "@/lib/os-valores";
 
 export type VisitaCampoDia = {
   id: string;
@@ -23,6 +24,7 @@ export type VisitaCampoDia = {
   clienteNome: string | null;
   clienteTelefone: string | null;
   osNumero: number | null;
+  osResumo: OsResumoCheckout | null;
 };
 
 type CacheAgenda = {
@@ -176,6 +178,7 @@ export function CampoAgendaDia({
                     checkinAction={checkinAgendamento.bind(null, a.id)}
                     checkoutAction={checkoutAgendamento.bind(null, a.id)}
                     permitirRetorno={Boolean(a.os_id)}
+                    osResumo={a.osResumo}
                   />
                 ) : (
                   <span className="text-[10px] text-slate-400">Check-in offline indisponível</span>

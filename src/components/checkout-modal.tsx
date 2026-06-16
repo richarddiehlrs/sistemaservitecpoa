@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
-import { amanhaYmdLocal, hojeYmdLocal } from "@/lib/format";
+import { amanhaYmdLocal, formatCurrency, hojeYmdLocal } from "@/lib/format";
 import { useToast } from "@/components/toast";
+import type { OsResumoCheckout } from "@/lib/os-valores";
 
 type Resultado = "visita" | "servico_concluido" | "aguardando_peca";
 
@@ -14,29 +15,54 @@ export function CheckoutModal({
   onConfirm,
   pending,
   permitirRetorno = false,
+  osResumo = null,
 }: {
   open: boolean;
   onClose: () => void;
   onConfirm: (fd: FormData) => Promise<void>;
   pending: boolean;
   permitirRetorno?: boolean;
+  osResumo?: OsResumoCheckout | null;
 }) {
   const [resultado, setResultado] = useState<Resultado>("visita");
   const [visitaCobrada, setVisitaCobrada] = useState(false);
+  const [clientePagou, setClientePagou] = useState(false);
+  const [valorRecebido, setValorRecebido] = useState("");
   const [agendarRetorno, setAgendarRetorno] = useState(false);
   const [retornoData, setRetornoData] = useState(amanhaYmdLocal);
   const [retornoTurno, setRetornoTurno] = useState<"manha" | "tarde" | "dia">("manha");
   const toast = useToast();
+
+  useEffect(() => {
+    if (!open) return;
+    setResultado("visita");
+    setVisitaCobrada(Boolean(osResumo?.abaterVisita));
+    setClientePagou(false);
+    setValorRecebido(
+      osResumo && osResumo.saldoCliente > 0 ? String(osResumo.saldoCliente) : ""
+    );
+    setAgendarRetorno(false);
+    setRetornoData(amanhaYmdLocal);
+    setRetornoTurno("manha");
+  }, [open, osResumo]);
 
   if (!open) return null;
 
   const mostraRetorno =
     permitirRetorno && (resultado === "visita" || resultado === "aguardando_peca");
 
+  const saldoExibicao = osResumo?.saldoCliente ?? 0;
+  const faturamentoExibicao = osResumo?.faturamento ?? 0;
+
   async function confirmar() {
     const fd = new FormData();
     fd.set("resultado", resultado);
     if (visitaCobrada) fd.set("visita_cobrada", "on");
+    if (resultado === "servico_concluido" && clientePagou) {
+      fd.set("cliente_pagou_agora", "on");
+      const valor = Number(String(valorRecebido).replace(",", "."));
+      if (valor > 0) fd.set("valor_recebido", String(valor));
+    }
     if (mostraRetorno && agendarRetorno && retornoData) {
       fd.set("agendar_retorno", "on");
       fd.set("retorno_data", retornoData);
@@ -65,7 +91,7 @@ export function CheckoutModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-5 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-900">Finalizar visita</h3>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
@@ -75,6 +101,20 @@ export function CheckoutModal({
         <p className="mb-4 text-sm text-slate-600">
           Informe o que foi feito nesta visita. Isso define o próximo passo da ordem de serviço.
         </p>
+
+        {osResumo && osResumo.faturamento > 0 && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            <p>
+              Faturamento: <strong className="text-slate-900">{formatCurrency(faturamentoExibicao)}</strong>
+            </p>
+            {osResumo.abaterVisita && osResumo.valorVisita > 0 && (
+              <p className="mt-1">
+                Visita abatida: {formatCurrency(osResumo.valorVisita)} • Saldo cliente:{" "}
+                <strong className="text-slate-900">{formatCurrency(saldoExibicao)}</strong>
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="space-y-3">
           <label className="flex cursor-pointer gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
@@ -90,7 +130,17 @@ export function CheckoutModal({
               <p className="text-xs text-slate-500">
                 Cobrou visita ou avaliou o problema — retorno para executar o serviço
               </p>
-              {resultado === "visita" && (
+              {resultado === "visita" && osResumo && osResumo.valorVisita > 0 && (
+                <label className="mt-2 flex items-center gap-2 text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={visitaCobrada}
+                    onChange={(e) => setVisitaCobrada(e.target.checked)}
+                  />
+                  Cliente já pagou a visita ({formatCurrency(osResumo.valorVisita)}) — abate do reparo
+                </label>
+              )}
+              {resultado === "visita" && (!osResumo || osResumo.valorVisita <= 0) && (
                 <label className="mt-2 flex items-center gap-2 text-xs text-slate-700">
                   <input
                     type="checkbox"
@@ -98,9 +148,6 @@ export function CheckoutModal({
                     onChange={(e) => setVisitaCobrada(e.target.checked)}
                   />
                   Cliente já pagou a visita (abate do total do reparo)
-                  <span className="mt-1 block text-[10px] text-slate-500">
-                    Desmarcado: visita será incluída no total final do serviço.
-                  </span>
                 </label>
               )}
             </div>
@@ -114,15 +161,61 @@ export function CheckoutModal({
               onChange={() => setResultado("servico_concluido")}
               className="mt-1"
             />
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="font-medium text-slate-900">Serviço executado</p>
               <p className="text-xs text-slate-500">
                 Reparo concluído nesta visita — conclui a OS se o orçamento já estiver aprovado
               </p>
               {resultado === "servico_concluido" && (
-                <p className="mt-1 text-[10px] text-amber-700">
-                  Sem aprovação do cliente, a OS vai para aguardando aprovação (não conclui).
-                </p>
+                <>
+                  <p className="mt-1 text-[10px] text-amber-700">
+                    Sem aprovação do cliente, a OS vai para aguardando aprovação (não conclui).
+                  </p>
+                  {osResumo && osResumo.valorVisita > 0 && (
+                    <label className="mt-2 flex items-start gap-2 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={visitaCobrada}
+                        onChange={(e) => setVisitaCobrada(e.target.checked)}
+                      />
+                      <span>
+                        Visita já paga ({formatCurrency(osResumo.valorVisita)}) — abatida do total
+                      </span>
+                    </label>
+                  )}
+                  <label className="mt-2 flex items-start gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={clientePagou}
+                      onChange={(e) => setClientePagou(e.target.checked)}
+                    />
+                    <span>Cliente pagou nesta visita (registra no caixa)</span>
+                  </label>
+                  {clientePagou && (
+                    <div className="mt-2">
+                      <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                        Valor recebido agora
+                        {saldoExibicao > 0 && (
+                          <span className="font-normal text-slate-400">
+                            {" "}
+                            — saldo {formatCurrency(saldoExibicao)}
+                          </span>
+                        )}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={valorRecebido}
+                        onChange={(e) => setValorRecebido(e.target.value)}
+                        className="input py-1.5 text-sm"
+                        placeholder={saldoExibicao > 0 ? String(saldoExibicao) : "0,00"}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </label>

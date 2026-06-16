@@ -400,6 +400,19 @@ export type Database = {
         Args: Record<string, never>;
         Returns: boolean;
       };
+      criar_receita_os_interno: {
+        Args: { p_os_id: string; p_observacao?: string | null };
+        Returns: boolean;
+      };
+      registrar_pagamento_os_checkout: {
+        Args: {
+          p_os_id: string;
+          p_valor: number;
+          p_forma_pagamento?: string | null;
+          p_observacao?: string | null;
+        };
+        Returns: boolean;
+      };
     };
     Enums: Record<string, never>;
   };

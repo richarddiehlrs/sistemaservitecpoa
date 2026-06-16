@@ -13,6 +13,7 @@ import { AgendaForm } from "@/components/agenda-form";
 import { requireProfile } from "@/lib/auth-guard";
 import { nomeTecnico, temPermissao } from "@/lib/permissoes";
 import { STATUS_OS_ABERTAS } from "@/lib/os-status";
+import { resumoFinanceiroOs } from "@/lib/os-valores";
 import { checkinAgendamento, checkoutAgendamento, criarAgendamento, excluirAgendamento } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +72,7 @@ export default async function AgendaPage({
   const supabase = await createClient();
   let queryAgenda = supabase
     .from("agendamentos")
-    .select("*, clientes(nome, telefone), ordens_servico(numero, status)")
+    .select("*, clientes(nome, telefone), ordens_servico(numero, status, valor_itens, valor_visita, abater_visita, desconto, acrescimo)")
     .gte("data", ymd(segunda))
     .lte("data", ymd(domingo))
     .order("hora_inicio", { ascending: true });
@@ -272,7 +273,15 @@ function CardAgendamento({
   podeExcluir: boolean;
 }) {
   const cli = a.clientes as { nome?: string; telefone?: string } | null;
-  const os = a.ordens_servico as { numero?: number; status?: string } | null;
+  const os = a.ordens_servico as {
+    numero?: number;
+    status?: string;
+    valor_itens?: number;
+    valor_visita?: number;
+    abater_visita?: boolean;
+    desconto?: number;
+    acrescimo?: number;
+  } | null;
   const cancelado = a.status === "cancelado";
   const realizado = a.status === "realizado";
   const emAtendimento = a.status === "em_atendimento";
@@ -337,6 +346,17 @@ function CardAgendamento({
             checkinAction={checkinAgendamento.bind(null, a.id as string)}
             checkoutAction={checkoutAgendamento.bind(null, a.id as string)}
             permitirRetorno={Boolean(a.os_id)}
+            osResumo={
+              os
+                ? resumoFinanceiroOs({
+                    valor_itens: Number(os.valor_itens) || 0,
+                    valor_visita: Number(os.valor_visita) || 0,
+                    abater_visita: Boolean(os.abater_visita),
+                    desconto: Number(os.desconto) || 0,
+                    acrescimo: Number(os.acrescimo) || 0,
+                  })
+                : null
+            }
           />
         </div>
       )}

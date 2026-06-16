@@ -14,6 +14,7 @@ import { tecnicoDoProfile } from "@/lib/auth-guard";
 import { calcComissaoTecnico, calcLucroOsSimples } from "@/lib/produtividade-tecnico";
 import type { Profile } from "@/types/database";
 import { formatCurrency, formatDate, formatNumeroOS } from "@/lib/format";
+import { resumoFinanceiroOs } from "@/lib/os-valores";
 import { lancarDespesaCampo, registrarPosicaoTecnico } from "./actions";
 import { checkinAgendamento, checkoutAgendamento } from "../agenda/actions";
 
@@ -32,7 +33,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
   ] = await Promise.all([
     supabase
       .from("agendamentos")
-      .select("*, clientes(nome, telefone), ordens_servico(numero)")
+      .select("*, clientes(nome, telefone), ordens_servico(numero, valor_itens, valor_visita, abater_visita, desconto, acrescimo)")
       .eq("data", hoje)
       .or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${tecnico}%`)
       .neq("status", "cancelado")
@@ -109,6 +110,20 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
     clienteTelefone: a.clientes?.telefone ?? null,
     // @ts-expect-error relação
     osNumero: a.ordens_servico?.numero ?? null,
+    osResumo: a.ordens_servico
+      ? resumoFinanceiroOs({
+          // @ts-expect-error relação
+          valor_itens: Number(a.ordens_servico.valor_itens) || 0,
+          // @ts-expect-error relação
+          valor_visita: Number(a.ordens_servico.valor_visita) || 0,
+          // @ts-expect-error relação
+          abater_visita: Boolean(a.ordens_servico.abater_visita),
+          // @ts-expect-error relação
+          desconto: Number(a.ordens_servico.desconto) || 0,
+          // @ts-expect-error relação
+          acrescimo: Number(a.ordens_servico.acrescimo) || 0,
+        })
+      : null,
   }));
 
   return (

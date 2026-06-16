@@ -9,6 +9,11 @@ import { hojeYmdLocal } from "@/lib/format";
 import { transicionarStatusOs } from "@/lib/transicao-os";
 import { statusPosCheckout, statusPermiteCheckin, type CheckoutResultado } from "@/lib/transicao-status";
 import { calcValorTotalCliente } from "@/lib/os-valores";
+import {
+  registrarPagamentoReceitaOsCheckout,
+  registrarReceitaVisitaCheckout,
+  sincronizarReceitaOsInterno,
+} from "@/lib/os-financeiro";
 import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
 import { requererReaprovacaoSeValoresMudaram } from "@/lib/aprovacao-os";
 import { notificarWhatsAppClienteSugerido } from "@/lib/notificacoes";
@@ -17,7 +22,6 @@ import {
   checkinBloqueadoPorAprovacao,
   mensagemCheckinBloqueado,
 } from "@/lib/checkin-os";
-import { registrarReceitaVisitaCheckout, sincronizarReceitaOsInterno } from "@/lib/os-financeiro";
 
 async function garantirAtribuicaoCampo(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -490,8 +494,41 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
         await sincronizarReceitaOsInterno(
           supabase,
           ag.os_id,
-          "Serviço concluído — saldo em aberto para recebimento"
+          "Serviço concluído — receita registrada"
         );
+
+        const clientePagou = formData?.get("cliente_pagou_agora") === "on";
+        if (clientePagou) {
+          const { data: osPagamento } = await supabase
+            .from("ordens_servico")
+            .select("valor_itens, valor_visita, abater_visita, desconto, acrescimo, forma_pagamento")
+            .eq("id", ag.os_id)
+            .single();
+
+          const saldoCliente = osPagamento
+            ? calcValorTotalCliente(
+                Number(osPagamento.valor_itens),
+                Number(osPagamento.valor_visita),
+                osPagamento.abater_visita,
+                Number(osPagamento.desconto),
+                Number(osPagamento.acrescimo)
+              )
+            : 0;
+
+          const informado = Number(String(formData?.get("valor_recebido") || "").replace(",", "."));
+          const valorPagamento =
+            informado > 0 ? Math.round(informado * 100) / 100 : saldoCliente;
+
+          if (valorPagamento > 0) {
+            await registrarPagamentoReceitaOsCheckout(
+              supabase,
+              ag.os_id,
+              valorPagamento,
+              osPagamento?.forma_pagamento ?? os.forma_pagamento,
+              "Pagamento recebido no check-out — serviço concluído"
+            );
+          }
+        }
       }
 
       if (proximo) {

@@ -338,6 +338,32 @@ export async function sincronizarReceitaOsInterno(
   }
 }
 
+/** Registra pagamento recebido no check-out (após sincronizar receita). */
+export async function registrarPagamentoReceitaOsCheckout(
+  supabase: Db,
+  osId: string,
+  valorPagamento: number,
+  formaPagamento?: string | null,
+  observacao?: string
+): Promise<void> {
+  const pagamento = Math.round(Number(valorPagamento) * 100) / 100;
+  if (pagamento <= 0) return;
+
+  const { data, error } = await supabase.rpc("registrar_pagamento_os_checkout", {
+    p_os_id: osId,
+    p_valor: pagamento,
+    p_forma_pagamento: formaPagamento ?? null,
+    p_observacao: observacao ?? null,
+  });
+
+  if (error) {
+    throw new Error(`Não foi possível registrar o pagamento: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error("Não foi possível registrar o pagamento — verifique se a receita da OS existe.");
+  }
+}
+
 /** Cancela receita e custo automáticos pendentes (mantém despesas de campo e quitados). */
 export async function cancelarReceitaPendenteOs(supabase: Db, osId: string): Promise<void> {
   const { data: lancamentos } = await supabase

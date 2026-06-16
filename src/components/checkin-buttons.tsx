@@ -6,6 +6,7 @@ import { LogIn, LogOut, Loader2 } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
 import { useToast } from "@/components/toast";
 import { CheckoutModal } from "@/components/checkout-modal";
+import type { OsResumoCheckout } from "@/lib/os-valores";
 
 function mensagemErro(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
@@ -17,11 +18,13 @@ export function CheckinButtons({
   checkinAction,
   checkoutAction,
   permitirRetorno = false,
+  osResumo = null,
 }: {
   agendamento: { status: string; checkin_at: string | null; checkout_at: string | null };
   checkinAction: (formData: FormData) => Promise<void>;
   checkoutAction: (formData: FormData) => Promise<void>;
   permitirRetorno?: boolean;
+  osResumo?: OsResumoCheckout | null;
 }) {
   const [pending, start] = useTransition();
   const [modalCheckout, setModalCheckout] = useState(false);
@@ -101,6 +104,7 @@ export function CheckinButtons({
         }}
         pending={pending}
         permitirRetorno={permitirRetorno}
+        osResumo={osResumo}
       />
     </>
   );
