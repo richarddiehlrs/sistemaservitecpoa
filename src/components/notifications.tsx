@@ -35,6 +35,12 @@ import {
   limparTodosAlertas,
   type AlertaDispensadoInput,
 } from "@/app/(app)/notificacoes/actions";
+import { useToast } from "@/components/toast";
+import {
+  type AlertaDispensadoEntry,
+  alertaEstaDispensado,
+  parseAlertasDispensados,
+} from "@/lib/alertas-dispensados";
 
 type OsAlerta = {
   id: string;
@@ -63,6 +69,7 @@ type ContaAlerta = {
   multa: number;
   data_vencimento: string;
   tipo: "receita" | "despesa";
+  os_id?: string | null;
 };
 
 type NotificacaoRow = {
@@ -108,6 +115,9 @@ export function Notifications({
   const [despesasCampo, setDespesasCampo] = useState<DespesaCampo[]>([]);
   const [metaAlerta, setMetaAlerta] = useState<{ meta: number; realizado: number } | null>(null);
   const [diasOficina, setDiasOficina] = useState(DIAS_OFICINA_PARADA_PADRAO);
+  const [dispensados, setDispensados] = useState<AlertaDispensadoEntry[]>([]);
+  const [limpando, setLimpando] = useState(false);
+  const toast = useToast();
   const [prefs, setPrefs] = useState({
     oficina_parada: true,
     financeiro: true,
@@ -148,7 +158,7 @@ export function Notifications({
       const { data: prefData } = await supabase
         .from("preferencias_alertas")
         .select(
-          "oficina_parada, financeiro, meta_faturamento, despesa_campo, os_aprovada, os_status, cliente_ausente, dias_oficina_parada"
+          "oficina_parada, financeiro, meta_faturamento, despesa_campo, os_aprovada, os_status, cliente_ausente, dias_oficina_parada, alertas_dispensados"
         )
         .eq("user_id", userId)
         .maybeSingle();
@@ -163,6 +173,7 @@ export function Notifications({
           cliente_ausente: prefData.cliente_ausente !== false,
         });
         setDiasOficina(prefData.dias_oficina_parada || DIAS_OFICINA_PARADA_PADRAO);
+        setDispensados(parseAlertasDispensados(prefData.alertas_dispensados));
       }
     })();
   }, [userId, supabase]);
@@ -251,7 +262,7 @@ export function Notifications({
       promessas.push(
         supabase
           .from("lancamentos_financeiros")
-          .select("id, descricao, valor, valor_pago, juros, multa, data_vencimento, tipo")
+          .select("id, descricao, valor, valor_pago, juros, multa, data_vencimento, tipo, os_id")
           .in("status", ["pendente", "parcial"])
           .not("data_vencimento", "is", null)
           .lte("data_vencimento", limiteStr)
@@ -403,12 +414,15 @@ export function Notifications({
   const visitasPendentes = agenda.filter((a) => a.status === "agendado" || a.status === "confirmado");
 
   function alertaOculto(refTipo: string, refId?: string | null) {
+    if (alertaEstaDispensado(dispensados, refTipo, refId)) return true;
     return eventos.some((e) => {
       if (e.tipo === "sistema" && e.ref_tipo === refTipo) {
         if (refId == null || refId === "") return e.ref_id == null;
         return e.ref_id === refId;
       }
-      return !e.lida && e.ref_id === refId && e.tipo === refTipo;
+      if (e.lida) return false;
+      if (refId == null || refId === "") return false;
+      return e.ref_id === refId && (e.tipo === refTipo || e.ref_tipo === refTipo);
     });
   }
 
@@ -435,8 +449,12 @@ export function Notifications({
   const contasPagar = contasFiltradas.filter((c) => c.tipo === "despesa");
   const contasVencidas = contasFiltradas.filter((c) => c.data_vencimento < hoje);
 
-  const eventosNaoLidos = eventos.filter((e) => e.tipo !== "sistema" && !e.lida).length;
-  const eventosVisiveis = eventos.filter((e) => e.tipo !== "sistema");
+  const eventosNaoLidos = eventos.filter(
+    (e) => e.tipo !== "sistema" && !e.lida && !alertaOculto(e.ref_tipo || e.tipo, e.ref_id)
+  ).length;
+  const eventosVisiveis = eventos.filter(
+    (e) => e.tipo !== "sistema" && !e.lida && !alertaOculto(e.ref_tipo || e.tipo, e.ref_id)
+  );
 
   const criticos =
     eventosNaoLidos +
@@ -470,6 +488,9 @@ export function Notifications({
   }
 
   async function limparAlertas() {
+    if (limpando) return;
+    setLimpando(true);
+
     const items: AlertaDispensadoInput[] = [];
 
     atrasadas.forEach((o) => items.push({ ref_tipo: "os_atraso", ref_id: o.id }));
@@ -478,15 +499,31 @@ export function Notifications({
     aprovadasExecucao.forEach((o) => items.push({ ref_tipo: "os_aprovada", ref_id: o.id }));
     clienteAusente.forEach((o) => items.push({ ref_tipo: "cliente_ausente", ref_id: o.id }));
     despesasCampo.forEach((d) => items.push({ ref_tipo: "despesa_campo", ref_id: d.id }));
-    contas.forEach((c) => items.push({ ref_tipo: "financeiro", ref_id: c.id }));
+    contas.forEach((c) => {
+      items.push({ ref_tipo: "financeiro", ref_id: c.id });
+      if (c.os_id) items.push({ ref_tipo: "financeiro", ref_id: c.os_id });
+    });
     visitasPendentes.forEach((a) => items.push({ ref_tipo: "agenda_hoje", ref_id: a.id }));
     if (metaAlerta) items.push({ ref_tipo: "meta_faturamento", ref_id: null });
 
+    eventos
+      .filter((e) => e.tipo !== "sistema" && !e.lida)
+      .forEach((e) => {
+        items.push({ ref_tipo: e.ref_tipo || e.tipo, ref_id: e.ref_id ?? null });
+        if (e.ref_id && e.ref_tipo && e.ref_tipo !== e.tipo) {
+          items.push({ ref_tipo: e.tipo, ref_id: e.ref_id });
+        }
+      });
+
     try {
-      await limparTodosAlertas(items);
-      await carregarEventos();
-    } catch {
-      /* silencioso */
+      const merged = await limparTodosAlertas(items);
+      setDispensados(merged);
+      setEventos((prev) => prev.map((e) => ({ ...e, lida: true })));
+      toast.push("Alertas limpos.", "success");
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : "Não foi possível limpar os alertas.", "error");
+    } finally {
+      setLimpando(false);
     }
   }
 
@@ -537,10 +574,11 @@ export function Notifications({
                 <button
                   type="button"
                   onClick={limparAlertas}
-                  className="shrink-0 text-[10px] font-medium text-slate-600 hover:text-brand-600 hover:underline"
+                  disabled={limpando}
+                  className="shrink-0 text-[10px] font-medium text-slate-600 hover:text-brand-600 hover:underline disabled:opacity-50"
                   title="Ocultar todos os alertas até a situação mudar"
                 >
-                  Limpar alertas
+                  {limpando ? "Limpando…" : "Limpar alertas"}
                 </button>
               )}
               {eventosNaoLidos > 0 && (

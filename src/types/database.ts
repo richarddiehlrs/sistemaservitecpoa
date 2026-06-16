@@ -326,7 +326,14 @@ export type PreferenciasAlertas = {
   meta_faturamento: boolean;
   email_resumo: boolean;
   dias_oficina_parada: number;
+  alertas_dispensados: AlertaDispensadoDb[];
   updated_at: string;
+};
+
+export type AlertaDispensadoDb = {
+  ref_tipo: string;
+  ref_id: string | null;
+  dispensado_em: string;
 };
 
 type Row<T> = T;
