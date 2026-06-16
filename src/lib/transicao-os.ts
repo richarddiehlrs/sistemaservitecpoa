@@ -47,16 +47,18 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
     validarTransicaoStatus(osAntes.status as StatusOS, opts.status, opts.papel, {
       sistema: opts.sistema,
     });
+  } else if (opts.sistema) {
+    validarTransicaoStatus(osAntes.status as StatusOS, opts.status, "admin", {
+      sistema: true,
+    });
+  } else {
+    throw new Error("Transição de status requer papel do operador ou flag sistema.");
   }
 
   const update: Record<string, unknown> = { status: opts.status, ...opts.extras };
 
   if (opts.status === "concluida") update.data_conclusao = new Date().toISOString();
   if (opts.status === "entregue") update.data_entrega = new Date().toISOString();
-  if (opts.status === "aprovada") {
-    update.aprovado = true;
-    update.data_aprovacao = new Date().toISOString();
-  }
 
   const { error } = await supabase.from("ordens_servico").update(update).eq("id", opts.osId);
   if (error) throw new Error(error.message);
@@ -72,10 +74,6 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
   });
 
   await sincronizarAgendaStatusOs(supabase, opts.osId, opts.status);
-
-  if (opts.status === "aprovada" && !opts.skipFinanceiro) {
-    await criarReceitaPendenteOs(supabase, opts.osId);
-  }
 
   if (opts.status === "cancelada") {
     await cancelarLancamentosOs(supabase, opts.osId);

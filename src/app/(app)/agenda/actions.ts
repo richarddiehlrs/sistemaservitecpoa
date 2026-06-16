@@ -12,6 +12,7 @@ import { calcValorTotalCliente } from "@/lib/os-valores";
 import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
 import { requererReaprovacaoSeValoresMudaram } from "@/lib/aprovacao-os";
 import { notificarWhatsAppClienteSugerido } from "@/lib/notificacoes";
+import { salvarPosicaoTecnico } from "@/lib/posicao-tecnico";
 import {
   checkinBloqueadoPorAprovacao,
   mensagemCheckinBloqueado,
@@ -28,26 +29,55 @@ function coord(v: FormDataEntryValue | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-async function salvarPosicaoTecnico(
+type AgEstado = {
+  id: string;
+  status: string;
+  checkin_at: string | null;
+  checkout_at: string | null;
+  tecnico_id: string | null;
+  os_id: string | null;
+};
+
+async function carregarAgendamento(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  profile: Awaited<ReturnType<typeof requirePermissao>>,
-  lat: number,
-  lng: number,
-  precisao: number | null,
-  emAtendimento: boolean,
-  agendamentoId: string | null
-) {
-  const nome = nomeTecnico(profile);
-  await supabase.from("posicoes_tecnico").upsert({
-    user_id: profile.id,
-    tecnico_nome: nome,
-    lat,
-    lng,
-    precisao,
-    em_atendimento: emAtendimento,
-    agendamento_id: agendamentoId,
-    atualizado_at: new Date().toISOString(),
-  });
+  id: string
+): Promise<AgEstado & { tecnico: string | null }> {
+  const { data: ag } = await supabase
+    .from("agendamentos")
+    .select("id, status, checkin_at, checkout_at, tecnico_id, os_id, tecnico")
+    .eq("id", id)
+    .single();
+  if (!ag) throw new Error("Agendamento não encontrado.");
+  return ag;
+}
+
+function validarCheckinAgenda(ag: AgEstado): void {
+  if (ag.status === "cancelado") throw new Error("Este agendamento foi cancelado.");
+  if (ag.status === "realizado") throw new Error("Esta visita já foi finalizada.");
+  if (ag.checkin_at) throw new Error("Check-in já registrado nesta visita.");
+}
+
+function validarCheckoutAgenda(ag: AgEstado): void {
+  if (ag.status === "cancelado") throw new Error("Este agendamento foi cancelado.");
+  if (ag.status === "realizado") throw new Error("Esta visita já foi finalizada.");
+  if (!ag.checkin_at) throw new Error("Faça o check-in antes do check-out.");
+  if (ag.checkout_at) throw new Error("Check-out já registrado nesta visita.");
+}
+
+async function assertUmaVisitaEmAtendimento(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profileId: string,
+  agendamentoId: string
+): Promise<void> {
+  const { count } = await supabase
+    .from("agendamentos")
+    .select("id", { count: "exact", head: true })
+    .eq("tecnico_id", profileId)
+    .eq("status", "em_atendimento")
+    .neq("id", agendamentoId);
+  if ((count ?? 0) > 0) {
+    throw new Error("Finalize a visita em andamento antes de iniciar outra.");
+  }
 }
 
 async function resolverTecnicoAgenda(
@@ -181,16 +211,16 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
   const supabase = await createClient();
   await validarAgendamentoTecnico(supabase, id, profile);
 
+  const ag = await carregarAgendamento(supabase, id);
+  validarCheckinAgenda(ag);
+
+  if (profile.papel === "tecnico") {
+    await assertUmaVisitaEmAtendimento(supabase, profile.id, id);
+  }
+
   const lat = coord(formData?.get("lat"));
   const lng = coord(formData?.get("lng"));
   const precisao = coord(formData?.get("precisao"));
-
-  const { data: ag } = await supabase
-    .from("agendamentos")
-    .select("tecnico, tecnico_id, os_id")
-    .eq("id", id)
-    .single();
-  if (!ag) throw new Error("Agendamento não encontrado.");
 
   const nome = nomeTecnico(profile);
   const assumir = !ag.tecnico_id && !ag.tecnico?.trim();
@@ -206,51 +236,71 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
     updates.tecnico_id = profile.id;
   }
 
-  if (ag.os_id) {
-    const { data: osCheckin } = await supabase
-      .from("ordens_servico")
-      .select("status, aprovado")
-      .eq("id", ag.os_id)
-      .single();
-
-    const { data: histRows } = await supabase
-      .from("os_status_historico")
-      .select("status")
-      .eq("os_id", ag.os_id);
-
-    const histStatuses = (histRows || []).map((h) => h.status);
-
-    if (!osCheckin || !statusPermiteCheckin(osCheckin.status as never)) {
-      throw new Error(mensagemCheckinBloqueado(osCheckin?.status as never));
-    }
-
-    if (checkinBloqueadoPorAprovacao(osCheckin as never, histStatuses)) {
-      throw new Error(
-        "Esta OS aguarda aprovação do cliente antes de iniciar o atendimento. Reagende após a aprovação."
-      );
-    }
-
-    const extras: Record<string, string> = {};
-    if (assumir || profile.papel === "tecnico") {
-      extras.tecnico = nome;
-      extras.tecnico_id = profile.id;
-    }
-    await transicionarStatusOs(supabase, {
-      osId: ag.os_id,
-      status: "em_execucao",
-      observacao: "Check-in do técnico na visita",
-      origem: "check-in",
-      sistema: true,
-      papel: profile.papel,
-      extras,
-    });
-  }
-
   const { error: errAgenda } = await supabase.from("agendamentos").update(updates).eq("id", id);
   if (errAgenda) throw new Error(errAgenda.message);
 
+  if (ag.os_id) {
+    try {
+      const { data: osCheckin } = await supabase
+        .from("ordens_servico")
+        .select("status, aprovado")
+        .eq("id", ag.os_id)
+        .single();
+
+      const { data: histRows } = await supabase
+        .from("os_status_historico")
+        .select("status")
+        .eq("os_id", ag.os_id);
+
+      const histStatuses = (histRows || []).map((h) => h.status);
+
+      if (!osCheckin || !statusPermiteCheckin(osCheckin.status as never)) {
+        throw new Error(mensagemCheckinBloqueado(osCheckin?.status as never));
+      }
+
+      if (checkinBloqueadoPorAprovacao(osCheckin as never, histStatuses)) {
+        throw new Error(
+          "Esta OS aguarda aprovação do cliente antes de iniciar o atendimento. Reagende após a aprovação."
+        );
+      }
+
+      const extras: Record<string, string> = {};
+      if (assumir || profile.papel === "tecnico") {
+        extras.tecnico = nome;
+        extras.tecnico_id = profile.id;
+      }
+      await transicionarStatusOs(supabase, {
+        osId: ag.os_id,
+        status: "em_execucao",
+        observacao: "Check-in do técnico na visita",
+        origem: "check-in",
+        sistema: true,
+        papel: profile.papel,
+        extras,
+      });
+    } catch (err) {
+      await supabase
+        .from("agendamentos")
+        .update({
+          status: ag.status,
+          checkin_at: null,
+          checkin_por: null,
+          checkin_lat: null,
+          checkin_lng: null,
+        })
+        .eq("id", id);
+      throw err;
+    }
+  }
+
   if (lat != null && lng != null) {
-    await salvarPosicaoTecnico(supabase, profile, lat, lng, precisao, true, id);
+    await salvarPosicaoTecnico(supabase, profile, {
+      lat,
+      lng,
+      precisao,
+      emAtendimento: true,
+      agendamentoId: id,
+    });
   }
 
   revalidatePath("/agenda");
@@ -264,24 +314,21 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
   const supabase = await createClient();
   await validarAgendamentoTecnico(supabase, id, profile);
 
+  const ag = await carregarAgendamento(supabase, id);
+  validarCheckoutAgenda(ag);
+
   const lat = coord(formData?.get("lat"));
   const lng = coord(formData?.get("lng"));
   const precisao = coord(formData?.get("precisao"));
 
-  const updates: Record<string, string | number | null> = {
+  const checkoutUpdates: Record<string, string | number | null> = {
     checkout_at: new Date().toISOString(),
     status: "realizado",
     checkout_lat: lat,
     checkout_lng: lng,
   };
 
-  const { data: ag } = await supabase
-    .from("agendamentos")
-    .select("os_id")
-    .eq("id", id)
-    .single();
-
-  if (ag?.os_id) {
+  if (ag.os_id) {
     const resultado = (String(formData?.get("resultado") || "visita") as CheckoutResultado);
     const visitaCobrada = formData?.get("visita_cobrada") === "on";
 
@@ -294,6 +341,12 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
       .single();
 
     if (os) {
+      if (os.status !== "em_execucao") {
+        throw new Error(
+          "A ordem não está em execução. Atualize a OS ou faça check-in antes do check-out."
+        );
+      }
+
       if (visitaCobrada && Number(os.valor_visita) > 0 && !os.abater_visita) {
         const novoTotal = calcValorTotalCliente(
           Number(os.valor_itens),
@@ -324,20 +377,45 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
             novoTotal
           );
         }
+      } else if (
+        !visitaCobrada &&
+        Number(os.valor_visita) > 0 &&
+        os.abater_visita &&
+        Number(os.valor_itens) > 0
+      ) {
+        const novoTotal = calcValorTotalCliente(
+          Number(os.valor_itens),
+          Number(os.valor_visita),
+          false,
+          Number(os.desconto),
+          Number(os.acrescimo)
+        );
+        await supabase
+          .from("ordens_servico")
+          .update({ abater_visita: false, valor_total: novoTotal })
+          .eq("id", ag.os_id);
       }
+
+      const { data: osAtual } = await supabase
+        .from("ordens_servico")
+        .select("status, aprovado, tipo_atendimento")
+        .eq("id", ag.os_id)
+        .single();
 
       const proximo = statusPosCheckout(
         {
-          status: os.status as never,
-          aprovado: Boolean(os.aprovado),
-          tipo_atendimento: os.tipo_atendimento ?? "domicilio",
+          status: (osAtual?.status ?? os.status) as never,
+          aprovado: Boolean(osAtual?.aprovado ?? os.aprovado),
+          tipo_atendimento: osAtual?.tipo_atendimento ?? os.tipo_atendimento ?? "domicilio",
         },
         resultado
       );
 
       const obsCheckout =
         resultado === "visita"
-          ? "Check-out: visita/diagnóstico — retorno pode ser necessário"
+          ? visitaCobrada
+            ? "Check-out: visita/diagnóstico — visita paga (abatida do reparo)"
+            : "Check-out: visita/diagnóstico — visita será cobrada junto no final"
           : resultado === "aguardando_peca"
             ? "Check-out: aguardando peça"
             : "Check-out: serviço executado nesta visita";
@@ -357,11 +435,7 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
       const retornoData = str(formData?.get("retorno_data"));
       const retornoTurno = str(formData?.get("retorno_turno")) || "manha";
 
-      if (
-        agendarRetorno &&
-        retornoData &&
-        os.tipo_atendimento === "domicilio"
-      ) {
+      if (agendarRetorno && retornoData && os.tipo_atendimento === "domicilio") {
         const tecnico_id = os.tecnico_id || profile.id;
         const tecnico = os.tecnico || nomeTecnico(profile);
 
@@ -392,15 +466,21 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
     }
   }
 
-  const { error } = await supabase.from("agendamentos").update(updates).eq("id", id);
+  const { error } = await supabase.from("agendamentos").update(checkoutUpdates).eq("id", id);
   if (error) throw new Error(error.message);
 
   if (lat != null && lng != null) {
-    await salvarPosicaoTecnico(supabase, profile, lat, lng, precisao, false, null);
+    await salvarPosicaoTecnico(supabase, profile, {
+      lat,
+      lng,
+      precisao,
+      emAtendimento: false,
+      agendamentoId: null,
+    });
   }
 
   revalidatePath("/agenda");
   revalidatePath("/campo");
   revalidatePath("/financeiro");
-  if (ag?.os_id) revalidatePath(`/ordens/${ag.os_id}`);
+  if (ag.os_id) revalidatePath(`/ordens/${ag.os_id}`);
 }

@@ -77,9 +77,8 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   }
 }
 
-// Papel efetivo. Sem profile (ex.: antes de rodar a migration), assume admin
-// para não bloquear o dono do sistema.
+// Papel efetivo — sem profile assume técnico (mais restritivo).
 export async function getRole(): Promise<"admin" | "atendente" | "tecnico"> {
   const profile = await getCurrentProfile();
-  return profile?.papel ?? "admin";
+  return profile?.papel ?? "tecnico";
 }

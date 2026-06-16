@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Pencil, Printer, DollarSign, Trash2, QrCode } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatusBadge } from "@/components/ui";
@@ -16,6 +16,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { LancamentoAcoes } from "@/components/lancamento-acoes";
 import { getConfig } from "@/lib/config";
 import { requireProfile } from "@/lib/auth-guard";
+import { assertOsAtribuida, osAtribuidaAoProfile, podeVerLucroOs } from "@/lib/os-acesso";
 import { temPermissao } from "@/lib/permissoes";
 import { TURNO_LABEL } from "@/lib/turnos";
 import {
@@ -54,6 +55,7 @@ export default async function OrdemDetalhePage({
   const profile = await requireProfile();
   const podeExcluirOs = temPermissao(profile.papel, "ordens_excluir");
   const podeFinanceiro = temPermissao(profile.papel, "financeiro");
+  const mostrarLucro = podeVerLucroOs(profile.papel);
   const supabase = await createClient();
 
   const { data: os } = await supabase
@@ -63,6 +65,10 @@ export default async function OrdemDetalhePage({
     .single();
 
   if (!os) notFound();
+
+  if (profile.papel === "tecnico" && !osAtribuidaAoProfile(profile, { tecnico_id: os.tecnico_id, tecnico: os.tecnico })) {
+    redirect("/campo?erro=os_nao_atribuida");
+  }
 
   const [
     { data: itens },
@@ -303,6 +309,7 @@ export default async function OrdemDetalhePage({
                 desconto={Number(os.desconto)}
                 acrescimo={Number(os.acrescimo)}
               />
+              {mostrarLucro && (
               <div className="mt-3 space-y-1 rounded-lg bg-slate-50 p-3 text-xs">
                 <Linha titulo="Custo total (peças/serviços)" valor={formatCurrency(os.custo_total || 0)} />
                 <div className="flex items-center justify-between font-semibold">
@@ -312,6 +319,7 @@ export default async function OrdemDetalhePage({
                   </span>
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>
@@ -552,6 +560,8 @@ export default async function OrdemDetalhePage({
                   </li>
                   );
                 })}
+                {mostrarLucro && (
+                  <>
                 <li className="flex items-center justify-between border-t border-slate-200 px-3 pt-2 text-xs text-slate-500">
                   <span>Lucro bruto</span>
                   <span>{formatCurrency(lucroOs.lucroBruto)}</span>
@@ -568,6 +578,8 @@ export default async function OrdemDetalhePage({
                     {formatCurrency(lucroOs.lucroLiquido)}
                   </span>
                 </li>
+                  </>
+                )}
               </ul>
             ) : podeFinanceiro ? (
               <form action={financeiroAction} className="space-y-2">

@@ -88,7 +88,10 @@ export function CheckoutModal({
                     checked={visitaCobrada}
                     onChange={(e) => setVisitaCobrada(e.target.checked)}
                   />
-                  Cliente já pagou a visita (abate do total do serviço)
+                  Cliente já pagou a visita (abate do total do reparo)
+                  <span className="mt-1 block text-[10px] text-slate-500">
+                    Desmarcado: visita será incluída no total final do serviço.
+                  </span>
                 </label>
               )}
             </div>

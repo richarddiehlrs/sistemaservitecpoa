@@ -43,11 +43,6 @@ export default async function PortalOsPage({
   const equips: { tipo?: string; marca?: string; modelo?: string; numero_serie?: string; voltagem?: string }[] =
     os.equipamentos || [];
   const ehClienteAusente = os.status === "cliente_ausente";
-  const podeAprovar = podeAprovarOrcamentoPortal({
-    aprovado: Boolean(os.aprovado),
-    status: os.status,
-    valorTotal,
-  });
   const valorTotal = calcValorTotalCliente(
     Number(os.valor_itens),
     Number(os.valor_visita),
@@ -55,6 +50,11 @@ export default async function PortalOsPage({
     Number(os.desconto),
     Number(os.acrescimo)
   );
+  const podeAprovar = podeAprovarOrcamentoPortal({
+    aprovado: Boolean(os.aprovado),
+    status: os.status,
+    valorTotal,
+  });
   const proximoAgendamento = os.proximo_agendamento as {
     data?: string;
     hora_inicio?: string | null;

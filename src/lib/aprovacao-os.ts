@@ -3,6 +3,10 @@ import { sincronizarAgendaStatusOs } from "@/lib/agenda-os";
 import { criarReceitaPendenteOs, cancelarReceitaPendenteOs } from "@/lib/os-financeiro";
 import { notificarOsAprovada, notificarReaprovacaoOrcamento } from "@/lib/notificacoes";
 import { calcValorTotalCliente } from "@/lib/os-valores";
+import {
+  podeAprovarOrcamentoPortal,
+  STATUS_PORTAL_PODE_APROVAR,
+} from "@/lib/portal-aprovacao";
 import type { Database, StatusOS } from "@/types/database";
 
 type Db = SupabaseClient<Database>;
@@ -69,9 +73,35 @@ export async function executarAprovacaoOs(
     return { ok: false, erro: "Não é possível aprovar enquanto o cliente estiver ausente." };
   }
 
+  const valorAprovado = calcValorAprovadoOs(os);
+
+  if (opts.origem.includes("portal")) {
+    if (
+      !podeAprovarOrcamentoPortal({
+        aprovado: Boolean(os.aprovado),
+        status: os.status,
+        valorTotal: valorAprovado,
+      })
+    ) {
+      return {
+        ok: false,
+        erro: "Orçamento não disponível para aprovação neste momento.",
+      };
+    }
+  } else if (
+    !(STATUS_PORTAL_PODE_APROVAR as readonly string[]).includes(os.status) &&
+    os.status !== "em_execucao" &&
+    os.status !== "em_roteiro" &&
+    os.status !== "aguardando_peca"
+  ) {
+    return {
+      ok: false,
+      erro: `Não é possível aprovar orçamento com status "${os.status}".`,
+    };
+  }
+
   // @ts-expect-error relação embutida
   const clienteNome = os.clientes?.nome as string | undefined;
-  const valorAprovado = calcValorAprovadoOs(os);
   const statusOriginal = os.status as StatusOS;
 
   if (valorAprovado <= 0) {

@@ -56,7 +56,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       .select("valor_total, custo_total")
       .or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${tecnico}%`)
       .in("status", ["concluida", "entregue"])
-      .gte("data_abertura", inicioMes),
+      .gte("data_conclusao", inicioMes),
     getConfig(),
   ]);
 
@@ -136,7 +136,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       {/* Alertas rápidos */}
       <div id="alertas" className="mb-6 grid scroll-mt-20 grid-cols-2 gap-2 sm:grid-cols-4">
         <AlertaCard
-          href="/ordens"
+          href="/campo#visitas"
           label="Visitas hoje"
           valor={visitasPendentes.length}
           icon={<Calendar className="h-4 w-4" />}
@@ -157,7 +157,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
           tom={semAssinatura.length > 0 ? "amber" : "default"}
         />
         <AlertaCard
-          href="/agenda"
+          href="/campo#visitas"
           label="Sem check-in"
           valor={semCheckin.length}
           icon={<LogIn className="h-4 w-4" />}
@@ -188,14 +188,16 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
         </div>
       )}
 
-      <CampoAgendaDia
-        visitas={visitasSerializadas}
-        hoje={hoje}
-        userId={profile.id}
-        tecnicoNome={profile.nome || tecnico}
-        checkinAgendamento={checkinAgendamento}
-        checkoutAgendamento={checkoutAgendamento}
-      />
+      <div id="visitas" className="scroll-mt-20">
+        <CampoAgendaDia
+          visitas={visitasSerializadas}
+          hoje={hoje}
+          userId={profile.id}
+          tecnicoNome={profile.nome || tecnico}
+          checkinAgendamento={checkinAgendamento}
+          checkoutAgendamento={checkoutAgendamento}
+        />
+      </div>
 
       {/* OS que precisam de atenção */}
       {(osAtrasadas.length > 0 || semAssinatura.length > 0) && (

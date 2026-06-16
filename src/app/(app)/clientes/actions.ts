@@ -67,7 +67,7 @@ export async function atualizarCliente(id: string, formData: FormData) {
 }
 
 export async function excluirCliente(id: string) {
-  await requirePermissao("clientes_criar");
+  await requirePermissao("ordens_excluir");
   const supabase = await createClient();
 
   const { count } = await supabase

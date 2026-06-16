@@ -9,6 +9,7 @@ import {
 import {
   statusPermiteCheckin,
   statusPosCheckout,
+  transicoesPermitidas,
   validarTransicaoStatus,
 } from "@/lib/transicao-status";
 
@@ -134,6 +135,23 @@ describe("calcValorAprovadoOs", () => {
         acrescimo: 0,
       })
     ).toBe(110);
+  });
+});
+
+describe("transições técnico", () => {
+  it("não permite concluir ou cliente ausente pelo dropdown", () => {
+    expect(transicoesPermitidas("em_execucao", "tecnico")).not.toContain("concluida");
+    expect(transicoesPermitidas("em_execucao", "tecnico")).not.toContain("cliente_ausente");
+  });
+});
+
+describe("os-acesso", () => {
+  it("valida atribuição por tecnico_id", async () => {
+    const { osAtribuidaAoProfile } = await import("@/lib/os-acesso");
+    const profile = { id: "t1", papel: "tecnico" as const, nome: "João", email: null };
+    expect(osAtribuidaAoProfile(profile, { tecnico_id: "t1", tecnico: null })).toBe(true);
+    expect(osAtribuidaAoProfile(profile, { tecnico_id: "t2", tecnico: null })).toBe(false);
+    expect(osAtribuidaAoProfile({ ...profile, papel: "admin" }, { tecnico_id: "t2", tecnico: null })).toBe(true);
   });
 });
 

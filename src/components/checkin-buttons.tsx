@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, LogOut, Loader2 } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
+import { useToast } from "@/components/toast";
 import { CheckoutModal } from "@/components/checkout-modal";
 
 export function CheckinButtons({
@@ -20,6 +21,7 @@ export function CheckinButtons({
   const [pending, start] = useTransition();
   const [modalCheckout, setModalCheckout] = useState(false);
   const router = useRouter();
+  const toast = useToast();
 
   if (agendamento.status === "cancelado" || agendamento.status === "realizado") return null;
 
@@ -37,12 +39,23 @@ export function CheckinButtons({
     } catch {
       // check-in/out segue sem GPS se o usuário negar permissão
     }
-    await fn(fd);
-    router.refresh();
+    try {
+      await fn(fd);
+      router.refresh();
+    } catch (err) {
+      toast.push((err as Error).message || "Erro ao registrar check-in/out.", "error");
+      throw err;
+    }
   }
 
   function executar(fn: (formData: FormData) => Promise<void>) {
-    start(() => comGps(fn));
+    start(async () => {
+      try {
+        await comGps(fn);
+      } catch {
+        // toast já exibido
+      }
+    });
   }
 
   return (
@@ -78,8 +91,13 @@ export function CheckinButtons({
         open={modalCheckout}
         onClose={() => setModalCheckout(false)}
         onConfirm={async (fd) => {
-          await checkoutAction(fd);
-          router.refresh();
+          try {
+            await checkoutAction(fd);
+            router.refresh();
+          } catch (err) {
+            toast.push((err as Error).message || "Erro no check-out.", "error");
+            throw err;
+          }
         }}
         pending={pending}
         permitirRetorno={permitirRetorno}

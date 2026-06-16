@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
+import { assertOsAtribuida } from "@/lib/os-acesso";
 import { nomeTecnico } from "@/lib/permissoes";
 import { onlyDigits, hojeYmdLocal } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
@@ -22,7 +23,7 @@ import {
   temLancamentoAtivoOs,
 } from "@/lib/os-financeiro";
 import { transicionarStatusOs } from "@/lib/transicao-os";
-import { STATUS_OS_BLOQUEADO_EDICAO } from "@/lib/transicao-status";
+import { STATUS_OS_BLOQUEADO_EDICAO, validarTransicaoStatus } from "@/lib/transicao-status";
 import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
 import { limparDadosVinculadosOs } from "@/lib/limpar-os";
 import {
@@ -292,7 +293,7 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   const { data: osAtual } = await supabase
     .from("ordens_servico")
     .select(
-      "numero, cliente_id, tecnico_id, status, aprovado, valor_aprovado, valor_itens, valor_visita, abater_visita, desconto, acrescimo"
+      "numero, cliente_id, tecnico_id, tecnico, status, aprovado, valor_aprovado, valor_itens, valor_visita, abater_visita, desconto, acrescimo"
     )
     .eq("id", id)
     .single();
@@ -305,6 +306,10 @@ export async function atualizarOrdem(id: string, formData: FormData) {
     throw new Error(
       "Esta ordem está finalizada e não pode ser editada. Solicite ao administrador se precisar alterar."
     );
+  }
+
+  if (osAtual) {
+    assertOsAtribuida(profile, osAtual);
   }
 
   const { error } = await supabase
@@ -477,7 +482,17 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
   const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
+  const { data: osAtual } = await supabase
+    .from("ordens_servico")
+    .select("status, tecnico_id, tecnico")
+    .eq("id", id)
+    .single();
+  if (!osAtual) throw new Error("OS não encontrada.");
+
+  assertOsAtribuida(profile, osAtual);
+
   if (status === "aprovada") {
+    validarTransicaoStatus(osAtual.status as StatusOS, "aprovada", profile.papel);
     const result = await executarAprovacaoOs(supabase, {
       osId: id,
       obs: observacao ?? null,
@@ -529,12 +544,22 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
   const { data: os } = await supabase
     .from("ordens_servico")
     .select(
-      "id, numero, cliente_id, status, aprovado, valor_itens, valor_visita, abater_visita, desconto, acrescimo, valor_total, custo_total, forma_pagamento"
+      "id, numero, cliente_id, status, aprovado, tipo_atendimento, valor_itens, valor_visita, abater_visita, desconto, acrescimo, valor_total, custo_total, forma_pagamento"
     )
     .eq("id", id)
     .single();
   if (!os) throw new Error("OS não encontrada.");
   if (os.status === "cancelada") throw new Error("Não é possível lançar financeiro de OS cancelada.");
+
+  if (
+    os.tipo_atendimento === "domicilio" &&
+    !os.aprovado &&
+    Number(os.valor_itens) > 0
+  ) {
+    throw new Error(
+      "Ordem domicílio com orçamento precisa de aprovação do cliente antes de lançar no financeiro."
+    );
+  }
 
   if (await temLancamentoAtivoOs(supabase, id)) {
     throw new Error("Esta OS já possui receita financeira. Edite os valores na OS para sincronizar.");
@@ -630,11 +655,7 @@ export async function aprovarOrcamentoComAssinatura(
       .eq("id", id)
       .single();
     if (!os) throw new Error("Ordem não encontrada.");
-    const nome = nomeTecnico(profile);
-    const atribuido =
-      os.tecnico_id === profile.id ||
-      (os.tecnico?.toLowerCase().includes(nome.toLowerCase()) ?? false);
-    if (!atribuido) throw new Error("Esta ordem não está atribuída a você.");
+    assertOsAtribuida(profile, os);
   }
 
   const result = await executarAprovacaoOs(supabase, {
@@ -693,11 +714,7 @@ export async function salvarAssinaturaTecnico(id: string, dataUrl: string) {
       .eq("id", id)
       .single();
     if (!os) throw new Error("Ordem não encontrada.");
-    const nome = nomeTecnico(profile);
-    const atribuido =
-      os.tecnico_id === profile.id ||
-      (os.tecnico?.toLowerCase().includes(nome.toLowerCase()) ?? false);
-    if (!atribuido) throw new Error("Esta ordem não está atribuída a você.");
+    assertOsAtribuida(profile, os);
   }
 
   const { error } = await supabase
@@ -719,14 +736,14 @@ export async function registrarClienteAusente(id: string, formData: FormData) {
 
   const { data: osAtual } = await supabase
     .from("ordens_servico")
-    .select("assinatura_tecnico, tecnico_id")
+    .select("assinatura_tecnico, tecnico_id, tecnico")
     .eq("id", id)
     .single();
   if (!osAtual?.assinatura_tecnico) {
     throw new Error("O técnico deve assinar a ordem de serviço antes de registrar cliente ausente.");
   }
-  if (profile.papel === "tecnico" && osAtual.tecnico_id && osAtual.tecnico_id !== profile.id) {
-    throw new Error("Esta ordem não está atribuída a você.");
+  if (profile.papel === "tecnico") {
+    assertOsAtribuida(profile, osAtual);
   }
   if (!fotoUrl) throw new Error("Foto comprobatória é obrigatória.");
 

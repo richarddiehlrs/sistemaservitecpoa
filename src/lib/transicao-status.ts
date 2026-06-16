@@ -24,11 +24,11 @@ const TRANSICOES_OPERACAO: Partial<Record<StatusOS, StatusOS[]>> = {
   cancelada: ["aberta"],
 };
 
-/** Transições permitidas para técnico (campo). */
+/** Transições permitidas para técnico (campo) — conclusão e ausente só via check-out formal. */
 const TRANSICOES_TECNICO: Partial<Record<StatusOS, StatusOS[]>> = {
-  em_roteiro: ["em_execucao", "cliente_ausente"],
-  em_execucao: ["aguardando_aprovacao", "aguardando_peca", "cliente_ausente", "concluida"],
-  aguardando_peca: ["em_execucao", "concluida"],
+  em_roteiro: ["em_execucao"],
+  em_execucao: ["aguardando_aprovacao", "aguardando_peca"],
+  aguardando_peca: ["em_execucao"],
   aprovada: ["em_execucao", "em_roteiro"],
   aguardando_aprovacao: ["em_roteiro"],
 };

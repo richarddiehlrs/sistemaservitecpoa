@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
+import { assertOsAtribuida } from "@/lib/os-acesso";
+import { salvarPosicaoTecnico } from "@/lib/posicao-tecnico";
 import { nomeTecnico } from "@/lib/permissoes";
 import { notificarDespesaCampo } from "@/lib/notificacoes";
 import { hojeYmdLocal } from "@/lib/format";
@@ -40,6 +42,16 @@ export async function lancarDespesaCampo(formData: FormData) {
   const obs = str(formData.get("observacoes"));
   const osId = str(formData.get("os_id"));
   const descricao = obs ? `${descBase} — ${obs}` : descBase;
+
+  if (osId) {
+    const { data: os } = await supabase
+      .from("ordens_servico")
+      .select("tecnico_id, tecnico")
+      .eq("id", osId)
+      .maybeSingle();
+    if (!os) throw new Error("Ordem de serviço não encontrada.");
+    assertOsAtribuida(profile, os);
+  }
 
   const catNome =
     tipo === "combustivel" ? "Combustível"
@@ -99,17 +111,13 @@ export async function registrarPosicaoTecnico(formData: FormData) {
   if (lat == null || lng == null) throw new Error("Coordenadas inválidas.");
 
   const supabase = await createClient();
-  const { error } = await supabase.from("posicoes_tecnico").upsert({
-    user_id: profile.id,
-    tecnico_nome: nomeTecnico(profile),
+  await salvarPosicaoTecnico(supabase, profile, {
     lat,
     lng,
     precisao: coord(formData.get("precisao")),
-    em_atendimento: formData.get("em_atendimento") === "1",
-    agendamento_id: str(formData.get("agendamento_id")),
-    atualizado_at: new Date().toISOString(),
+    emAtendimento: formData.get("em_atendimento") === "1",
+    agendamentoId: str(formData.get("agendamento_id")),
   });
-  if (error) throw new Error(error.message);
 
   revalidatePath("/campo");
   revalidatePath("/agenda");
