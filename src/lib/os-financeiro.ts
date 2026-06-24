@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcReceitaFaturamentoOs, calcValorTotalCliente } from "@/lib/os-valores";
 import { hojeYmdLocal } from "@/lib/format";
+import { isRetornoGarantia } from "@/lib/os-garantia";
 import type { Database } from "@/types/database";
 
 type Db = SupabaseClient<Database>;
@@ -318,6 +319,33 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
   }
 
   return true;
+}
+
+/** Financeiro na conclusão — receita normal ou custo de retorno em garantia. */
+export async function sincronizarFinanceiroConclusaoOs(
+  supabase: Db,
+  osId: string,
+  observacao?: string
+): Promise<void> {
+  const { data: osFin } = await supabase
+    .from("ordens_servico")
+    .select("motivo_atendimento")
+    .eq("id", osId)
+    .single();
+
+  if (isRetornoGarantia(osFin ?? {})) {
+    await sincronizarFinanceiroRetornoGarantia(
+      supabase,
+      osId,
+      observacao ?? "Retorno em garantia concluído — custo registrado; pagamento manual"
+    );
+  } else {
+    await sincronizarReceitaOsInterno(
+      supabase,
+      osId,
+      observacao ?? "Serviço concluído — receita registrada"
+    );
+  }
 }
 
 /** Sincroniza receita/custo da OS via RPC (ignora RLS — uso no check-out do técnico). */

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
-import { amanhaYmdLocal, formatCurrency, hojeYmdLocal } from "@/lib/format";
+import { amanhaYmdLocal, formatCurrency, hojeYmdLocal, parseNumForm } from "@/lib/format";
 import { useToast } from "@/components/toast";
 import type { OsResumoCheckout } from "@/lib/os-valores";
 
@@ -60,7 +60,7 @@ export function CheckoutModal({
     if (visitaCobrada) fd.set("visita_cobrada", "on");
     if (resultado === "servico_concluido" && clientePagou) {
       fd.set("cliente_pagou_agora", "on");
-      const valor = Number(String(valorRecebido).replace(",", "."));
+      const valor = parseNumForm(valorRecebido || null);
       if (valor > 0) fd.set("valor_recebido", String(valor));
     }
     if (mostraRetorno && agendarRetorno && retornoData) {

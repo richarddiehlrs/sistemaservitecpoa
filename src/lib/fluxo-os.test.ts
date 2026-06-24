@@ -75,6 +75,15 @@ describe("validarTransicaoStatus", () => {
       validarTransicaoStatus("aguardando_aprovacao", "em_execucao", "tecnico", { sistema: true })
     ).not.toThrow();
   });
+
+  it("sistema permite marcar OS original em garantia ao abrir retorno", () => {
+    expect(() =>
+      validarTransicaoStatus("concluida", "garantia", "admin", { sistema: true })
+    ).not.toThrow();
+    expect(() =>
+      validarTransicaoStatus("entregue", "garantia", "admin", { sistema: true })
+    ).not.toThrow();
+  });
 });
 
 describe("statusAposAprovacao", () => {

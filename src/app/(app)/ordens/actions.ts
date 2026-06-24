@@ -527,7 +527,7 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
     papel: profile.papel,
   });
 
-  if (result.mudou && (status === "aprovada" || status === "cancelada")) {
+  if (result.mudou && (status === "aprovada" || status === "cancelada" || status === "concluida")) {
     revalidatePath("/financeiro");
     revalidatePath("/dashboard");
     revalidatePath("/dre");

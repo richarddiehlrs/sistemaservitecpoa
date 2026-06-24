@@ -121,9 +121,13 @@ export async function registrarPagamento(formData: FormData): Promise<Financeiro
     };
   }
 
-  const juros = Number(l.juros) + jurosNovos;
-  const multa = Number(l.multa) + multaNovos;
-  const valorPago = Number(l.valor_pago) + pagamento;
+  const valorPagoAnterior = Number(l.valor_pago);
+  const jurosAnterior = Number(l.juros);
+  const multaAnterior = Number(l.multa);
+
+  const juros = jurosAnterior + jurosNovos;
+  const multa = multaAnterior + multaNovos;
+  const valorPago = valorPagoAnterior + pagamento;
   const devido = Number(l.valor) + juros + multa;
   const status = valorPago + 0.001 >= devido ? "pago" : "parcial";
   const liquidoBase = Number(l.valor_liquido ?? Number(l.valor) - Number(l.taxa_cartao || 0));
@@ -131,7 +135,7 @@ export async function registrarPagamento(formData: FormData): Promise<Financeiro
     devido > 0 ? Math.round((valorPago / devido) * liquidoBase * 100) / 100 : liquidoBase;
   const valorLiquido = Number.isFinite(valorLiquidoRaw) ? valorLiquidoRaw : liquidoBase;
 
-  const { error } = await supabase
+  const { data: atualizado, error } = await supabase
     .from("lancamentos_financeiros")
     .update({
       valor_pago: Math.round(valorPago * 100) / 100,
@@ -142,8 +146,17 @@ export async function registrarPagamento(formData: FormData): Promise<Financeiro
       data_pagamento: data,
       status,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("valor_pago", valorPagoAnterior)
+    .select("id")
+    .maybeSingle();
   if (error) return { ok: false, error: error.message };
+  if (!atualizado) {
+    return {
+      ok: false,
+      error: "Outro pagamento foi registrado neste título. Atualize a página e tente novamente.",
+    };
+  }
   revalidarFinanceiro();
   return { ok: true };
 }

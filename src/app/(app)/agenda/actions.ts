@@ -5,15 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { nomeTecnico } from "@/lib/permissoes";
 import { horarioTurno } from "@/lib/turnos";
-import { hojeYmdLocal } from "@/lib/format";
+import { hojeYmdLocal, parseNumForm } from "@/lib/format";
 import { transicionarStatusOs } from "@/lib/transicao-os";
 import { statusPosCheckout, type CheckoutResultado } from "@/lib/transicao-status";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import {
   registrarPagamentoReceitaOsCheckout,
   registrarReceitaVisitaCheckout,
-  sincronizarFinanceiroRetornoGarantia,
-  sincronizarReceitaOsInterno,
 } from "@/lib/os-financeiro";
 import { isRetornoGarantia } from "@/lib/os-garantia";
 import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
@@ -543,43 +541,33 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
       if (proximo === "concluida") {
         const { data: osFin } = await supabase
           .from("ordens_servico")
-          .select("motivo_atendimento, forma_pagamento")
+          .select("motivo_atendimento, forma_pagamento, valor_itens, valor_visita, abater_visita, desconto, acrescimo")
           .eq("id", ag.os_id)
           .single();
 
-        if (isRetornoGarantia(osFin ?? {})) {
-          await sincronizarFinanceiroRetornoGarantia(
-            supabase,
-            ag.os_id,
-            "Retorno em garantia concluído — custo registrado; pagamento manual"
-          );
-        } else {
-          await sincronizarReceitaOsInterno(
-            supabase,
-            ag.os_id,
-            "Serviço concluído — receita registrada"
-          );
+        const clientePagou = formData?.get("cliente_pagou_agora") === "on";
+
+        if (proximo) {
+          await transicionarStatusOs(supabase, {
+            osId: ag.os_id,
+            status: proximo,
+            observacao: obsCheckout,
+            origem: "check-out",
+            sistema: true,
+            papel: profile.papel,
+          });
         }
 
-        const clientePagou = formData?.get("cliente_pagou_agora") === "on";
-        if (clientePagou) {
-          const { data: osPagamento } = await supabase
-            .from("ordens_servico")
-            .select("valor_itens, valor_visita, abater_visita, desconto, acrescimo, forma_pagamento")
-            .eq("id", ag.os_id)
-            .single();
+        if (clientePagou && osFin) {
+          const saldoCliente = calcValorTotalCliente(
+            Number(osFin.valor_itens),
+            Number(osFin.valor_visita),
+            osFin.abater_visita,
+            Number(osFin.desconto),
+            Number(osFin.acrescimo)
+          );
 
-          const saldoCliente = osPagamento
-            ? calcValorTotalCliente(
-                Number(osPagamento.valor_itens),
-                Number(osPagamento.valor_visita),
-                osPagamento.abater_visita,
-                Number(osPagamento.desconto),
-                Number(osPagamento.acrescimo)
-              )
-            : 0;
-
-          const informado = Number(String(formData?.get("valor_recebido") || "").replace(",", "."));
+          const informado = parseNumForm(formData?.get("valor_recebido") ?? null);
           const valorPagamento =
             informado > 0 ? Math.round(informado * 100) / 100 : saldoCliente;
 
@@ -588,16 +576,14 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
               supabase,
               ag.os_id,
               valorPagamento,
-              osPagamento?.forma_pagamento ?? os.forma_pagamento,
-              isRetornoGarantia(osFin ?? {})
+              osFin.forma_pagamento ?? os.forma_pagamento,
+              isRetornoGarantia(osFin)
                 ? "Pagamento no retorno em garantia"
                 : "Pagamento recebido no check-out — serviço concluído"
             );
           }
         }
-      }
-
-      if (proximo) {
+      } else if (proximo) {
         await transicionarStatusOs(supabase, {
           osId: ag.os_id,
           status: proximo,
@@ -610,8 +596,17 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
     }
   }
 
-  const { error: errAgenda } = await supabase.from("agendamentos").update(checkoutUpdates).eq("id", id);
-  assertSupabaseOk(errAgenda, "Não foi possível finalizar a visita");
+  const { data: agFinalizado, error: errAgenda } = await supabase
+    .from("agendamentos")
+    .update(checkoutUpdates)
+    .eq("id", id)
+    .is("checkout_at", null)
+    .select("id")
+    .maybeSingle();
+  if (errAgenda) throw new Error(errAgenda.message);
+  if (!agFinalizado) {
+    throw new Error("Check-out já registrado nesta visita.");
+  }
 
   if (ag.os_id) {
     const agendarRetorno = formData?.get("agendar_retorno") === "on";

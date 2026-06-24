@@ -15,21 +15,21 @@ export async function resolverOsPorCodigo(
 
   const supabase = await createClient();
 
-  if (ref.tipo === "id") {
-    const { data } = await supabase
-      .from("ordens_servico")
-      .select("id")
-      .eq("id", ref.valor)
-      .maybeSingle();
-    if (data) return { id: data.id };
-    return { erro: "Ordem de serviço não encontrada." };
+  const { data: osId, error } = await supabase.rpc("resolver_os_escaneamento", {
+    p_numero: ref.tipo === "numero" ? ref.valor : null,
+    p_id: ref.tipo === "id" ? ref.valor : null,
+  });
+
+  if (error) {
+    return { erro: "Não foi possível localizar a ordem de serviço." };
   }
 
-  const { data } = await supabase
-    .from("ordens_servico")
-    .select("id")
-    .eq("numero", ref.valor)
-    .maybeSingle();
-  if (data) return { id: data.id };
-  return { erro: `OS ${ref.valor} não encontrada.` };
+  if (osId) return { id: osId as string };
+
+  return {
+    erro:
+      ref.tipo === "numero"
+        ? `OS ${ref.valor} não encontrada ou sem permissão de acesso.`
+        : "Ordem de serviço não encontrada ou sem permissão de acesso.",
+  };
 }

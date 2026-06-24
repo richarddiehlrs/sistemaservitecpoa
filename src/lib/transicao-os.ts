@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Papel } from "@/lib/permissoes";
 import { sincronizarAgendaStatusOs } from "@/lib/agenda-os";
-import { cancelarLancamentosOs } from "@/lib/os-financeiro";
+import { cancelarLancamentosOs, sincronizarFinanceiroConclusaoOs } from "@/lib/os-financeiro";
 import { notificarMudancaStatusOs, notificarWhatsAppClienteSugerido } from "@/lib/notificacoes";
 import { eventoAutoPorStatus } from "@/lib/mensagens-cliente";
 import { validarTransicaoStatus } from "@/lib/transicao-status";
@@ -53,6 +53,14 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
     });
   } else {
     throw new Error("Transição de status requer papel do operador ou flag sistema.");
+  }
+
+  if (opts.status === "concluida" && !opts.skipFinanceiro) {
+    await sincronizarFinanceiroConclusaoOs(
+      supabase,
+      opts.osId,
+      opts.observacao ?? "Serviço concluído — receita registrada"
+    );
   }
 
   const update: Record<string, unknown> = { status: opts.status, ...opts.extras };

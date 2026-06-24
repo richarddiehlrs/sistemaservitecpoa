@@ -43,6 +43,15 @@ export async function updateSession(request: NextRequest, opts: SessionOpts = {}
   const publicPaths = opts.publicPaths ?? DEFAULT_PUBLIC_PATHS;
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 
+  // Cron Vercel: Bearer CRON_SECRET (sem sessão Supabase)
+  if (pathname.startsWith("/api/cron/")) {
+    const secret = process.env.CRON_SECRET;
+    const auth = request.headers.get("authorization");
+    if (secret && auth === `Bearer ${secret}`) {
+      return supabaseResponse;
+    }
+  }
+
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

@@ -32,7 +32,7 @@ const MATRIZ: Record<Papel, Permissao[]> = {
   ],
   atendente: [
     "dashboard", "agenda", "agenda_criar", "agenda_checkin",
-    "ordens", "ordens_criar", "ordens_editar", "ordens_excluir",
+    "ordens", "ordens_criar", "ordens_editar",
     "clientes", "clientes_criar",
     "financeiro", "financeiro_fluxo", "financeiro_recorrentes",
     "relatorios", "dre", "catalogo", "campo_central",
