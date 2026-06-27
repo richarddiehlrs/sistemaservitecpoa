@@ -8,35 +8,40 @@ import {
   mesclarAlertasDispensados,
   parseAlertasDispensados,
 } from "@/lib/alertas-dispensados";
+import { safeAction, type ActionResult } from "@/lib/action-result";
 
-export async function marcarNotificacaoLida(id: string) {
-  const profile = await requireProfile();
-  const supabase = await createClient();
-  const agora = new Date().toISOString();
+export async function marcarNotificacaoLida(id: string): Promise<ActionResult> {
+  return safeAction(async () => {
+    const profile = await requireProfile();
+    const supabase = await createClient();
+    const agora = new Date().toISOString();
 
-  const { error } = await supabase
-    .from("notificacoes")
-    .update({ lida: true, lida_em: agora })
-    .eq("id", id)
-    .eq("user_id", profile.id);
+    const { error } = await supabase
+      .from("notificacoes")
+      .update({ lida: true, lida_em: agora })
+      .eq("id", id)
+      .eq("user_id", profile.id);
 
-  if (error) throw new Error(error.message);
-  revalidatePath("/", "layout");
+    if (error) throw new Error(error.message);
+    revalidatePath("/", "layout");
+  });
 }
 
-export async function marcarTodasNotificacoesLidas() {
-  const profile = await requireProfile();
-  const supabase = await createClient();
-  const agora = new Date().toISOString();
+export async function marcarTodasNotificacoesLidas(): Promise<ActionResult> {
+  return safeAction(async () => {
+    const profile = await requireProfile();
+    const supabase = await createClient();
+    const agora = new Date().toISOString();
 
-  const { error } = await supabase
-    .from("notificacoes")
-    .update({ lida: true, lida_em: agora })
-    .eq("user_id", profile.id)
-    .eq("lida", false);
+    const { error } = await supabase
+      .from("notificacoes")
+      .update({ lida: true, lida_em: agora })
+      .eq("user_id", profile.id)
+      .eq("lida", false);
 
-  if (error) throw new Error(error.message);
-  revalidatePath("/", "layout");
+    if (error) throw new Error(error.message);
+    revalidatePath("/", "layout");
+  });
 }
 
 export type AlertaDispensadoInput = {
@@ -46,6 +51,12 @@ export type AlertaDispensadoInput = {
 
 /** Marca eventos como lidos e persiste alertas dispensados (preferências do usuário). */
 export async function limparTodosAlertas(
+  items: AlertaDispensadoInput[]
+): Promise<ActionResult<AlertaDispensadoEntry[]>> {
+  return safeAction(() => limparTodosAlertasImpl(items));
+}
+
+async function limparTodosAlertasImpl(
   items: AlertaDispensadoInput[]
 ): Promise<AlertaDispensadoEntry[]> {
   const profile = await requireProfile();

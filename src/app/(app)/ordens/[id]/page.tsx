@@ -14,6 +14,7 @@ import { OsClienteAusente } from "@/components/os-cliente-ausente";
 import { CopyLink } from "@/components/copy-link";
 import { ConfirmButton } from "@/components/confirm-button";
 import { LancamentoAcoes } from "@/components/lancamento-acoes";
+import { ActionForm } from "@/components/use-action";
 import { getConfig } from "@/lib/config";
 import { requireProfile } from "@/lib/auth-guard";
 import { osAtribuidaAoProfile, podeVerLucroOs } from "@/lib/os-acesso";
@@ -614,7 +615,7 @@ export default async function OrdemDetalhePage({
                 )}
               </ul>
             ) : podeFinanceiro ? (
-              <form action={financeiroAction} className="space-y-2">
+              <ActionForm action={financeiroAction} className="space-y-2">
                 <select name="status_pagamento" className="input" defaultValue="pendente">
                   <option value="pendente">A receber (pendente)</option>
                   <option value="pago">Já recebido (pago)</option>
@@ -627,7 +628,7 @@ export default async function OrdemDetalhePage({
                   Lançar receita {formatCurrency(valorTotal)}
                   {os.custo_total > 0 ? ` + custo pendente ${formatCurrency(os.custo_total)}` : ""}
                 </button>
-              </form>
+              </ActionForm>
             ) : (
               <p className="text-sm text-slate-500">Sem lançamento financeiro. Aprovação gera receita pendente automaticamente.</p>
             )}

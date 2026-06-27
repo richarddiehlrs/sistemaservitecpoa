@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Search } from "lucide-react";
 import type { Cliente } from "@/types/database";
 import { buscarCep } from "@/lib/cep";
 import { formatCep, formatCpfCnpj, formatTelefone, maskCpfCnpj, maskTelefone, maskCep, onlyDigits } from "@/lib/format";
 import { validarCpfCnpj } from "@/lib/validators";
+import type { ActionResult } from "@/lib/action-result";
+import { useAction } from "@/components/use-action";
 
 type Props = {
   cliente?: Cliente;
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
 };
 
 const UFS = [
@@ -20,7 +22,7 @@ const UFS = [
 
 export function ClienteForm({ cliente, action }: Props) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const { run, pending } = useAction();
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [cepErro, setCepErro] = useState<string | null>(null);
 
@@ -60,9 +62,7 @@ export function ClienteForm({ cliente, action }: Props) {
   }
 
   function handleSubmit(formData: FormData) {
-    startTransition(async () => {
-      await action(formData);
-    });
+    run(() => action(formData), { errorMsg: "Erro ao salvar cliente." });
   }
 
   return (

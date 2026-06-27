@@ -6,6 +6,7 @@ import { obterPosicaoGps } from "@/lib/geo";
 import { amanhaYmdLocal, formatCurrency, hojeYmdLocal, parseNumForm } from "@/lib/format";
 import { useToast } from "@/components/toast";
 import type { OsResumoCheckout } from "@/lib/os-valores";
+import type { ActionResult } from "@/lib/action-result";
 
 type Resultado = "visita" | "servico_concluido" | "aguardando_peca";
 
@@ -19,7 +20,7 @@ export function CheckoutModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onConfirm: (fd: FormData) => Promise<void>;
+  onConfirm: (fd: FormData) => Promise<ActionResult>;
   pending: boolean;
   permitirRetorno?: boolean;
   osResumo?: OsResumoCheckout | null;
@@ -76,15 +77,12 @@ export function CheckoutModal({
     } catch {
       // segue sem GPS
     }
-    try {
-      await onConfirm(fd);
-      onClose();
-    } catch (err) {
-      toast.push(
-        err instanceof Error && err.message ? err.message : "Erro ao finalizar visita.",
-        "error"
-      );
+    const res = await onConfirm(fd);
+    if (!res.ok) {
+      toast.push(res.error || "Erro ao finalizar visita.", "error");
+      return;
     }
+    onClose();
   }
 
   const hoje = hojeYmdLocal();

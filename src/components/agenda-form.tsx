@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, Search, X, UserCheck, Wrench } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatTelefone, hojeYmdLocal } from "@/lib/format";
 import { TecnicoCargaTrabalho } from "@/components/tecnico-carga-trabalho";
 import type { TecnicoOpcao } from "@/lib/tecnicos";
+import type { ActionResult } from "@/lib/action-result";
+import { useAction } from "@/components/use-action";
 
 type ClienteLite = { id: string; nome: string; telefone: string | null; endereco?: string };
 
@@ -24,14 +26,14 @@ export function AgendaForm({
   tecnicos = [],
   osOpcoes = [],
 }: {
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
   dataPadrao?: string;
   tecnicos?: TecnicoOpcao[];
   osOpcoes?: OsOpcao[];
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [aberto, setAberto] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const { run, pending } = useAction();
 
   const [cliente, setCliente] = useState<ClienteLite | null>(null);
   const [busca, setBusca] = useState("");
@@ -98,10 +100,12 @@ export function AgendaForm({
   function handle(formData: FormData) {
     if (cliente) formData.set("cliente_id", cliente.id);
     if (osId) formData.set("os_id", osId);
-    startTransition(async () => {
-      await action(formData);
-      setAberto(false);
-      resetForm();
+    run(() => action(formData), {
+      successMsg: "Agendamento criado.",
+      onSuccess: () => {
+        setAberto(false);
+        resetForm();
+      },
     });
   }
 

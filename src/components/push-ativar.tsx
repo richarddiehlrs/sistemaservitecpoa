@@ -69,7 +69,11 @@ export function PushAtivar() {
       fd.set("endpoint", json.endpoint || "");
       fd.set("p256dh", json.keys?.p256dh || "");
       fd.set("auth", json.keys?.auth || "");
-      await registrarPushSubscription(fd);
+      const res = await registrarPushSubscription(fd);
+      if (!res.ok) {
+        setErro(res.error || "Não foi possível ativar notificações.");
+        return;
+      }
       setAtivo(true);
     } catch (e) {
       setErro((e as Error).message || "Não foi possível ativar notificações.");
@@ -85,7 +89,11 @@ export function PushAtivar() {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
-        await removerPushSubscription(sub.endpoint);
+        const res = await removerPushSubscription(sub.endpoint);
+        if (!res.ok) {
+          setErro(res.error || "Erro ao desativar.");
+          return;
+        }
         await sub.unsubscribe();
       }
       setAtivo(false);

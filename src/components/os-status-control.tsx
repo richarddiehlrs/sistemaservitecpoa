@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { STATUS_OS_LABEL } from "@/lib/format";
+import type { ActionResult } from "@/lib/action-result";
+import { useAction } from "./use-action";
 
 export function OsStatusControl({
   statusAtual,
@@ -10,13 +12,13 @@ export function OsStatusControl({
   transicoesPermitidas = [],
 }: {
   statusAtual: string;
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
   transicoesPermitidas?: string[];
 }) {
   const opcoes = transicoesPermitidas.length > 0 ? transicoesPermitidas : [statusAtual];
   const [status, setStatus] = useState(statusAtual);
   const [obs, setObs] = useState("");
-  const [pending, startTransition] = useTransition();
+  const { run, pending } = useAction();
 
   useEffect(() => {
     setStatus(statusAtual);
@@ -26,9 +28,9 @@ export function OsStatusControl({
     const fd = new FormData();
     fd.set("status", status);
     fd.set("observacao", obs);
-    startTransition(async () => {
-      await action(fd);
-      setObs("");
+    run(() => action(fd), {
+      successMsg: "Status atualizado.",
+      onSuccess: () => setObs(""),
     });
   }
 

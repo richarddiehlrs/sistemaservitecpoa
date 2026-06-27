@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Eraser, Check, Loader2 } from "lucide-react";
 import { salvarAssinaturaTecnico } from "@/app/(app)/ordens/actions";
+import { useToast } from "./toast";
 
 export function OsAssinaturaTecnico({
   osId,
@@ -18,6 +19,7 @@ export function OsAssinaturaTecnico({
   const [temTraco, setTemTraco] = useState(false);
   const [pending, startTransition] = useTransition();
   const [salvo, setSalvo] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -68,7 +70,11 @@ export function OsAssinaturaTecnico({
     const dataUrl = canvasRef.current!.toDataURL("image/png");
     setSalvo(false);
     startTransition(async () => {
-      await salvarAssinaturaTecnico(osId, dataUrl);
+      const res = await salvarAssinaturaTecnico(osId, dataUrl);
+      if (!res.ok) {
+        toast.push(res.error, "error");
+        return;
+      }
       setSalvo(true);
     });
   }

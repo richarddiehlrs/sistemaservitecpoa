@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Loader2, Pencil, X } from "lucide-react";
 import type { CategoriaFinanceira, LancamentoFinanceiro } from "@/types/database";
-import { useToast } from "./toast";
+import type { ActionResult } from "@/lib/action-result";
+import { useAction } from "./use-action";
 
 type LancamentoEdit = Pick<
   LancamentoFinanceiro,
@@ -33,30 +33,20 @@ export function EditarLancamento({
 }: {
   lancamento: LancamentoEdit;
   categorias: CategoriaFinanceira[];
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
   compact?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
-  const [pending, start] = useTransition();
-  const toast = useToast();
-  const router = useRouter();
+  const { run, pending } = useAction();
 
   const cats = categorias.filter((c) => c.tipo === lancamento.tipo);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    start(async () => {
-      try {
-        await action(fd);
-        toast.push("Lançamento atualizado.", "success");
-        setAberto(false);
-        router.refresh();
-      } catch (err) {
-        const digest = (err as { digest?: string })?.digest;
-        if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) throw err;
-        toast.push(err instanceof Error && err.message ? err.message : "Erro ao salvar.", "error");
-      }
+    run(() => action(fd), {
+      successMsg: "Lançamento atualizado.",
+      onSuccess: () => setAberto(false),
     });
   }
 

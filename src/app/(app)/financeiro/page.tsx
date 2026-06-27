@@ -10,6 +10,7 @@ import { CobrancaWhatsApp } from "@/components/cobranca-whatsapp";
 import { CobrancaWhatsAppLote } from "@/components/cobranca-whatsapp-lote";
 import { ConfirmButton } from "@/components/confirm-button";
 import { LancamentoAcoes } from "@/components/lancamento-acoes";
+import { ActionForm } from "@/components/use-action";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
 import { calcMetricasCaixa, calcMetricasCompetencia } from "@/lib/metricas-financeiras";
@@ -141,12 +142,12 @@ export default async function FinanceiroPage({
           </select>
           <button className="btn-secondary">Filtrar</button>
         </form>
-        <form action={gerarDespesasDoMes}>
+        <ActionForm action={gerarDespesasDoMes} successMsg="Despesas fixas geradas para o mês.">
           <input type="hidden" name="mes" value={periodo.value} />
           <button className="btn-secondary" title="Lança as despesas fixas cadastradas para este mês">
             <RefreshCw className="h-4 w-4" /> Gerar despesas fixas
           </button>
-        </form>
+        </ActionForm>
         <Link
           href={`/financeiro?mes=${periodo.value}&vencidos=1`}
           className={`badge ${vencidos === "1" ? "bg-red-600 text-white" : "bg-white text-red-600 ring-1 ring-red-200"}`}

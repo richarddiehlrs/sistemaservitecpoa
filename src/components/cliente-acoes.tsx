@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Pencil, Trash2 } from "lucide-react";
+import type { ActionResult } from "@/lib/action-result";
 import { ConfirmButton } from "./confirm-button";
 
 export function ClienteAcoes({
@@ -11,7 +12,7 @@ export function ClienteAcoes({
   somenteExcluir = false,
 }: {
   clienteId: string;
-  excluirAction: () => Promise<void>;
+  excluirAction: () => Promise<ActionResult>;
   compact?: boolean;
   somenteExcluir?: boolean;
 }) {

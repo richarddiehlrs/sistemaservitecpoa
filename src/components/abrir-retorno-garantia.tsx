@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Shield, Loader2 } from "lucide-react";
 import { hojeYmdLocal } from "@/lib/format";
+import type { ActionResult } from "@/lib/action-result";
 import { useToast } from "@/components/toast";
 
 export function AbrirRetornoGarantia({
@@ -11,7 +12,7 @@ export function AbrirRetornoGarantia({
   fimGarantiaLabel,
 }: {
   osId: string;
-  action: (osId: string, formData: FormData) => Promise<void>;
+  action: (osId: string, formData: FormData) => Promise<ActionResult>;
   fimGarantiaLabel: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -24,9 +25,20 @@ export function AbrirRetornoGarantia({
     const fd = new FormData(e.currentTarget);
     start(async () => {
       try {
-        await action(osId, fd);
+        const res = await action(osId, fd);
+        if (!res.ok) {
+          toast.push(res.error || "Erro ao abrir retorno.", "error");
+          return;
+        }
         setOpen(false);
       } catch (err) {
+        const digest = (err as { digest?: string })?.digest;
+        if (
+          typeof digest === "string" &&
+          (digest.startsWith("NEXT_REDIRECT") || digest.startsWith("NEXT_NOT_FOUND"))
+        ) {
+          throw err;
+        }
         toast.push(err instanceof Error ? err.message : "Erro ao abrir retorno.", "error");
       }
     });

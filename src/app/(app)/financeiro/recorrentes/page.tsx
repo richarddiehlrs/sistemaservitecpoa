@@ -5,6 +5,7 @@ import { requirePermissao } from "@/lib/auth-guard";
 import { PageHeader, EmptyState } from "@/components/ui";
 import { RecorrenteForm } from "@/components/recorrente-form";
 import { ConfirmButton } from "@/components/confirm-button";
+import { ActionForm } from "@/components/use-action";
 import { formatCurrency } from "@/lib/format";
 import { salvarRecorrente, alternarRecorrente, excluirRecorrente, gerarDespesasDoMes } from "../actions";
 
@@ -32,12 +33,12 @@ export default async function RecorrentesPage() {
             <Link href="/financeiro" className="btn-secondary">
               <ArrowLeft className="h-4 w-4" /> Voltar
             </Link>
-            <form action={gerarDespesasDoMes}>
+            <ActionForm action={gerarDespesasDoMes} successMsg="Despesas do mês geradas.">
               <input type="hidden" name="mes" value={mesAtual} />
               <button className="btn-secondary" title="Lançar estas despesas no mês atual">
                 <RefreshCw className="h-4 w-4" /> Gerar mês atual
               </button>
-            </form>
+            </ActionForm>
             <RecorrenteForm categorias={categorias || []} action={salvarRecorrente} />
           </>
         }
@@ -77,11 +78,14 @@ export default async function RecorrentesPage() {
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <RecorrenteForm categorias={categorias || []} action={salvarRecorrente} recorrente={r} trigger="edit" />
-                      <form action={alternarRecorrente.bind(null, r.id, !r.ativo)}>
+                      <ActionForm
+                        action={alternarRecorrente.bind(null, r.id, !r.ativo)}
+                        successMsg={r.ativo ? "Despesa desativada." : "Despesa ativada."}
+                      >
                         <button className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title={r.ativo ? "Desativar" : "Ativar"}>
                           <Power className="h-4 w-4" />
                         </button>
-                      </form>
+                      </ActionForm>
                       <ConfirmButton
                         action={excluirRecorrente.bind(null, r.id)}
                         className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"

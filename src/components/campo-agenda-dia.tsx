@@ -7,6 +7,7 @@ import { CheckinButtons } from "@/components/checkin-buttons";
 import { CampoVisitaAcoes } from "@/components/campo-visita-acoes";
 import { formatHora, TIPO_AGENDAMENTO_LABEL } from "@/lib/format";
 import type { OsResumoCheckout } from "@/lib/os-valores";
+import type { ActionResult } from "@/lib/action-result";
 
 export type VisitaCampoDia = {
   id: string;
@@ -58,8 +59,8 @@ export function CampoAgendaDia({
   hoje: string;
   userId: string;
   tecnicoNome: string;
-  checkinAgendamento: (id: string, formData: FormData) => Promise<void>;
-  checkoutAgendamento: (id: string, formData?: FormData) => Promise<void>;
+  checkinAgendamento: (id: string, formData: FormData) => Promise<ActionResult>;
+  checkoutAgendamento: (id: string, formData?: FormData) => Promise<ActionResult>;
 }) {
   const [online, setOnline] = useState(true);
   const [cache, setCache] = useState<CacheAgenda | null>(null);

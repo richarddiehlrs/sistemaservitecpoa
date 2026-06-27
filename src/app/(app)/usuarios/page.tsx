@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import { getRole } from "@/lib/config";
 import { atualizarUsuario } from "./actions";
+import { ActionForm } from "@/components/use-action";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,7 @@ export default async function UsuariosPage() {
             {(usuarios || []).map((u) => (
               <tr key={u.id}>
                 <td colSpan={5} className="p-0">
-                  <form action={atualizarUsuario.bind(null, u.id)} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <ActionForm action={atualizarUsuario.bind(null, u.id)} successMsg="Usuário atualizado." className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <input name="nome" defaultValue={u.nome || ""} className="input max-w-[180px]" placeholder="Nome" />
                     <span className="min-w-[200px] flex-1 text-sm text-slate-500">{u.email}</span>
                     <select name="papel" defaultValue={u.papel} className="input max-w-[160px]">
@@ -69,7 +70,7 @@ export default async function UsuariosPage() {
                     <button className="btn-primary text-sm">
                       <Save className="h-4 w-4" /> Salvar
                     </button>
-                  </form>
+                  </ActionForm>
                 </td>
               </tr>
             ))}

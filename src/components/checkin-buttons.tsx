@@ -7,11 +7,7 @@ import { obterPosicaoGps } from "@/lib/geo";
 import { useToast } from "@/components/toast";
 import { CheckoutModal } from "@/components/checkout-modal";
 import type { OsResumoCheckout } from "@/lib/os-valores";
-
-function mensagemErro(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  return "Erro ao registrar check-in/out.";
-}
+import type { ActionResult } from "@/lib/action-result";
 
 export function CheckinButtons({
   agendamento,
@@ -21,8 +17,8 @@ export function CheckinButtons({
   osResumo = null,
 }: {
   agendamento: { status: string; checkin_at: string | null; checkout_at: string | null };
-  checkinAction: (formData: FormData) => Promise<void>;
-  checkoutAction: (formData: FormData) => Promise<void>;
+  checkinAction: (formData: FormData) => Promise<ActionResult>;
+  checkoutAction: (formData: FormData) => Promise<ActionResult>;
   permitirRetorno?: boolean;
   osResumo?: OsResumoCheckout | null;
 }) {
@@ -37,7 +33,7 @@ export function CheckinButtons({
   const podeCheckout = !!agendamento.checkin_at && !agendamento.checkout_at;
   if (!podeCheckin && !podeCheckout) return null;
 
-  async function comGps(fn: (formData: FormData) => Promise<void>) {
+  async function comGps(fn: (formData: FormData) => Promise<ActionResult>) {
     const fd = new FormData();
     try {
       const pos = await obterPosicaoGps();
@@ -47,15 +43,15 @@ export function CheckinButtons({
     } catch {
       // check-in/out segue sem GPS se o usuário negar permissão
     }
-    try {
-      await fn(fd);
-      router.refresh();
-    } catch (err) {
-      toast.push(mensagemErro(err), "error");
+    const res = await fn(fd);
+    if (!res.ok) {
+      toast.push(res.error || "Erro ao registrar check-in/out.", "error");
+      return;
     }
+    router.refresh();
   }
 
-  function executar(fn: (formData: FormData) => Promise<void>) {
+  function executar(fn: (formData: FormData) => Promise<ActionResult>) {
     start(async () => {
       await comGps(fn);
     });
@@ -94,13 +90,9 @@ export function CheckinButtons({
         open={modalCheckout}
         onClose={() => setModalCheckout(false)}
         onConfirm={async (fd) => {
-          try {
-            await checkoutAction(fd);
-            setModalCheckout(false);
-            router.refresh();
-          } catch (err) {
-            toast.push(mensagemErro(err), "error");
-          }
+          const res = await checkoutAction(fd);
+          if (res.ok) router.refresh();
+          return res;
         }}
         pending={pending}
         permitirRetorno={permitirRetorno}

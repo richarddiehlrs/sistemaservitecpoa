@@ -1,9 +1,10 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
+import type { ActionResult } from "@/lib/action-result";
 import { ConfirmButton } from "./confirm-button";
 
-export function ExcluirAgendamentoButton({ action }: { action: () => Promise<void> }) {
+export function ExcluirAgendamentoButton({ action }: { action: () => Promise<ActionResult> }) {
   return (
     <ConfirmButton
       action={action}

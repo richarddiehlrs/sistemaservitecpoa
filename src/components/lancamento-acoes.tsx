@@ -2,6 +2,7 @@
 
 import { Trash2 } from "lucide-react";
 import type { CategoriaFinanceira, LancamentoFinanceiro } from "@/types/database";
+import type { ActionResult } from "@/lib/action-result";
 import { ConfirmButton } from "./confirm-button";
 import { EditarLancamento } from "./editar-lancamento";
 
@@ -14,8 +15,8 @@ export function LancamentoAcoes({
 }: {
   lancamento: LancamentoFinanceiro;
   categorias: CategoriaFinanceira[];
-  editarAction: (formData: FormData) => Promise<void>;
-  excluirAction: () => Promise<void>;
+  editarAction: (formData: FormData) => Promise<ActionResult>;
+  excluirAction: () => Promise<ActionResult>;
   compact?: boolean;
 }) {
   if (lancamento.status === "cancelado") {

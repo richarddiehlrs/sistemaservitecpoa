@@ -69,7 +69,7 @@ function emptyEquipSlot(): EquipSlot {
 }
 
 type Props = {
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<import("@/lib/action-result").ActionResult>;
   ordem?: OrdemServico;
   clienteInicial?: ClienteLite | null;
   equipamentos?: Equipamento[];
@@ -336,10 +336,16 @@ export function OrdemForm({
     setErroSalvar(null);
     startTransition(async () => {
       try {
-        await action(formData);
+        const res = await action(formData);
+        if (res && !res.ok) {
+          setErroSalvar(res.error || "Erro ao salvar a ordem de serviço.");
+        }
       } catch (e: unknown) {
         const err = e as { digest?: string; message?: string };
-        if (typeof err?.digest === "string" && err.digest.startsWith("NEXT_REDIRECT")) {
+        if (
+          typeof err?.digest === "string" &&
+          (err.digest.startsWith("NEXT_REDIRECT") || err.digest.startsWith("NEXT_NOT_FOUND"))
+        ) {
           throw e;
         }
         setErroSalvar(err?.message || "Erro ao salvar a ordem de serviço.");

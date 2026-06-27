@@ -21,6 +21,7 @@ import { salvarPosicaoTecnico } from "@/lib/posicao-tecnico";
 import {
   validarCheckinOs,
 } from "@/lib/checkin-os";
+import { safeAction, type ActionResult } from "@/lib/action-result";
 
 async function garantirAtribuicaoCampo(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -169,7 +170,7 @@ async function resolverTecnicoAgenda(
   return { tecnico_id: t.id, tecnico: nomeTecnico(t) };
 }
 
-export async function criarAgendamento(formData: FormData) {
+async function criarAgendamentoImpl(formData: FormData) {
   await requirePermissao("agenda_criar");
   const supabase = await createClient();
 
@@ -234,7 +235,7 @@ export async function criarAgendamento(formData: FormData) {
   if (osId) revalidatePath(`/ordens/${osId}`);
 }
 
-export async function alterarStatusAgendamento(id: string, status: string) {
+async function alterarStatusAgendamentoImpl(id: string, status: string) {
   await requirePermissao("agenda_criar");
   const supabase = await createClient();
   const { error } = await supabase
@@ -245,7 +246,7 @@ export async function alterarStatusAgendamento(id: string, status: string) {
   revalidatePath("/agenda");
 }
 
-export async function excluirAgendamento(id: string) {
+async function excluirAgendamentoImpl(id: string) {
   await requirePermissao("agenda_criar");
   const supabase = await createClient();
   const { error } = await supabase.from("agendamentos").delete().eq("id", id);
@@ -278,7 +279,7 @@ async function validarAgendamentoTecnico(
   }
 }
 
-export async function checkinAgendamento(id: string, formData?: FormData) {
+async function checkinAgendamentoImpl(id: string, formData?: FormData) {
   const profile = await requirePermissao("agenda_checkin");
   const supabase = await createClient();
   await validarAgendamentoTecnico(supabase, id, profile);
@@ -390,7 +391,7 @@ export async function checkinAgendamento(id: string, formData?: FormData) {
   if (ag.os_id) revalidatePath(`/ordens/${ag.os_id}`);
 }
 
-export async function checkoutAgendamento(id: string, formData?: FormData) {
+async function checkoutAgendamentoImpl(id: string, formData?: FormData) {
   const profile = await requirePermissao("agenda_checkin");
   const supabase = await createClient();
   await validarAgendamentoTecnico(supabase, id, profile);
@@ -694,4 +695,35 @@ export async function checkoutAgendamento(id: string, formData?: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/painel");
   if (ag.os_id) revalidatePath(`/ordens/${ag.os_id}`);
+}
+
+// ===================== Wrappers seguros (ActionResult) =====================
+
+export async function criarAgendamento(formData: FormData): Promise<ActionResult> {
+  return safeAction(() => criarAgendamentoImpl(formData));
+}
+
+export async function alterarStatusAgendamento(
+  id: string,
+  status: string
+): Promise<ActionResult> {
+  return safeAction(() => alterarStatusAgendamentoImpl(id, status));
+}
+
+export async function excluirAgendamento(id: string): Promise<ActionResult> {
+  return safeAction(() => excluirAgendamentoImpl(id));
+}
+
+export async function checkinAgendamento(
+  id: string,
+  formData?: FormData
+): Promise<ActionResult> {
+  return safeAction(() => checkinAgendamentoImpl(id, formData));
+}
+
+export async function checkoutAgendamento(
+  id: string,
+  formData?: FormData
+): Promise<ActionResult> {
+  return safeAction(() => checkoutAgendamentoImpl(id, formData));
 }

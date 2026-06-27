@@ -50,10 +50,12 @@ export function PreferenciasAlertasForm({ prefs }: { prefs: PreferenciasAlertas 
     e.preventDefault();
     setSalvando(true);
     try {
-      await salvarPreferenciasAlertas(new FormData(e.currentTarget));
+      const res = await salvarPreferenciasAlertas(new FormData(e.currentTarget));
+      if (!res.ok) {
+        toast.push(res.error || "Erro ao salvar.", "error");
+        return;
+      }
       toast.push("Preferências de alertas salvas.", "success");
-    } catch (err) {
-      toast.push((err as Error).message || "Erro ao salvar.", "error");
     } finally {
       setSalvando(false);
     }

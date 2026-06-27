@@ -32,6 +32,7 @@ import {
 } from "@/lib/notificacoes";
 import type { StatusOS, TipoAtendimento } from "@/types/database";
 import { podeAbrirRetornoGarantia } from "@/lib/os-garantia";
+import { safeAction, type ActionResult } from "@/lib/action-result";
 
 function lerTipoAtendimento(formData: FormData): TipoAtendimento {
   const t = str(formData.get("tipo_atendimento"));
@@ -148,7 +149,7 @@ async function resolverCliente(
   return data!.id;
 }
 
-export async function criarOrdem(formData: FormData) {
+async function criarOrdemImpl(formData: FormData) {
   const profile = await requirePermissao("ordens_criar");
   const supabase = await createClient();
 
@@ -269,7 +270,7 @@ export async function criarOrdem(formData: FormData) {
   redirect(`/ordens/${os!.id}`);
 }
 
-export async function atualizarOrdem(id: string, formData: FormData) {
+async function atualizarOrdemImpl(id: string, formData: FormData) {
   const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
@@ -478,13 +479,13 @@ export async function atualizarOrdem(id: string, formData: FormData) {
   redirect(`/ordens/${id}`);
 }
 
-export async function alterarStatusForm(id: string, formData: FormData) {
+async function alterarStatusFormImpl(id: string, formData: FormData) {
   const status = String(formData.get("status") || "aberta") as StatusOS;
   const observacao = str(formData.get("observacao")) || undefined;
-  await alterarStatus(id, status, observacao);
+  await alterarStatusImpl(id, status, observacao);
 }
 
-export async function alterarStatus(id: string, status: StatusOS, observacao?: string) {
+async function alterarStatusImpl(id: string, status: StatusOS, observacao?: string) {
   const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
@@ -543,7 +544,7 @@ export async function alterarStatus(id: string, status: StatusOS, observacao?: s
 }
 
 // Lança a OS no financeiro: receita (valor total) + custo (despesa pendente).
-export async function lancarFinanceiro(id: string, formData: FormData) {
+async function lancarFinanceiroImpl(id: string, formData: FormData) {
   await requirePermissao("financeiro");
   const supabase = await createClient();
 
@@ -653,7 +654,7 @@ export async function lancarFinanceiro(id: string, formData: FormData) {
   redirect(`/ordens/${id}`);
 }
 
-export async function aprovarOrcamentoComAssinatura(
+async function aprovarOrcamentoComAssinaturaImpl(
   id: string,
   assinatura: string | null,
   obs: string | null
@@ -689,7 +690,7 @@ export async function aprovarOrcamentoComAssinatura(
   revalidatePath("/painel");
 }
 
-export async function salvarAssinatura(id: string, dataUrl: string) {
+async function salvarAssinaturaImpl(id: string, dataUrl: string) {
   const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
@@ -716,7 +717,7 @@ export async function salvarAssinatura(id: string, dataUrl: string) {
   revalidatePath("/imprimir/os/" + id);
 }
 
-export async function salvarAssinaturaTecnico(id: string, dataUrl: string) {
+async function salvarAssinaturaTecnicoImpl(id: string, dataUrl: string) {
   const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
@@ -739,7 +740,7 @@ export async function salvarAssinaturaTecnico(id: string, dataUrl: string) {
   revalidatePath("/imprimir/os/" + id);
 }
 
-export async function registrarClienteAusente(id: string, formData: FormData) {
+async function registrarClienteAusenteImpl(id: string, formData: FormData) {
   const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
@@ -806,7 +807,7 @@ export async function registrarClienteAusente(id: string, formData: FormData) {
 }
 
 /** Abre nova OS de retorno em garantia vinculada à original (dentro do prazo). */
-export async function abrirRetornoGarantia(osOrigemId: string, formData: FormData) {
+async function abrirRetornoGarantiaImpl(osOrigemId: string, formData: FormData) {
   await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
@@ -925,7 +926,7 @@ export async function abrirRetornoGarantia(osOrigemId: string, formData: FormDat
   redirect(`/ordens/${nova!.id}/editar`);
 }
 
-export async function excluirOrdem(id: string) {
+async function excluirOrdemImpl(id: string) {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
 
@@ -947,4 +948,79 @@ export async function excluirOrdem(id: string) {
   revalidatePath("/dashboard");
   revalidatePath("/painel");
   redirect("/ordens");
+}
+
+// ===================== Wrappers seguros (ActionResult) =====================
+
+export async function criarOrdem(formData: FormData): Promise<ActionResult> {
+  return safeAction(() => criarOrdemImpl(formData));
+}
+
+export async function atualizarOrdem(
+  id: string,
+  formData: FormData
+): Promise<ActionResult> {
+  return safeAction(() => atualizarOrdemImpl(id, formData));
+}
+
+export async function alterarStatusForm(
+  id: string,
+  formData: FormData
+): Promise<ActionResult> {
+  return safeAction(() => alterarStatusFormImpl(id, formData));
+}
+
+export async function alterarStatus(
+  id: string,
+  status: StatusOS,
+  observacao?: string
+): Promise<ActionResult> {
+  return safeAction(() => alterarStatusImpl(id, status, observacao));
+}
+
+export async function lancarFinanceiro(
+  id: string,
+  formData: FormData
+): Promise<ActionResult> {
+  return safeAction(() => lancarFinanceiroImpl(id, formData));
+}
+
+export async function aprovarOrcamentoComAssinatura(
+  id: string,
+  assinatura: string | null,
+  obs: string | null
+): Promise<ActionResult> {
+  return safeAction(() => aprovarOrcamentoComAssinaturaImpl(id, assinatura, obs));
+}
+
+export async function salvarAssinatura(
+  id: string,
+  dataUrl: string
+): Promise<ActionResult> {
+  return safeAction(() => salvarAssinaturaImpl(id, dataUrl));
+}
+
+export async function salvarAssinaturaTecnico(
+  id: string,
+  dataUrl: string
+): Promise<ActionResult> {
+  return safeAction(() => salvarAssinaturaTecnicoImpl(id, dataUrl));
+}
+
+export async function registrarClienteAusente(
+  id: string,
+  formData: FormData
+): Promise<ActionResult> {
+  return safeAction(() => registrarClienteAusenteImpl(id, formData));
+}
+
+export async function abrirRetornoGarantia(
+  osOrigemId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  return safeAction(() => abrirRetornoGarantiaImpl(osOrigemId, formData));
+}
+
+export async function excluirOrdem(id: string): Promise<ActionResult> {
+  return safeAction(() => excluirOrdemImpl(id));
 }

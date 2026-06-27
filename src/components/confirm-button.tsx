@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useToast } from "./toast";
+import type { ActionResult } from "@/lib/action-result";
 
 export function ConfirmButton({
   action,
@@ -13,7 +14,7 @@ export function ConfirmButton({
   confirmLabel = "Excluir",
   successMsg,
 }: {
-  action: () => Promise<void>;
+  action: () => Promise<ActionResult | void>;
   children: React.ReactNode;
   className?: string;
   title?: string;
@@ -28,13 +29,20 @@ export function ConfirmButton({
   function confirmar() {
     start(async () => {
       try {
-        await action();
+        const res = await action();
+        if (res && res.ok === false) {
+          toast.push(res.error || "Erro ao executar a ação.", "error");
+          return;
+        }
         if (successMsg) toast.push(successMsg, "success");
         setOpen(false);
       } catch (e: unknown) {
         const err = e as { digest?: string; message?: string };
-        if (typeof err?.digest === "string" && err.digest.startsWith("NEXT_REDIRECT")) {
-          throw e; // deixa o redirect acontecer
+        if (
+          typeof err?.digest === "string" &&
+          (err.digest.startsWith("NEXT_REDIRECT") || err.digest.startsWith("NEXT_NOT_FOUND"))
+        ) {
+          throw e; // deixa o redirect/notFound acontecer
         }
         toast.push(err?.message || "Erro ao executar a ação.", "error");
         setOpen(false);

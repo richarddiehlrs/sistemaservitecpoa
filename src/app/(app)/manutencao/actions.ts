@@ -5,13 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { filtrarAgendamentosOrfaos, filtrarLancamentosOrfaos } from "@/lib/orfaos";
 import { listarOsInconsistentes, repararOs, repararTodasOs } from "@/lib/reparar-os";
+import { safeAction, type ActionResult } from "@/lib/action-result";
 
 async function idsOsValidos(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data } = await supabase.from("ordens_servico").select("id");
   return new Set((data || []).map((o) => o.id));
 }
 
-export async function excluirAgendamentoOrfao(id: string) {
+async function excluirAgendamentoOrfaoImpl(id: string) {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
   const { error } = await supabase.from("agendamentos").delete().eq("id", id);
@@ -19,7 +20,7 @@ export async function excluirAgendamentoOrfao(id: string) {
   revalidarManutencao();
 }
 
-export async function excluirLancamentoOrfao(id: string) {
+async function excluirLancamentoOrfaoImpl(id: string) {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
   const { error } = await supabase.from("lancamentos_financeiros").delete().eq("id", id);
@@ -27,7 +28,7 @@ export async function excluirLancamentoOrfao(id: string) {
   revalidarManutencao();
 }
 
-export async function limparTodosOrfaos() {
+async function limparTodosOrfaosImpl() {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
   const osIds = await idsOsValidos(supabase);
@@ -73,7 +74,7 @@ export async function limparTodosOrfaos() {
   revalidarManutencao();
 }
 
-export async function repararOsInconsistente(osId: string) {
+async function repararOsInconsistenteImpl(osId: string) {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
   const resultado = await repararOs(supabase, osId);
@@ -82,13 +83,39 @@ export async function repararOsInconsistente(osId: string) {
   return resultado;
 }
 
-export async function repararTodasOsInconsistentes() {
+async function repararTodasOsInconsistentesImpl() {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
   const resultados = await repararTodasOs(supabase);
   revalidarManutencao();
   revalidatePath("/ordens");
   return resultados;
+}
+
+// ===================== Wrappers seguros (ActionResult) =====================
+
+export async function excluirAgendamentoOrfao(id: string): Promise<ActionResult> {
+  return safeAction(() => excluirAgendamentoOrfaoImpl(id));
+}
+
+export async function excluirLancamentoOrfao(id: string): Promise<ActionResult> {
+  return safeAction(() => excluirLancamentoOrfaoImpl(id));
+}
+
+export async function limparTodosOrfaos(): Promise<ActionResult> {
+  return safeAction(() => limparTodosOrfaosImpl());
+}
+
+export async function repararOsInconsistente(
+  osId: string
+): Promise<ActionResult<Awaited<ReturnType<typeof repararOsInconsistenteImpl>>>> {
+  return safeAction(() => repararOsInconsistenteImpl(osId));
+}
+
+export async function repararTodasOsInconsistentes(): Promise<
+  ActionResult<Awaited<ReturnType<typeof repararTodasOsInconsistentesImpl>>>
+> {
+  return safeAction(() => repararTodasOsInconsistentesImpl());
 }
 
 function revalidarManutencao() {

@@ -1,35 +1,37 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Loader2, Plus, Pencil, Trash2, X } from "lucide-react";
 import type { ServicoCatalogo } from "@/types/database";
 import { formatCurrency } from "@/lib/format";
+import type { ActionResult } from "@/lib/action-result";
+import { useAction } from "./use-action";
 
 type Props = {
   servicos: ServicoCatalogo[];
   podeEditar: boolean;
-  salvar: (formData: FormData) => Promise<void>;
-  excluir: (id: string) => Promise<void>;
+  salvar: (formData: FormData) => Promise<ActionResult>;
+  excluir: (id: string) => Promise<ActionResult>;
 };
 
 export function CatalogoManager({ servicos, podeEditar, salvar, excluir }: Props) {
   const [editando, setEditando] = useState<ServicoCatalogo | null>(null);
   const [criando, setCriando] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const { run, pending } = useAction();
 
   const aberto = criando || editando !== null;
 
   function handle(formData: FormData) {
-    startTransition(async () => {
-      await salvar(formData);
-      setCriando(false);
-      setEditando(null);
+    run(() => salvar(formData), {
+      successMsg: "Item salvo.",
+      onSuccess: () => {
+        setCriando(false);
+        setEditando(null);
+      },
     });
   }
   function remover(id: string) {
-    startTransition(async () => {
-      await excluir(id);
-    });
+    run(() => excluir(id), { successMsg: "Item excluído." });
   }
 
   return (

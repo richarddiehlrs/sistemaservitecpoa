@@ -8,6 +8,7 @@ import { salvarPosicaoTecnico } from "@/lib/posicao-tecnico";
 import { nomeTecnico } from "@/lib/permissoes";
 import { notificarDespesaCampo } from "@/lib/notificacoes";
 import { hojeYmdLocal, parseNumForm } from "@/lib/format";
+import { safeAction, type ActionResult } from "@/lib/action-result";
 
 function num(v: FormDataEntryValue | null): number {
   return parseNumForm(v);
@@ -18,7 +19,7 @@ function str(v: FormDataEntryValue | null): string | null {
   return s === "" ? null : s;
 }
 
-export async function lancarDespesaCampo(formData: FormData) {
+async function lancarDespesaCampoImpl(formData: FormData) {
   const profile = await requirePermissao("despesas_campo");
   const supabase = await createClient();
   const hoje = hojeYmdLocal();
@@ -101,7 +102,7 @@ function coord(v: FormDataEntryValue | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export async function registrarPosicaoTecnico(formData: FormData) {
+async function registrarPosicaoTecnicoImpl(formData: FormData) {
   const profile = await requirePermissao("despesas_campo");
   const lat = coord(formData.get("lat"));
   const lng = coord(formData.get("lng"));
@@ -118,4 +119,16 @@ export async function registrarPosicaoTecnico(formData: FormData) {
 
   revalidatePath("/campo");
   revalidatePath("/agenda");
+}
+
+// ===================== Wrappers seguros (ActionResult) =====================
+
+export async function lancarDespesaCampo(formData: FormData): Promise<ActionResult> {
+  return safeAction(() => lancarDespesaCampoImpl(formData));
+}
+
+export async function registrarPosicaoTecnico(
+  formData: FormData
+): Promise<ActionResult> {
+  return safeAction(() => registrarPosicaoTecnicoImpl(formData));
 }

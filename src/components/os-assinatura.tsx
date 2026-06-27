@@ -83,12 +83,12 @@ export function OsAssinatura({
     setSalvo(false);
     setErro(null);
     startTransition(async () => {
-      try {
-        await salvarAssinatura(osId, dataUrl);
-        setSalvo(true);
-      } catch (e) {
-        setErro(e instanceof Error ? e.message : "Erro ao salvar.");
+      const res = await salvarAssinatura(osId, dataUrl);
+      if (!res.ok) {
+        setErro(res.error);
+        return;
       }
+      setSalvo(true);
     });
   }
 
@@ -100,12 +100,12 @@ export function OsAssinatura({
     }
     setErro(null);
     startTransition(async () => {
-      try {
-        await aprovarOrcamentoComAssinatura(osId, dataUrl, obs.trim() || null);
-        setAprovadoOk(true);
-      } catch (e) {
-        setErro(e instanceof Error ? e.message : "Erro ao aprovar.");
+      const res = await aprovarOrcamentoComAssinatura(osId, dataUrl, obs.trim() || null);
+      if (!res.ok) {
+        setErro(res.error);
+        return;
       }
+      setAprovadoOk(true);
     });
   }
 

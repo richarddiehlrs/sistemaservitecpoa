@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Loader2, Plus, X, Fuel, Utensils, Car, Wrench, Receipt } from "lucide-react";
-import { useToast } from "./toast";
+import type { ActionResult } from "@/lib/action-result";
+import { useAction } from "./use-action";
 
 const TIPOS = [
   { id: "combustivel", label: "Combustível", icon: Fuel },
@@ -16,24 +17,18 @@ export function DespesaCampoForm({
   action,
   osOpcoes = [],
 }: {
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
   osOpcoes?: { id: string; label: string }[];
 }) {
   const [aberto, setAberto] = useState(false);
   const [tipo, setTipo] = useState("combustivel");
-  const [pending, start] = useTransition();
-  const toast = useToast();
+  const { run, pending } = useAction();
 
   function handle(formData: FormData) {
     formData.set("tipo_despesa", tipo);
-    start(async () => {
-      try {
-        await action(formData);
-        toast.push("Despesa registrada! Aparece no financeiro para aprovação.", "success");
-        setAberto(false);
-      } catch (e) {
-        toast.push((e as Error)?.message || "Erro ao registrar.", "error");
-      }
+    run(() => action(formData), {
+      successMsg: "Despesa registrada! Aparece no financeiro para aprovação.",
+      onSuccess: () => setAberto(false),
     });
   }
 

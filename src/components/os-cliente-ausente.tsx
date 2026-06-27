@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, Loader2, ImagePlus, UserX, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import type { ActionResult } from "@/lib/action-result";
 import { useToast } from "./toast";
 
 export function OsClienteAusente({
@@ -14,7 +15,7 @@ export function OsClienteAusente({
   osId: string;
   assinaturaTecnico?: string | null;
   observacaoAtual?: string | null;
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
 }) {
   const [obs, setObs] = useState(observacaoAtual || "");
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
@@ -58,12 +59,12 @@ export function OsClienteAusente({
     fd.set("foto_url", fotoUrl);
     fd.set("foto_path", fotoPath || "");
     start(async () => {
-      try {
-        await action(fd);
-        toast.push("Cliente ausente registrado com sucesso.", "success");
-      } catch (e) {
-        toast.push((e as Error).message || "Erro ao registrar.", "error");
+      const res = await action(fd);
+      if (!res.ok) {
+        toast.push(res.error || "Erro ao registrar.", "error");
+        return;
       }
+      toast.push("Cliente ausente registrado com sucesso.", "success");
     });
   }
 

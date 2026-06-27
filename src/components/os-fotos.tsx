@@ -5,6 +5,7 @@ import { Loader2, ImagePlus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { OsAnexo } from "@/types/database";
 import { registrarAnexo, excluirAnexo } from "@/app/(app)/ordens/anexos-actions";
+import { useToast } from "./toast";
 
 export function OsFotos({
   osId,
@@ -17,6 +18,7 @@ export function OsFotos({
   const [enviando, setEnviando] = useState(false);
   const [momento, setMomento] = useState<"antes" | "depois" | "outro">("antes");
   const [, startTransition] = useTransition();
+  const toast = useToast();
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
@@ -38,7 +40,8 @@ export function OsFotos({
       fd.set("url", data.publicUrl);
       fd.set("path", path);
       fd.set("momento", momento);
-      await registrarAnexo(fd);
+      const res = await registrarAnexo(fd);
+      if (!res.ok) toast.push(res.error, "error");
     }
     setEnviando(false);
     e.target.value = "";
@@ -46,7 +49,8 @@ export function OsFotos({
 
   function remover(a: OsAnexo) {
     startTransition(async () => {
-      await excluirAnexo(a.id, a.path || "", osId);
+      const res = await excluirAnexo(a.id, a.path || "", osId);
+      if (!res.ok) toast.push(res.error, "error");
     });
   }
 

@@ -516,12 +516,14 @@ export function Notifications({
       });
 
     try {
-      const merged = await limparTodosAlertas(items);
-      setDispensados(merged);
+      const res = await limparTodosAlertas(items);
+      if (!res.ok) {
+        toast.push(res.error || "Não foi possível limpar os alertas.", "error");
+        return;
+      }
+      setDispensados(res.data ?? []);
       setEventos((prev) => prev.map((e) => ({ ...e, lida: true })));
       toast.push("Alertas limpos.", "success");
-    } catch (e) {
-      toast.push(e instanceof Error ? e.message : "Não foi possível limpar os alertas.", "error");
     } finally {
       setLimpando(false);
     }

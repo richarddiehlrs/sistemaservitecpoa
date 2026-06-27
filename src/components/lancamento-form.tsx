@@ -1,35 +1,30 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Loader2, Plus, X } from "lucide-react";
 import type { CategoriaFinanceira } from "@/types/database";
-import { useToast } from "./toast";
+import type { ActionResult } from "@/lib/action-result";
+import { useAction } from "./use-action";
 
 export function LancamentoForm({
   categorias,
   action,
 }: {
   categorias: CategoriaFinanceira[];
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
 }) {
   const [aberto, setAberto] = useState(false);
   const [tipo, setTipo] = useState<"receita" | "despesa">("despesa");
   const [forma, setForma] = useState("");
-  const [pending, startTransition] = useTransition();
-  const toast = useToast();
+  const { run, pending } = useAction();
 
   const cats = categorias.filter((c) => c.tipo === tipo);
   const ehCartao = forma === "Cartão de crédito";
 
   function handle(formData: FormData) {
-    startTransition(async () => {
-      try {
-        await action(formData);
-        toast.push("Lançamento salvo com sucesso.", "success");
-        setAberto(false);
-      } catch (e) {
-        toast.push((e as Error)?.message || "Erro ao salvar.", "error");
-      }
+    run(() => action(formData), {
+      successMsg: "Lançamento salvo com sucesso.",
+      onSuccess: () => setAberto(false),
     });
   }
 

@@ -1,19 +1,21 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Loader2, Upload, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { EmpresaConfig } from "@/lib/config";
+import type { ActionResult } from "@/lib/action-result";
+import { useAction } from "./use-action";
 
 export function ConfigForm({
   config,
   action,
 }: {
   config: EmpresaConfig;
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
 }) {
   const supabase = createClient();
-  const [pending, startTransition] = useTransition();
+  const { run, pending } = useAction();
   const [logoUrl, setLogoUrl] = useState(config.logo_url || "");
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const [salvo, setSalvo] = useState(false);
@@ -40,9 +42,9 @@ export function ConfigForm({
   function handle(formData: FormData) {
     formData.set("logo_url", logoUrl);
     setSalvo(false);
-    startTransition(async () => {
-      await action(formData);
-      setSalvo(true);
+    run(() => action(formData), {
+      successMsg: "Configurações salvas.",
+      onSuccess: () => setSalvo(true),
     });
   }
 

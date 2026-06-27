@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Target, Pencil, Loader2, Check } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
-import { useToast } from "./toast";
+import type { ActionResult } from "@/lib/action-result";
+import { useAction } from "./use-action";
 
 export function MetaCard({
   ano,
@@ -16,25 +17,19 @@ export function MetaCard({
   mes: number;
   meta: number;
   realizado: number;
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
 }) {
   const [editando, setEditando] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const toast = useToast();
+  const { run, pending } = useAction();
 
   const pct = meta > 0 ? Math.min(100, (realizado / meta) * 100) : 0;
   const falta = Math.max(0, meta - realizado);
   const cor = pct >= 100 ? "bg-green-500" : pct >= 60 ? "bg-brand-500" : "bg-amber-500";
 
   function handle(formData: FormData) {
-    startTransition(async () => {
-      try {
-        await action(formData);
-        toast.push("Meta atualizada.", "success");
-        setEditando(false);
-      } catch (e) {
-        toast.push((e as Error)?.message || "Erro ao salvar meta.", "error");
-      }
+    run(() => action(formData), {
+      successMsg: "Meta atualizada.",
+      onSuccess: () => setEditando(false),
     });
   }
 

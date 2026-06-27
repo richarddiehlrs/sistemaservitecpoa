@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { MapPin, Loader2, Navigation } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
 import { useToast } from "./toast";
+import type { ActionResult } from "@/lib/action-result";
 
 const INTERVALO_MS = 3 * 60 * 1000; // 3 minutos
 
@@ -12,7 +13,7 @@ export function CompartilharGps({
   emAtendimento = false,
   agendamentoId,
 }: {
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ActionResult>;
   emAtendimento?: boolean;
   agendamentoId?: string | null;
 }) {
@@ -32,7 +33,12 @@ export function CompartilharGps({
       fd.set("precisao", String(pos.precisao));
       fd.set("em_atendimento", emAtendimento ? "1" : "0");
       if (agendamentoId) fd.set("agendamento_id", agendamentoId);
-      await action(fd);
+      const res = await action(fd);
+      if (!res.ok) {
+        toast.push(res.error || "Erro ao enviar localização.", "error");
+        setAtivo(false);
+        return;
+      }
       setUltima(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
     } catch (e) {
       toast.push((e as Error).message || "Erro ao enviar localização.", "error");

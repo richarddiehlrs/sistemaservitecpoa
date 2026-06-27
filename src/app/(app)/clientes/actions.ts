@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { onlyDigits } from "@/lib/format";
+import { safeAction, type ActionResult } from "@/lib/action-result";
 
 function parseCliente(formData: FormData) {
   const get = (k: string) => {
@@ -33,10 +34,10 @@ function parseCliente(formData: FormData) {
   };
 }
 
-export async function criarCliente(formData: FormData) {
+async function criarClienteImpl(formData: FormData) {
   await requirePermissao("clientes_criar");
   const dados = parseCliente(formData);
-  if (!dados.nome) return;
+  if (!dados.nome) throw new Error("Informe o nome do cliente.");
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -51,10 +52,10 @@ export async function criarCliente(formData: FormData) {
   redirect(`/clientes/${data!.id}`);
 }
 
-export async function atualizarCliente(id: string, formData: FormData) {
+async function atualizarClienteImpl(id: string, formData: FormData) {
   await requirePermissao("clientes_criar");
   const dados = parseCliente(formData);
-  if (!dados.nome) return;
+  if (!dados.nome) throw new Error("Informe o nome do cliente.");
 
   const supabase = await createClient();
   const { error } = await supabase.from("clientes").update(dados).eq("id", id);
@@ -66,7 +67,7 @@ export async function atualizarCliente(id: string, formData: FormData) {
   redirect(`/clientes/${id}`);
 }
 
-export async function excluirCliente(id: string) {
+async function excluirClienteImpl(id: string) {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
 
@@ -86,4 +87,21 @@ export async function excluirCliente(id: string) {
 
   revalidatePath("/clientes");
   redirect("/clientes");
+}
+
+// ===================== Wrappers seguros (ActionResult) =====================
+
+export async function criarCliente(formData: FormData): Promise<ActionResult> {
+  return safeAction(() => criarClienteImpl(formData));
+}
+
+export async function atualizarCliente(
+  id: string,
+  formData: FormData
+): Promise<ActionResult> {
+  return safeAction(() => atualizarClienteImpl(id, formData));
+}
+
+export async function excluirCliente(id: string): Promise<ActionResult> {
+  return safeAction(() => excluirClienteImpl(id));
 }
