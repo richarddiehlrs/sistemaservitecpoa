@@ -15,12 +15,14 @@ export function CheckinButtons({
   checkoutAction,
   permitirRetorno = false,
   osResumo = null,
+  percentualSinalPadrao = 50,
 }: {
   agendamento: { status: string; checkin_at: string | null; checkout_at: string | null };
   checkinAction: (formData: FormData) => Promise<ActionResult>;
   checkoutAction: (formData: FormData) => Promise<ActionResult>;
   permitirRetorno?: boolean;
   osResumo?: OsResumoCheckout | null;
+  percentualSinalPadrao?: number;
 }) {
   const [pending, start] = useTransition();
   const [modalCheckout, setModalCheckout] = useState(false);
@@ -97,6 +99,7 @@ export function CheckinButtons({
         pending={pending}
         permitirRetorno={permitirRetorno}
         osResumo={osResumo}
+        percentualSinalPadrao={percentualSinalPadrao}
       />
     </>
   );

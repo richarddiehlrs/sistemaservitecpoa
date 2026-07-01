@@ -72,27 +72,44 @@ export type OsResumoCheckout = {
   abaterVisita: boolean;
   saldoCliente: number;
   faturamento: number;
+  valorPago: number;
+  saldoRestante: number;
+  visitaPaga: boolean;
+  aprovado: boolean;
   retornoGarantia?: boolean;
 };
 
-export function resumoFinanceiroOs(os: {
-  valor_itens: number;
-  valor_visita: number;
-  abater_visita: boolean;
-  desconto: number;
-  acrescimo: number;
-  motivo_atendimento?: string | null;
-}): OsResumoCheckout {
+export function resumoFinanceiroOs(
+  os: {
+    valor_itens: number;
+    valor_visita: number;
+    abater_visita: boolean;
+    desconto: number;
+    acrescimo: number;
+    motivo_atendimento?: string | null;
+    aprovado?: boolean;
+  },
+  extras?: { valorPago?: number; visitaPaga?: boolean }
+): OsResumoCheckout {
   const valorItens = Number(os.valor_itens) || 0;
   const valorVisita = Number(os.valor_visita) || 0;
   const desconto = Number(os.desconto) || 0;
   const acrescimo = Number(os.acrescimo) || 0;
   const abaterVisita = Boolean(os.abater_visita);
+  const saldoCliente = calcValorTotalCliente(valorItens, valorVisita, abaterVisita, desconto, acrescimo);
+  const valorPago = Number(extras?.valorPago) || 0;
+  const visitaPaga =
+    Boolean(extras?.visitaPaga) ||
+    (abaterVisita && valorVisita > 0 && valorPago + 0.001 >= valorVisita);
   return {
     valorVisita,
     abaterVisita,
-    saldoCliente: calcValorTotalCliente(valorItens, valorVisita, abaterVisita, desconto, acrescimo),
+    saldoCliente,
     faturamento: calcReceitaFaturamentoOs(valorItens, valorVisita, abaterVisita, desconto, acrescimo),
+    valorPago,
+    saldoRestante: Math.max(0, Math.round((saldoCliente - valorPago) * 100) / 100),
+    visitaPaga,
+    aprovado: Boolean(os.aprovado),
     retornoGarantia: os.motivo_atendimento === "retorno_garantia",
   };
 }

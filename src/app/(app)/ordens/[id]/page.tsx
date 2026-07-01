@@ -41,8 +41,11 @@ import { calcLucroOs } from "@/lib/metricas-financeiras";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
 import { transicoesPermitidas } from "@/lib/transicao-status";
 import type { StatusOS } from "@/types/database";
-import { alterarStatusForm, abrirRetornoGarantia, excluirOrdem, lancarFinanceiro, registrarClienteAusente } from "../actions";
+import { alterarStatusForm, abrirRetornoGarantia, excluirOrdem, lancarFinanceiro, registrarClienteAusente, registrarPagamentoOs } from "../actions";
 import { OsEtiquetaPrompt } from "@/components/os-etiqueta-prompt";
+import { OsFinanceiroResumo, OsPagamentosHistorico } from "@/components/os-financeiro-resumo";
+import { RegistrarPagamentoOs } from "@/components/registrar-pagamento-os";
+import { resumoFinanceiroOsCompleto } from "@/lib/os-pagamentos";
 
 export const dynamic = "force-dynamic";
 
@@ -172,6 +175,18 @@ export default async function OrdemDetalhePage({
       .maybeSingle();
     osOrigemNumero = origem?.numero ?? null;
   }
+
+  const finResumo = await resumoFinanceiroOsCompleto(supabase, {
+    id: os.id,
+    valor_itens: Number(os.valor_itens),
+    valor_visita: Number(os.valor_visita),
+    abater_visita: os.abater_visita,
+    desconto: Number(os.desconto),
+    acrescimo: Number(os.acrescimo),
+    aprovado: Boolean(os.aprovado),
+    motivo_atendimento: os.motivo_atendimento,
+  });
+  const pagamentoOsAction = registrarPagamentoOs.bind(null, id);
 
   return (
     <div>
@@ -545,6 +560,28 @@ export default async function OrdemDetalhePage({
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
               <DollarSign className="h-4 w-4" /> Financeiro
             </h3>
+
+            <OsFinanceiroResumo
+              totalCliente={finResumo.totalCliente}
+              valorPago={finResumo.valorPago}
+              saldoRestante={finResumo.saldoRestante}
+              visitaPaga={finResumo.visitaPaga}
+              valorVisita={Number(os.valor_visita)}
+              statusReceita={finResumo.statusReceita}
+            />
+
+            <OsPagamentosHistorico pagamentos={finResumo.pagamentos} />
+
+            {!retornoGarantia && finResumo.saldoRestante > 0 && !ehTecnico && (
+              <RegistrarPagamentoOs
+                osId={id}
+                saldoRestante={finResumo.saldoRestante}
+                percentualSinalPadrao={config.percentual_sinal_padrao}
+                aprovado={Boolean(os.aprovado)}
+                action={pagamentoOsAction}
+              />
+            )}
+
             {lancamentosAtivos.length > 0 ? (
               <ul className="space-y-2 text-sm">
                 {lancamentosAtivos.map((l) => {
@@ -623,14 +660,19 @@ export default async function OrdemDetalhePage({
                 <input type="date" name="data_vencimento" className="input" />
                 <p className="text-xs text-slate-500">
                   O custo de peças será lançado como despesa pendente (separado do recebimento).
+                  Na aprovação e conclusão, o financeiro é gerado automaticamente.
                 </p>
                 <button className="btn-primary w-full">
-                  Lançar receita {formatCurrency(valorTotal)}
+                  Lançar receita manual {formatCurrency(valorTotal)}
                   {os.custo_total > 0 ? ` + custo pendente ${formatCurrency(os.custo_total)}` : ""}
                 </button>
               </ActionForm>
             ) : (
-              <p className="text-sm text-slate-500">Sem lançamento financeiro. Aprovação gera receita pendente automaticamente.</p>
+              <p className="text-sm text-slate-500">
+                {os.aprovado
+                  ? "Financeiro gerado na aprovação. Registre pagamentos acima ou conclua a OS para sincronizar."
+                  : "Após aprovação do orçamento, a receita é criada automaticamente no financeiro."}
+              </p>
             )}
           </div>
 

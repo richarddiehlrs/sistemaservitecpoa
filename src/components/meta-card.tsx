@@ -37,7 +37,7 @@ export function MetaCard({
     <div className="card p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-          <Target className="h-4 w-4 text-brand-600" /> Meta de faturamento do mês
+          <Target className="h-4 w-4 text-brand-600" /> Meta vs recebido (caixa)
         </h2>
         {!editando && (
           <button onClick={() => setEditando(true)} className="text-slate-400 hover:text-brand-600" title="Definir meta">

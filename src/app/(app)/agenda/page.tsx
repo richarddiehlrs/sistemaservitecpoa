@@ -14,6 +14,7 @@ import { requireProfile } from "@/lib/auth-guard";
 import { nomeTecnico, temPermissao } from "@/lib/permissoes";
 import { STATUS_OS_ABERTAS } from "@/lib/os-status";
 import { resumoFinanceiroOs } from "@/lib/os-valores";
+import { getConfig } from "@/lib/config";
 import { checkinAgendamento, checkoutAgendamento, criarAgendamento, excluirAgendamento } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -90,7 +91,7 @@ export default async function AgendaPage({
 
   const podeCriarAgenda = ehAdminOuAtendente && temPermissao(profile.papel, "agenda_criar");
 
-  const [{ data: agendamentos }, { data: posicoes }, { data: perfisTecnicos }, { data: osParaAgenda }] =
+  const [{ data: agendamentos }, { data: posicoes }, { data: perfisTecnicos }, { data: osParaAgenda }, config] =
     await Promise.all([
     queryAgenda,
     verGps
@@ -114,6 +115,7 @@ export default async function AgendaPage({
           .order("numero", { ascending: false })
           .limit(40)
       : Promise.resolve({ data: [] as never[] }),
+    getConfig(),
   ]);
 
   const tecnicos = mapTecnicos(perfisTecnicos || []);
@@ -224,9 +226,9 @@ export default async function AgendaPage({
                 <p className="text-sm">{dia.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>
               </div>
 
-              <TurnoBloco titulo="Manhã" icone={<Sun className="h-3.5 w-3.5" />} itens={manha} podeCheckin={podeCheckin} podeExcluir={ehAdminOuAtendente} />
+              <TurnoBloco titulo="Manhã" icone={<Sun className="h-3.5 w-3.5" />} itens={manha} podeCheckin={podeCheckin} podeExcluir={ehAdminOuAtendente} percentualSinalPadrao={config.percentual_sinal_padrao} />
               <div className="border-t border-slate-100" />
-              <TurnoBloco titulo="Tarde" icone={<Sunset className="h-3.5 w-3.5" />} itens={tarde} podeCheckin={podeCheckin} podeExcluir={ehAdminOuAtendente} />
+              <TurnoBloco titulo="Tarde" icone={<Sunset className="h-3.5 w-3.5" />} itens={tarde} podeCheckin={podeCheckin} podeExcluir={ehAdminOuAtendente} percentualSinalPadrao={config.percentual_sinal_padrao} />
             </div>
           );
         })}
@@ -241,12 +243,14 @@ function TurnoBloco({
   itens,
   podeCheckin,
   podeExcluir,
+  percentualSinalPadrao,
 }: {
   titulo: string;
   icone: ReactNode;
   itens: Array<Record<string, unknown>>;
   podeCheckin: boolean;
   podeExcluir: boolean;
+  percentualSinalPadrao: number;
 }) {
   return (
     <div className="flex-1 p-2">
@@ -256,7 +260,13 @@ function TurnoBloco({
       <div className="space-y-2">
         {itens.length === 0 && <p className="px-1 py-1 text-center text-[11px] text-slate-300">—</p>}
         {itens.map((a) => (
-          <CardAgendamento key={a.id as string} a={a} podeCheckin={podeCheckin} podeExcluir={podeExcluir} />
+          <CardAgendamento
+            key={a.id as string}
+            a={a}
+            podeCheckin={podeCheckin}
+            podeExcluir={podeExcluir}
+            percentualSinalPadrao={percentualSinalPadrao}
+          />
         ))}
       </div>
     </div>
@@ -267,10 +277,12 @@ function CardAgendamento({
   a,
   podeCheckin,
   podeExcluir,
+  percentualSinalPadrao,
 }: {
   a: Record<string, unknown>;
   podeCheckin: boolean;
   podeExcluir: boolean;
+  percentualSinalPadrao: number;
 }) {
   const cli = a.clientes as { nome?: string; telefone?: string } | null;
   const os = a.ordens_servico as {
@@ -359,6 +371,7 @@ function CardAgendamento({
                   })
                 : null
             }
+            percentualSinalPadrao={percentualSinalPadrao}
           />
         </div>
       )}

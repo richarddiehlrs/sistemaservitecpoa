@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MapPin, WifiOff } from "lucide-react";
 import { CheckinButtons } from "@/components/checkin-buttons";
 import { CampoVisitaAcoes } from "@/components/campo-visita-acoes";
-import { formatHora, TIPO_AGENDAMENTO_LABEL } from "@/lib/format";
+import { formatCurrency, formatHora, TIPO_AGENDAMENTO_LABEL } from "@/lib/format";
 import type { OsResumoCheckout } from "@/lib/os-valores";
 import type { ActionResult } from "@/lib/action-result";
 
@@ -54,6 +54,7 @@ export function CampoAgendaDia({
   tecnicoNome,
   checkinAgendamento,
   checkoutAgendamento,
+  percentualSinalPadrao = 50,
 }: {
   visitas: VisitaCampoDia[];
   hoje: string;
@@ -61,6 +62,7 @@ export function CampoAgendaDia({
   tecnicoNome: string;
   checkinAgendamento: (id: string, formData: FormData) => Promise<ActionResult>;
   checkoutAgendamento: (id: string, formData?: FormData) => Promise<ActionResult>;
+  percentualSinalPadrao?: number;
 }) {
   const [online, setOnline] = useState(true);
   const [cache, setCache] = useState<CacheAgenda | null>(null);
@@ -162,6 +164,28 @@ export function CampoAgendaDia({
                       <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {a.endereco}
                     </p>
                   )}
+                  {a.osResumo && a.osResumo.saldoCliente > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {a.osResumo.visitaPaga && a.osResumo.valorVisita > 0 && (
+                        <span className="badge bg-emerald-100 text-emerald-800 text-[10px]">
+                          Visita paga {formatCurrency(a.osResumo.valorVisita)}
+                        </span>
+                      )}
+                      {a.osResumo.valorPago > 0 && (
+                        <span className="badge bg-green-100 text-green-800 text-[10px]">
+                          Recebido {formatCurrency(a.osResumo.valorPago)}
+                        </span>
+                      )}
+                      {a.osResumo.saldoRestante > 0 && (
+                        <span className="badge bg-amber-100 text-amber-900 text-[10px]">
+                          Saldo {formatCurrency(a.osResumo.saldoRestante)}
+                        </span>
+                      )}
+                      {a.osResumo.aprovado && (
+                        <span className="badge bg-blue-100 text-blue-800 text-[10px]">Aprovada</span>
+                      )}
+                    </div>
+                  )}
                   <CampoVisitaAcoes
                     telefone={a.clienteTelefone}
                     endereco={a.endereco}
@@ -180,6 +204,7 @@ export function CampoAgendaDia({
                     checkoutAction={checkoutAgendamento.bind(null, a.id)}
                     permitirRetorno={Boolean(a.os_id)}
                     osResumo={a.osResumo}
+                    percentualSinalPadrao={percentualSinalPadrao}
                   />
                 ) : (
                   <span className="text-[10px] text-slate-400">Check-in offline indisponível</span>

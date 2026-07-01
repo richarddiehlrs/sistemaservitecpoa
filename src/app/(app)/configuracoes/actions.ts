@@ -28,6 +28,13 @@ export async function salvarConfig(formData: FormData): Promise<ActionResult> {
         msg_whatsapp: str(formData.get("msg_whatsapp")),
         comissao_percent:
           Number(String(formData.get("comissao_percent") || "0").replace(",", ".")) || 0,
+        percentual_sinal_padrao: Math.min(
+          100,
+          Math.max(
+            0,
+            Number(String(formData.get("percentual_sinal_padrao") || "50").replace(",", ".")) || 50
+          )
+        ),
       })
       .eq("id", 1);
 

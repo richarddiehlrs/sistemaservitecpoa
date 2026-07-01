@@ -41,9 +41,9 @@ function inicioFimMes(mesStr?: string) {
 export default async function FinanceiroPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; tipo?: string; status?: string; vencidos?: string }>;
+  searchParams: Promise<{ mes?: string; tipo?: string; status?: string; vencidos?: string; origem?: string }>;
 }) {
-  const { mes, tipo, status, vencidos } = await searchParams;
+  const { mes, tipo, status, vencidos, origem } = await searchParams;
   await requirePermissao("financeiro");
   const periodo = inicioFimMes(mes);
   const supabase = await createClient();
@@ -58,6 +58,7 @@ export default async function FinanceiroPage({
 
   if (tipo) query = query.eq("tipo", tipo);
   if (status) query = query.eq("status", status);
+  if (origem === "campo" || origem === "sistema") query = query.eq("origem", origem);
 
   const [{ data: lancamentos }, { data: lancamentosCaixa }, { data: categorias }, { data: osRetorno }, config] = await Promise.all([
     query,

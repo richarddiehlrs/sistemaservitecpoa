@@ -926,6 +926,49 @@ async function abrirRetornoGarantiaImpl(osOrigemId: string, formData: FormData) 
   redirect(`/ordens/${nova!.id}/editar`);
 }
 
+async function registrarPagamentoOsImpl(osId: string, formData: FormData) {
+  await requirePermissao("ordens");
+  const supabase = await createClient();
+
+  const { data: os } = await supabase
+    .from("ordens_servico")
+    .select("id, aprovado, status, motivo_atendimento")
+    .eq("id", osId)
+    .single();
+
+  if (!os) throw new Error("Ordem não encontrada.");
+  if (os.status === "cancelada") throw new Error("OS cancelada.");
+  if (os.motivo_atendimento === "retorno_garantia") {
+    throw new Error("Use o check-out de campo para registrar pagamento em retorno de garantia.");
+  }
+
+  const valor = parseNumForm(formData.get("valor"));
+  if (valor <= 0) throw new Error("Informe um valor maior que zero.");
+
+  const tipoRaw = String(formData.get("tipo") || "sinal");
+  const tipo = (["visita", "sinal", "saldo", "parcial", "outro"].includes(tipoRaw)
+    ? tipoRaw
+    : "sinal") as "visita" | "sinal" | "saldo" | "parcial" | "outro";
+
+  if (tipo === "sinal" && !os.aprovado) {
+    throw new Error("Registre o sinal somente após a aprovação do orçamento pelo cliente.");
+  }
+
+  const { registrarPagamentoOsComHistorico } = await import("@/lib/os-pagamentos");
+  await registrarPagamentoOsComHistorico(supabase, {
+    osId,
+    valor,
+    tipo,
+    formaPagamento: str(formData.get("forma_pagamento")),
+    observacao: str(formData.get("observacao")) ?? undefined,
+  });
+
+  revalidatePath(`/ordens/${osId}`);
+  revalidatePath("/financeiro");
+  revalidatePath("/campo");
+  revalidatePath("/dashboard");
+}
+
 async function excluirOrdemImpl(id: string) {
   await requirePermissao("ordens_excluir");
   const supabase = await createClient();
@@ -1019,6 +1062,13 @@ export async function abrirRetornoGarantia(
   formData: FormData
 ): Promise<ActionResult> {
   return safeAction(() => abrirRetornoGarantiaImpl(osOrigemId, formData));
+}
+
+export async function registrarPagamentoOs(
+  osId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  return safeAction(() => registrarPagamentoOsImpl(osId, formData));
 }
 
 export async function excluirOrdem(id: string): Promise<ActionResult> {

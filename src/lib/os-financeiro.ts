@@ -188,6 +188,8 @@ export async function registrarReceitaVisitaCheckout(
       console.error("[os-financeiro] Erro ao registrar visita:", error.message);
       return false;
     }
+    const { registrarHistoricoVisitaOs } = await import("@/lib/os-pagamentos");
+    await registrarHistoricoVisitaOs(supabase, osId, visita, forma);
     return true;
   }
 
@@ -215,6 +217,9 @@ export async function registrarReceitaVisitaCheckout(
     console.error("[os-financeiro] Erro ao criar receita da visita:", error.message);
     return false;
   }
+
+  const { registrarHistoricoVisitaOs } = await import("@/lib/os-pagamentos");
+  await registrarHistoricoVisitaOs(supabase, osId, visita, forma);
   return true;
 }
 
@@ -375,24 +380,18 @@ export async function registrarPagamentoReceitaOsCheckout(
   osId: string,
   valorPagamento: number,
   formaPagamento?: string | null,
-  observacao?: string
+  observacao?: string,
+  tipo: "saldo" | "sinal" | "parcial" | "outro" = "saldo"
 ): Promise<void> {
-  const pagamento = Math.round(Number(valorPagamento) * 100) / 100;
-  if (pagamento <= 0) return;
-
-  const { data, error } = await supabase.rpc("registrar_pagamento_os_checkout", {
-    p_os_id: osId,
-    p_valor: pagamento,
-    p_forma_pagamento: formaPagamento ?? null,
-    p_observacao: observacao ?? null,
+  const { registrarPagamentoOsComHistorico } = await import("@/lib/os-pagamentos");
+  await registrarPagamentoOsComHistorico(supabase, {
+    osId,
+    valor: valorPagamento,
+    tipo,
+    formaPagamento,
+    observacao,
+    garantirReceita: false,
   });
-
-  if (error) {
-    throw new Error(`Não foi possível registrar o pagamento: ${error.message}`);
-  }
-  if (!data) {
-    throw new Error("Não foi possível registrar o pagamento — verifique se a receita da OS existe.");
-  }
 }
 
 /** Custo de garantia na conclusão — receita só via pagamento manual. */

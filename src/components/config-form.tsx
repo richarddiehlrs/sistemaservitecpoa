@@ -132,20 +132,35 @@ export function ConfigForm({
         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
           Financeiro
         </h3>
-        <div className="max-w-xs">
-          <label className="label">Comissão do técnico (% sobre o lucro)</label>
-          <input
-            name="comissao_percent"
-            type="number"
-            step="0.01"
-            min="0"
-            max="100"
-            defaultValue={config.comissao_percent}
-            className="input"
-          />
-          <p className="mt-1 text-xs text-slate-400">
-            Usado no relatório de comissão por técnico.
-          </p>
+        <div className="grid max-w-md grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label">Comissão do técnico (% sobre o lucro)</label>
+            <input
+              name="comissao_percent"
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              defaultValue={config.comissao_percent}
+              className="input"
+            />
+            <p className="mt-1 text-xs text-slate-400">Usado no relatório de comissão por técnico.</p>
+          </div>
+          <div>
+            <label className="label">Entrada / sinal sugerido (%)</label>
+            <input
+              name="percentual_sinal_padrao"
+              type="number"
+              step="1"
+              min="0"
+              max="100"
+              defaultValue={config.percentual_sinal_padrao}
+              className="input"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Botão rápido após aprovação (ex.: 30, 50). Não é obrigatório — valor livre também.
+            </p>
+          </div>
         </div>
       </div>
 

@@ -539,52 +539,14 @@ async function checkoutAgendamentoImpl(id: string, formData?: FormData) {
             ? "Check-out: aguardando peça"
             : "Check-out: serviço executado nesta visita";
 
-      if (proximo === "concluida") {
-        const { data: osFin } = await supabase
-          .from("ordens_servico")
-          .select("motivo_atendimento, forma_pagamento, valor_itens, valor_visita, abater_visita, desconto, acrescimo")
-          .eq("id", ag.os_id)
-          .single();
+      const clientePagou = formData?.get("cliente_pagou_agora") === "on";
+      const formaCheckout = str(formData?.get("forma_pagamento")) || os.forma_pagamento;
+      const tipoPagamentoRaw = String(formData?.get("tipo_pagamento") || "saldo");
+      const tipoPagamento = (["sinal", "saldo", "parcial", "outro"].includes(tipoPagamentoRaw)
+        ? tipoPagamentoRaw
+        : "saldo") as "sinal" | "saldo" | "parcial" | "outro";
 
-        const clientePagou = formData?.get("cliente_pagou_agora") === "on";
-
-        if (proximo) {
-          await transicionarStatusOs(supabase, {
-            osId: ag.os_id,
-            status: proximo,
-            observacao: obsCheckout,
-            origem: "check-out",
-            sistema: true,
-            papel: profile.papel,
-          });
-        }
-
-        if (clientePagou && osFin) {
-          const saldoCliente = calcValorTotalCliente(
-            Number(osFin.valor_itens),
-            Number(osFin.valor_visita),
-            osFin.abater_visita,
-            Number(osFin.desconto),
-            Number(osFin.acrescimo)
-          );
-
-          const informado = parseNumForm(formData?.get("valor_recebido") ?? null);
-          const valorPagamento =
-            informado > 0 ? Math.round(informado * 100) / 100 : saldoCliente;
-
-          if (valorPagamento > 0) {
-            await registrarPagamentoReceitaOsCheckout(
-              supabase,
-              ag.os_id,
-              valorPagamento,
-              osFin.forma_pagamento ?? os.forma_pagamento,
-              isRetornoGarantia(osFin)
-                ? "Pagamento no retorno em garantia"
-                : "Pagamento recebido no check-out — serviço concluído"
-            );
-          }
-        }
-      } else if (proximo) {
+      if (proximo) {
         await transicionarStatusOs(supabase, {
           osId: ag.os_id,
           status: proximo,
@@ -593,6 +555,52 @@ async function checkoutAgendamentoImpl(id: string, formData?: FormData) {
           sistema: true,
           papel: profile.papel,
         });
+      }
+
+      if (clientePagou) {
+        const { data: osFinPag } = await supabase
+          .from("ordens_servico")
+          .select("motivo_atendimento, forma_pagamento, valor_itens, valor_visita, abater_visita, desconto, acrescimo, aprovado")
+          .eq("id", ag.os_id)
+          .single();
+
+        if (osFinPag && (proximo === "concluida" || osFinPag.aprovado)) {
+          if (osFinPag.aprovado) {
+            const { garantirReceitaOs } = await import("@/lib/os-pagamentos");
+            await garantirReceitaOs(supabase, ag.os_id);
+          }
+
+          const saldoCliente = calcValorTotalCliente(
+            Number(osFinPag.valor_itens),
+            Number(osFinPag.valor_visita),
+            osFinPag.abater_visita,
+            Number(osFinPag.desconto),
+            Number(osFinPag.acrescimo)
+          );
+
+          const informado = parseNumForm(formData?.get("valor_recebido") ?? null);
+          const valorPagamento =
+            informado > 0 ? Math.round(informado * 100) / 100 : saldoCliente;
+
+          if (valorPagamento > 0) {
+            const obsPag = isRetornoGarantia(osFinPag)
+              ? "Pagamento no retorno em garantia"
+              : proximo === "concluida"
+                ? "Pagamento recebido no check-out — serviço concluído"
+                : tipoPagamento === "sinal"
+                  ? "Entrada / sinal recebido no check-out"
+                  : "Pagamento parcial recebido no check-out";
+
+            await registrarPagamentoReceitaOsCheckout(
+              supabase,
+              ag.os_id,
+              valorPagamento,
+              formaCheckout ?? osFinPag.forma_pagamento ?? os.forma_pagamento,
+              obsPag,
+              proximo === "concluida" ? "saldo" : tipoPagamento
+            );
+          }
+        }
       }
     }
   }

@@ -33,7 +33,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
   ] = await Promise.all([
     supabase
       .from("agendamentos")
-      .select("*, clientes(nome, telefone), ordens_servico(numero, valor_itens, valor_visita, abater_visita, desconto, acrescimo, motivo_atendimento)")
+      .select("*, clientes(nome, telefone), ordens_servico(numero, valor_itens, valor_visita, abater_visita, desconto, acrescimo, motivo_atendimento, aprovado)")
       .eq("data", hoje)
       .or(`tecnico_id.eq.${profile.id},tecnico.ilike.%${tecnico}%`)
       .neq("status", "cancelado")
@@ -91,6 +91,23 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
   );
   const comissaoMes = calcComissaoTecnico(lucroMes, config.comissao_percent);
 
+  const osIdsAgenda = (visitasPendentes || [])
+    .map((a) => a.os_id)
+    .filter((id): id is string => Boolean(id));
+
+  const { data: receitasOs } = osIdsAgenda.length
+    ? await supabase
+        .from("lancamentos_financeiros")
+        .select("os_id, valor_pago")
+        .in("os_id", osIdsAgenda)
+        .eq("tipo", "receita")
+        .neq("status", "cancelado")
+    : { data: [] as { os_id: string; valor_pago: number | null }[] };
+
+  const pagoPorOs = new Map(
+    (receitasOs || []).map((r) => [r.os_id, Number(r.valor_pago) || 0])
+  );
+
   const visitasSerializadas: VisitaCampoDia[] = visitasPendentes.map((a) => ({
     id: a.id,
     status: a.status,
@@ -111,7 +128,8 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
     // @ts-expect-error relação
     osNumero: a.ordens_servico?.numero ?? null,
     osResumo: a.ordens_servico
-      ? resumoFinanceiroOs({
+      ? resumoFinanceiroOs(
+          {
           // @ts-expect-error relação
           valor_itens: Number(a.ordens_servico.valor_itens) || 0,
           // @ts-expect-error relação
@@ -123,7 +141,14 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
           // @ts-expect-error relação
           acrescimo: Number(a.ordens_servico.acrescimo) || 0,
           motivo_atendimento: a.ordens_servico.motivo_atendimento,
-        })
+          // @ts-expect-error relação
+          aprovado: Boolean(a.ordens_servico.aprovado),
+          },
+          {
+            valorPago: a.os_id ? pagoPorOs.get(a.os_id) ?? 0 : 0,
+            visitaPaga: Boolean(a.ordens_servico.abater_visita),
+          }
+        )
       : null,
   }));
 
@@ -212,6 +237,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
           tecnicoNome={profile.nome || tecnico}
           checkinAgendamento={checkinAgendamento}
           checkoutAgendamento={checkoutAgendamento}
+          percentualSinalPadrao={config.percentual_sinal_padrao}
         />
       </div>
 

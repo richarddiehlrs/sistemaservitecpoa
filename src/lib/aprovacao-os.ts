@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sincronizarAgendaStatusOs } from "@/lib/agenda-os";
-import { cancelarReceitaPendenteOs } from "@/lib/os-financeiro";
+import { cancelarReceitaPendenteOs, criarReceitaPendenteOs } from "@/lib/os-financeiro";
 import { notificarOsAprovada, notificarReaprovacaoOrcamento } from "@/lib/notificacoes";
 import { calcValorTotalCliente } from "@/lib/os-valores";
 import {
@@ -148,6 +148,12 @@ export async function executarAprovacaoOs(
   });
 
   await sincronizarAgendaStatusOs(supabase, os.id, novoStatus);
+
+  // Financeiro automático na aprovação — receita pendente + custo peças
+  const financeOk = await criarReceitaPendenteOs(supabase, os.id);
+  if (!financeOk) {
+    console.error("[aprovacao-os] Não foi possível gerar financeiro automático na aprovação:", os.id);
+  }
 
   await notificarOsAprovada({
     osId: os.id,

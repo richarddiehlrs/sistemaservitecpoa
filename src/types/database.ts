@@ -114,6 +114,7 @@ export type Configuracao = {
   politica_os: string | null;
   msg_whatsapp: string | null;
   comissao_percent: number | null;
+  percentual_sinal_padrao: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -289,6 +290,18 @@ export type MetaFaturamento = {
   updated_at: string;
 };
 
+export type OsPagamento = {
+  id: string;
+  os_id: string;
+  lancamento_id: string | null;
+  tipo: "visita" | "sinal" | "saldo" | "parcial" | "outro";
+  valor: number;
+  forma_pagamento: string | null;
+  observacao: string | null;
+  registrado_por: string | null;
+  created_at: string;
+};
+
 export type TipoNotificacaoDb =
   | "os_nova"
   | "os_aprovada"
@@ -369,6 +382,7 @@ export type Database = {
       os_anexos: TableDef<OsAnexo>;
       despesas_recorrentes: TableDef<DespesaRecorrente>;
       metas_faturamento: TableDef<MetaFaturamento>;
+      os_pagamentos: TableDef<OsPagamento>;
       notificacoes: TableDef<Notificacao>;
       preferencias_alertas: TableDef<PreferenciasAlertas>;
     };
@@ -410,6 +424,16 @@ export type Database = {
         Args: {
           p_os_id: string;
           p_valor: number;
+          p_forma_pagamento?: string | null;
+          p_observacao?: string | null;
+        };
+        Returns: boolean;
+      };
+      registrar_pagamento_os_com_historico: {
+        Args: {
+          p_os_id: string;
+          p_valor: number;
+          p_tipo?: string | null;
           p_forma_pagamento?: string | null;
           p_observacao?: string | null;
         };
