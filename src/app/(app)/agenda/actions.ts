@@ -536,7 +536,9 @@ async function checkoutAgendamentoImpl(id: string, formData?: FormData) {
             ? "Check-out: visita/diagnóstico — visita paga (abatida do reparo)"
             : "Check-out: visita/diagnóstico — visita será cobrada junto no final"
           : resultado === "aguardando_peca"
-            ? "Check-out: aguardando peça"
+            ? proximo === "aguardando_peca"
+              ? "Check-out: aguardando peça (fornecedor)"
+              : "Check-out: diagnóstico — peça necessária, aguardando aprovação do orçamento"
             : "Check-out: serviço executado nesta visita";
 
       const clientePagou = formData?.get("cliente_pagou_agora") === "on";
@@ -564,7 +566,10 @@ async function checkoutAgendamentoImpl(id: string, formData?: FormData) {
           .eq("id", ag.os_id)
           .single();
 
-        if (osFinPag && (proximo === "concluida" || osFinPag.aprovado)) {
+        if (
+          osFinPag &&
+          (proximo === "concluida" || proximo === "aguardando_peca" || osFinPag.aprovado)
+        ) {
           if (osFinPag.aprovado) {
             const { garantirReceitaOs } = await import("@/lib/os-pagamentos");
             await garantirReceitaOs(supabase, ag.os_id);
@@ -587,9 +592,11 @@ async function checkoutAgendamentoImpl(id: string, formData?: FormData) {
               ? "Pagamento no retorno em garantia"
               : proximo === "concluida"
                 ? "Pagamento recebido no check-out — serviço concluído"
-                : tipoPagamento === "sinal"
-                  ? "Entrada / sinal recebido no check-out"
-                  : "Pagamento parcial recebido no check-out";
+                : proximo === "aguardando_peca"
+                  ? "Pagamento recebido no pedido de peça"
+                  : tipoPagamento === "sinal"
+                    ? "Entrada / sinal recebido no check-out"
+                    : "Pagamento parcial recebido no check-out";
 
             await registrarPagamentoReceitaOsCheckout(
               supabase,
@@ -597,7 +604,11 @@ async function checkoutAgendamentoImpl(id: string, formData?: FormData) {
               valorPagamento,
               formaCheckout ?? osFinPag.forma_pagamento ?? os.forma_pagamento,
               obsPag,
-              proximo === "concluida" ? "saldo" : tipoPagamento
+              proximo === "concluida"
+                ? "saldo"
+                : proximo === "aguardando_peca"
+                  ? "sinal"
+                  : tipoPagamento
             );
           }
         }

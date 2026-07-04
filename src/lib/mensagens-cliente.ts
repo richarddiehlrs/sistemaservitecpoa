@@ -106,8 +106,11 @@ export function eventosSugeridosParaStatus(status: string): EventoWhatsAppClient
 function formatarVisita(ctx: ContextoMensagemCliente): string {
   const partes: string[] = [];
   if (ctx.dataPrevisao) partes.push(formatDate(ctx.dataPrevisao));
-  if (ctx.turno && TURNO_LABEL[ctx.turno]) partes.push(TURNO_LABEL[ctx.turno]);
-  if (ctx.horaInicio) partes.push(formatHora(ctx.horaInicio));
+  if (ctx.turno && TURNO_LABEL[ctx.turno]) {
+    partes.push(TURNO_LABEL[ctx.turno]);
+  } else if (ctx.horaInicio) {
+    partes.push(formatHora(ctx.horaInicio));
+  }
   return partes.join(" • ");
 }
 

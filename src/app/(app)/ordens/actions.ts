@@ -21,6 +21,7 @@ import {
 import {
   sincronizarFinanceiroOs,
   temLancamentoAtivoOs,
+  registrarPagamentoReceitaOsCheckout,
 } from "@/lib/os-financeiro";
 import { transicionarStatusOs } from "@/lib/transicao-os";
 import { STATUS_OS_BLOQUEADO_EDICAO, validarTransicaoStatus } from "@/lib/transicao-status";
@@ -482,21 +483,35 @@ async function atualizarOrdemImpl(id: string, formData: FormData) {
 async function alterarStatusFormImpl(id: string, formData: FormData) {
   const status = String(formData.get("status") || "aberta") as StatusOS;
   const observacao = str(formData.get("observacao")) || undefined;
-  await alterarStatusImpl(id, status, observacao);
+  await alterarStatusImpl(id, status, observacao, formData);
 }
 
-async function alterarStatusImpl(id: string, status: StatusOS, observacao?: string) {
+async function alterarStatusImpl(
+  id: string,
+  status: StatusOS,
+  observacao?: string,
+  formData?: FormData
+) {
   const profile = await requirePermissao("ordens_editar");
   const supabase = await createClient();
 
   const { data: osAtual } = await supabase
     .from("ordens_servico")
-    .select("status, tecnico_id, tecnico")
+    .select("status, tecnico_id, tecnico, aprovado")
     .eq("id", id)
     .single();
   if (!osAtual) throw new Error("OS não encontrada.");
 
   assertOsAtribuida(profile, osAtual);
+
+  let statusEfetivo = status;
+  let observacaoEfetiva = observacao;
+  if (status === "aguardando_peca" && !osAtual.aprovado) {
+    statusEfetivo = "aguardando_aprovacao";
+    observacaoEfetiva = [observacao, "Peça necessária — aguardando aprovação do orçamento"]
+      .filter(Boolean)
+      .join(". ");
+  }
 
   if (status === "aprovada") {
     validarTransicaoStatus(osAtual.status as StatusOS, "aprovada", profile.papel);
@@ -522,11 +537,38 @@ async function alterarStatusImpl(id: string, status: StatusOS, observacao?: stri
 
   const result = await transicionarStatusOs(supabase, {
     osId: id,
-    status,
-    observacao,
+    status: statusEfetivo,
+    observacao: observacaoEfetiva,
     origem: "erp",
     papel: profile.papel,
   });
+
+  if (
+    result.mudou &&
+    statusEfetivo === "aguardando_peca" &&
+    formData?.get("registrar_pagamento_peca") === "on"
+  ) {
+    const valor = parseNumForm(formData.get("valor_recebido"));
+    if (valor > 0) {
+      const { garantirReceitaOs } = await import("@/lib/os-pagamentos");
+      await garantirReceitaOs(supabase, id);
+
+      await registrarPagamentoReceitaOsCheckout(
+        supabase,
+        id,
+        valor,
+        str(formData.get("forma_pagamento")),
+        "Pagamento recebido no pedido de peça",
+        "sinal"
+      );
+
+      revalidatePath("/financeiro");
+      revalidatePath("/dashboard");
+      revalidatePath("/dre");
+      revalidatePath("/relatorios");
+      revalidatePath("/financeiro/fluxo");
+    }
+  }
 
   if (result.mudou && (status === "aprovada" || status === "cancelada" || status === "concluida")) {
     revalidatePath("/financeiro");

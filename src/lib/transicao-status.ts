@@ -103,7 +103,9 @@ export function statusPosCheckout(
 
   switch (resultado) {
     case "aguardando_peca":
-      return "aguardando_peca";
+      // Sem orçamento aprovado: aguarda aprovação do cliente (peça entra no orçamento).
+      // Com aprovação: pedido de peça no fornecedor.
+      return os.aprovado ? "aguardando_peca" : "aguardando_aprovacao";
     case "servico_concluido":
       return os.aprovado ? "concluida" : "aguardando_aprovacao";
     case "visita":

@@ -63,6 +63,8 @@ export function CheckoutModal({
     resultado === "servico_concluido" && Boolean(osResumo?.aprovado);
   const podeRegistrarSinalVisita =
     resultado === "visita" && Boolean(osResumo?.aprovado) && saldoExibicao > 0;
+  const podeRegistrarPagamentoPeca =
+    resultado === "aguardando_peca" && Boolean(osResumo?.aprovado) && saldoExibicao > 0;
 
   function aplicarValor(v: number) {
     setValorRecebido(String(Math.round(v * 100) / 100));
@@ -73,12 +75,19 @@ export function CheckoutModal({
     const fd = new FormData();
     fd.set("resultado", resultado);
     if (visitaCobrada) fd.set("visita_cobrada", "on");
-    if ((podeRegistrarPagamentoServico || podeRegistrarSinalVisita) && clientePagou) {
+    if (
+      (podeRegistrarPagamentoServico ||
+        podeRegistrarSinalVisita ||
+        podeRegistrarPagamentoPeca) &&
+      clientePagou
+    ) {
       fd.set("cliente_pagou_agora", "on");
       fd.set("forma_pagamento", formaPagamento);
       const valor = parseNumForm(valorRecebido || null);
       if (valor > 0) fd.set("valor_recebido", String(valor));
-      if (podeRegistrarSinalVisita) fd.set("tipo_pagamento", "sinal");
+      if (podeRegistrarSinalVisita || podeRegistrarPagamentoPeca) {
+        fd.set("tipo_pagamento", "sinal");
+      }
     }
     if (mostraRetorno && agendarRetorno && retornoData) {
       fd.set("agendar_retorno", "on");
@@ -279,9 +288,73 @@ export function CheckoutModal({
               onChange={() => setResultado("aguardando_peca")}
               className="mt-1"
             />
-            <div>
-              <p className="font-medium text-slate-900">Aguardando peça</p>
-              <p className="text-xs text-slate-500">Precisa de peça para continuar</p>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-slate-900">Precisa de peça</p>
+              <p className="text-xs text-slate-500">
+                Diagnóstico feito — aguarda peça no fornecedor ou aprovação do orçamento pelo cliente
+              </p>
+              {resultado === "aguardando_peca" && (
+                <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
+                  {!osResumo?.aprovado ? (
+                    <p className="text-[11px] text-amber-700">
+                      Orçamento ainda não aprovado — a OS ficará{" "}
+                      <strong>aguardando aprovação</strong>. O cliente pode pagar depois (presencial ou
+                      portal).
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-[11px] text-slate-600">
+                        Orçamento aprovado — após pedir a peça, a OS fica{" "}
+                        <strong>aguardando peça</strong>.
+                      </p>
+                      {saldoExibicao > 0 && (
+                        <>
+                          <label className="flex items-start gap-2 text-xs text-slate-700">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={clientePagou}
+                              onChange={(e) => setClientePagou(e.target.checked)}
+                            />
+                            <span>Cliente pagou agora (entrada / sinal da peça) — opcional</span>
+                          </label>
+                          {clientePagou && (
+                            <PagamentoRapido
+                              valor={valorRecebido}
+                              onValor={setValorRecebido}
+                              forma={formaPagamento}
+                              onForma={setFormaPagamento}
+                              saldo={saldoExibicao}
+                              botoes={[
+                                ...(percentualSinalPadrao > 0
+                                  ? [{ label: `${percentualSinalPadrao}%`, v: valorSinal }]
+                                  : []),
+                                { label: "30%", v: valor30 },
+                                { label: "50%", v: valor50 },
+                                { label: "Saldo", v: saldoExibicao },
+                              ]}
+                              onAplicar={aplicarValor}
+                            />
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                  {osResumo && osResumo.valorVisita > 0 && !osResumo.visitaPaga && (
+                    <label className="flex items-start gap-2 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={visitaCobrada}
+                        onChange={(e) => setVisitaCobrada(e.target.checked)}
+                      />
+                      <span>
+                        Cliente pagou a visita ({formatCurrency(osResumo.valorVisita)}) — abate do reparo
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
           </label>
         </div>
@@ -347,6 +420,7 @@ function PagamentoRapido({
   saldo,
   botoes,
   onAplicar,
+  required = false,
 }: {
   valor: string;
   onValor: (v: string) => void;
@@ -355,6 +429,7 @@ function PagamentoRapido({
   saldo: number;
   botoes: { label: string; v: number }[];
   onAplicar: (v: number) => void;
+  required?: boolean;
 }) {
   return (
     <div className="mt-2 space-y-2">
@@ -375,13 +450,14 @@ function PagamentoRapido({
       <div className="grid grid-cols-2 gap-2">
         <input
           type="number"
-          min="0"
+          min="0.01"
           step="0.01"
-          max={saldo}
+          max={saldo < 99999 ? saldo : undefined}
           value={valor}
           onChange={(e) => onValor(e.target.value)}
           className="input py-1.5 text-sm"
-          placeholder={saldo > 0 ? String(saldo) : "0,00"}
+          placeholder={saldo > 0 && saldo < 99999 ? String(saldo) : "0,00"}
+          required={required}
         />
         <select
           value={forma}

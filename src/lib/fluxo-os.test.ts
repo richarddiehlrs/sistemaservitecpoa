@@ -49,6 +49,24 @@ describe("statusPosCheckout", () => {
       )
     ).toBeNull();
   });
+
+  it("precisa de peça sem aprovação vai para aguardando_aprovacao", () => {
+    expect(
+      statusPosCheckout(
+        { status: "em_execucao", aprovado: false, tipo_atendimento: "domicilio" },
+        "aguardando_peca"
+      )
+    ).toBe("aguardando_aprovacao");
+  });
+
+  it("precisa de peça com orçamento aprovado vai para aguardando_peca", () => {
+    expect(
+      statusPosCheckout(
+        { status: "em_execucao", aprovado: true, tipo_atendimento: "domicilio" },
+        "aguardando_peca"
+      )
+    ).toBe("aguardando_peca");
+  });
 });
 
 describe("statusPermiteCheckin", () => {

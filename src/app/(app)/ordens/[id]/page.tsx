@@ -383,6 +383,9 @@ export default async function OrdemDetalhePage({
               statusAtual={os.status}
               action={statusAction}
               transicoesPermitidas={transicoesStatus}
+              saldoRestante={finResumo.saldoRestante}
+              percentualSinalPadrao={config.percentual_sinal_padrao}
+              aprovado={Boolean(os.aprovado)}
             />
           </div>
 
@@ -414,7 +417,7 @@ export default async function OrdemDetalhePage({
                 valorTotal={valorTotal}
                 portalUrl={portalUrl}
                 dataPrevisao={os.data_previsao}
-                turno={os.turno}
+                turno={os.turno || agendamentos?.[0]?.turno}
                 horaInicio={agendamentos?.[0]?.hora_inicio}
                 tecnico={os.tecnico}
                 empresaNome={config.nome}
@@ -572,7 +575,7 @@ export default async function OrdemDetalhePage({
 
             <OsPagamentosHistorico pagamentos={finResumo.pagamentos} />
 
-            {!retornoGarantia && finResumo.saldoRestante > 0 && !ehTecnico && (
+            {!retornoGarantia && finResumo.saldoRestante > 0 && Boolean(os.aprovado) && (
               <RegistrarPagamentoOs
                 osId={id}
                 saldoRestante={finResumo.saldoRestante}

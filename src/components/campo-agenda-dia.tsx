@@ -16,6 +16,7 @@ export type VisitaCampoDia = {
   titulo: string;
   hora_inicio: string | null;
   hora_fim: string | null;
+  turno: string | null;
   endereco: string | null;
   os_id: string | null;
   checkin_lat: number | null;
@@ -193,6 +194,7 @@ export function CampoAgendaDia({
                     checkinLng={a.checkin_lng}
                     clienteNome={a.clienteNome}
                     tecnicoNome={tecnicoNome}
+                    turno={a.turno}
                     horaInicio={a.hora_inicio}
                     osNumero={a.osNumero}
                   />

@@ -2,6 +2,7 @@ import { MapPin, MessageCircle, Phone } from "lucide-react";
 import { linkMapa, linkMapaEndereco } from "@/lib/geo";
 import { formatHora, formatTelefone, onlyDigits } from "@/lib/format";
 import { mensagemWhatsAppCliente } from "@/lib/mensagens-cliente";
+import { TURNO_LABEL } from "@/lib/turnos";
 import { EMPRESA } from "@/lib/utils";
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
   checkinLng?: number | null;
   clienteNome?: string | null;
   tecnicoNome?: string | null;
+  turno?: string | null;
   horaInicio?: string | null;
   osNumero?: number | null;
 };
@@ -21,18 +23,24 @@ function telefoneComDDI(telefone: string | null | undefined): string {
   return tel.startsWith("55") ? tel : `55${tel}`;
 }
 
+function textoPeriodoVisita(p: Props): string {
+  if (p.turno && TURNO_LABEL[p.turno]) return TURNO_LABEL[p.turno].toLowerCase();
+  if (p.horaInicio) return formatHora(p.horaInicio);
+  return "hoje";
+}
+
 function mensagemVisitaCampo(p: Props): string {
   if (p.osNumero == null) {
-    const hora = p.horaInicio ? formatHora(p.horaInicio) : "hoje";
     return (
       `Olá ${p.clienteNome || ""}! Sou ${p.tecnicoNome || "o técnico"} da ${EMPRESA.nome}. ` +
-      `Estou a caminho para o atendimento agendado para ${hora}.`
+      `Estou a caminho para o atendimento agendado para ${textoPeriodoVisita(p)}.`
     );
   }
   return mensagemWhatsAppCliente("tecnico_caminho", {
     empresa: EMPRESA.nome,
     cliente: p.clienteNome,
     numero: p.osNumero,
+    turno: p.turno,
     horaInicio: p.horaInicio,
     tecnico: p.tecnicoNome,
   });

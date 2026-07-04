@@ -115,6 +115,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
     titulo: a.titulo,
     hora_inicio: a.hora_inicio,
     hora_fim: a.hora_fim,
+    turno: a.turno,
     endereco: a.endereco,
     os_id: a.os_id,
     checkin_lat: a.checkin_lat,

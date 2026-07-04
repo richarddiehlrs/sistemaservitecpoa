@@ -243,16 +243,31 @@ export function OrdemForm({
   function addEquipSlot() {
     setEquipSlots((arr) => [...arr, emptyEquipSlot()]);
   }
-  function updEquipSlot(idx: number, patch: Partial<EquipSlot>) {
-    setEquipSlots((arr) => arr.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
+  function updEquipSlot(
+    idx: number,
+    patch: Partial<EquipSlot> | ((slot: EquipSlot) => Partial<EquipSlot>)
+  ) {
+    setEquipSlots((arr) =>
+      arr.map((s, i) => {
+        if (i !== idx) return s;
+        const next = typeof patch === "function" ? patch(s) : patch;
+        return { ...s, ...next };
+      })
+    );
   }
   function selecionarEquipExistente(idx: number, equipamentoId: string) {
-    const eq = equipExistentes.find((e) => e.id === equipamentoId);
-    if (!eq) {
-      updEquipSlot(idx, emptyEquipSlot());
+    if (!equipamentoId) {
+      updEquipSlot(idx, (s) => ({ ...s, id: "" }));
       return;
     }
+    const eq = equipExistentes.find((e) => e.id === equipamentoId);
+    if (!eq) return;
     updEquipSlot(idx, equipToSlot(eq));
+  }
+  function alterarTipoEquip(idx: number, tipo: string) {
+    setEquipSlots((arr) =>
+      arr.map((s, i) => (i === idx ? { ...s, tipo, id: "" } : s))
+    );
   }
   function rmEquipSlot(idx: number) {
     setEquipSlots((arr) => (arr.length <= 1 ? [emptyEquipSlot()] : arr.filter((_, i) => i !== idx)));
@@ -297,23 +312,31 @@ export function OrdemForm({
       formData.set("novo_uf", novoCli.uf);
     }
 
+    const equipsEnvio = equipSlots.filter((s) => s.id || s.tipo.trim());
+    if (equipsEnvio.length === 0) {
+      setErroSalvar("Informe o tipo do equipamento (ex.: Geladeira). Você pode digitar um nome que não está na lista.");
+      return;
+    }
+    if (equipsEnvio.some((s) => !s.id && !s.tipo.trim())) {
+      setErroSalvar("Informe o tipo de todos os equipamentos da ordem.");
+      return;
+    }
+
     formData.set(
       "equipamentos_json",
       JSON.stringify(
-        equipSlots
-          .filter((s) => s.id || s.tipo.trim())
-          .map((s) =>
-            s.id
-              ? { id: s.id }
-              : {
-                  tipo: s.tipo,
-                  marca: s.marca,
-                  modelo: s.modelo,
-                  serie: s.serie,
-                  voltagem: s.voltagem,
-                  cor: s.cor,
-                }
-          )
+        equipsEnvio.map((s) =>
+          s.id
+            ? { id: s.id }
+            : {
+                tipo: s.tipo.trim(),
+                marca: s.marca,
+                modelo: s.modelo,
+                serie: s.serie,
+                voltagem: s.voltagem,
+                cor: s.cor,
+              }
+        )
       )
     );
 
@@ -552,7 +575,7 @@ export function OrdemForm({
           </button>
         </div>
         <p className="mb-4 text-xs text-slate-500">
-          Você pode vincular mais de um aparelho na mesma ordem de serviço.
+          Você pode vincular mais de um aparelho na mesma ordem de serviço. Digite o tipo livremente se não estiver na lista de sugestões.
         </p>
         <div className="space-y-4">
           {equipSlots.map((slot, idx) => (
@@ -574,13 +597,13 @@ export function OrdemForm({
               </div>
               {equipExistentes.length > 0 && (
                 <div className="mb-3">
-                  <label className="label">Selecionar cadastrado do cliente</label>
+                  <label className="label">Preencher com equipamento já cadastrado (opcional)</label>
                   <select
                     className="input"
                     value={slot.id}
                     onChange={(e) => selecionarEquipExistente(idx, e.target.value)}
                   >
-                    <option value="">+ Cadastrar novo equipamento</option>
+                    <option value="">Digitar equipamento novo abaixo</option>
                     {equipExistentes.map((e) => (
                       <option key={e.id} value={e.id}>
                         {e.tipo} {e.marca ? `- ${e.marca}` : ""} {e.modelo ?? ""}{" "}
@@ -590,75 +613,71 @@ export function OrdemForm({
                   </select>
                 </div>
               )}
-              {!slot.id && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
-                  <div className="sm:col-span-2">
-                    <label className="label">Tipo *</label>
-                    <SpellCheckInput
-                      inline
-                      list="tipos-equip"
-                      value={slot.tipo}
-                      onChange={(e) => updEquipSlot(idx, { tipo: e.target.value })}
-                      placeholder="Ex: Geladeira"
-                      className="input"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="label">Marca</label>
-                    <SpellCheckInput
-                      inline
-                      value={slot.marca}
-                      onChange={(e) => updEquipSlot(idx, { marca: e.target.value })}
-                      className="input"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="label">Modelo</label>
-                    <SpellCheckInput
-                      inline
-                      value={slot.modelo}
-                      onChange={(e) => updEquipSlot(idx, { modelo: e.target.value })}
-                      className="input"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="label">Nº de série</label>
-                    <input
-                      className="input"
-                      value={slot.serie}
-                      onChange={(e) => updEquipSlot(idx, { serie: e.target.value })}
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="label">Voltagem</label>
-                    <select
-                      className="input"
-                      value={slot.voltagem}
-                      onChange={(e) => updEquipSlot(idx, { voltagem: e.target.value })}
-                    >
-                      <option value="">-</option>
-                      <option>110V</option>
-                      <option>220V</option>
-                      <option>Bivolt</option>
-                    </select>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="label">Cor</label>
-                    <SpellCheckInput
-                      inline
-                      value={slot.cor}
-                      onChange={(e) => updEquipSlot(idx, { cor: e.target.value })}
-                      className="input"
-                    />
-                  </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-6">
+                <div className="sm:col-span-2">
+                  <label className="label">Tipo *</label>
+                  <SpellCheckInput
+                    inline
+                    list="tipos-equip"
+                    value={slot.tipo}
+                    onChange={(e) => alterarTipoEquip(idx, e.target.value)}
+                    placeholder="Ex: Geladeira, Coifa, Depurador..."
+                    className="input"
+                    required
+                  />
                 </div>
-              )}
+                <div className="sm:col-span-2">
+                  <label className="label">Marca</label>
+                  <SpellCheckInput
+                    inline
+                    value={slot.marca}
+                    onChange={(e) => updEquipSlot(idx, { marca: e.target.value, id: "" })}
+                    className="input"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="label">Modelo</label>
+                  <SpellCheckInput
+                    inline
+                    value={slot.modelo}
+                    onChange={(e) => updEquipSlot(idx, { modelo: e.target.value, id: "" })}
+                    className="input"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="label">Nº de série</label>
+                  <input
+                    className="input"
+                    value={slot.serie}
+                    onChange={(e) => updEquipSlot(idx, { serie: e.target.value, id: "" })}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="label">Voltagem</label>
+                  <select
+                    className="input"
+                    value={slot.voltagem}
+                    onChange={(e) => updEquipSlot(idx, { voltagem: e.target.value, id: "" })}
+                  >
+                    <option value="">-</option>
+                    <option>110V</option>
+                    <option>220V</option>
+                    <option>Bivolt</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="label">Cor</label>
+                  <SpellCheckInput
+                    inline
+                    value={slot.cor}
+                    onChange={(e) => updEquipSlot(idx, { cor: e.target.value, id: "" })}
+                    className="input"
+                  />
+                </div>
+              </div>
               {slot.id && (
-                <p className="text-sm text-slate-700">
-                  <strong>{slot.tipo}</strong>
-                  {slot.marca && ` — ${slot.marca}`} {slot.modelo}
-                  {slot.serie && ` • Série: ${slot.serie}`}
-                  {slot.voltagem && ` • ${slot.voltagem}`}
+                <p className="mt-2 text-xs text-emerald-700">
+                  Usando equipamento já cadastrado do cliente. Altere o tipo acima para cadastrar um aparelho diferente.
                 </p>
               )}
             </div>
