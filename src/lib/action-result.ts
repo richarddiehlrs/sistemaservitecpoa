@@ -27,6 +27,12 @@ export function actionFail(error: string): ActionResult<never> {
   return { ok: false, error };
 }
 
+/** Garante FormData em Server Actions chamadas via bind + cliente. */
+export function assertFormData(v: unknown): FormData {
+  if (v instanceof FormData) return v;
+  throw new Error("Dados do formulário inválidos. Recarregue a página e tente novamente.");
+}
+
 /**
  * Executa o corpo de uma Server Action capturando exceções e devolvendo
  * { ok:false, error } com a mensagem real. Deixa redirect()/notFound() passar.

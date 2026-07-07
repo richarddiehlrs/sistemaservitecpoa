@@ -20,7 +20,7 @@ export function RegistrarPagamentoOs({
   saldoRestante: number;
   percentualSinalPadrao: number;
   aprovado: boolean;
-  action: (osId: string, formData: FormData) => Promise<ActionResult>;
+  action: (formData: FormData) => Promise<ActionResult>;
   defaultTipo?: "sinal" | "parcial" | "saldo";
 }) {
   const { run, pending } = useAction();
@@ -44,7 +44,7 @@ export function RegistrarPagamentoOs({
     const v = parseNumForm(fd.get("valor"));
     if (v <= 0) return;
     if (tipo === "sinal" && !aprovado) return;
-    run(() => action(osId, fd), {
+    run(() => action(fd), {
       successMsg: "Pagamento registrado no financeiro.",
       refresh: true,
       onSuccess: () => setValor(""),
@@ -82,7 +82,7 @@ export function RegistrarPagamentoOs({
           ))}
         </div>
 
-        {tipo === "sinal" && aprovado && (
+        {(tipo === "sinal" || tipo === "parcial") && aprovado && (
           <div className="flex flex-wrap gap-2">
             {percentualSinalPadrao > 0 && percentualSinalPadrao !== 30 && percentualSinalPadrao !== 50 && (
               <button
@@ -105,7 +105,7 @@ export function RegistrarPagamentoOs({
           </div>
         )}
 
-        {tipo !== "sinal" && (
+        {tipo === "saldo" && (
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-secondary py-1 text-xs" onClick={() => aplicarValor(saldoRestante)}>
               Saldo total ({formatCurrency(saldoRestante)})
@@ -126,7 +126,7 @@ export function RegistrarPagamentoOs({
               onChange={(e) => setValor(e.target.value)}
               className="input py-1.5 text-sm"
               required
-              disabled={tipo === "sinal" && !aprovado}
+              disabled={!aprovado}
             />
           </div>
           <div>
@@ -155,7 +155,7 @@ export function RegistrarPagamentoOs({
         <button
           type="submit"
           className="btn-primary w-full"
-          disabled={pending || (tipo === "sinal" && !aprovado)}
+          disabled={pending || !aprovado}
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar pagamento"}
         </button>

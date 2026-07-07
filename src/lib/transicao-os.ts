@@ -56,11 +56,20 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
   }
 
   if (opts.status === "concluida" && !opts.skipFinanceiro) {
-    await sincronizarFinanceiroConclusaoOs(
-      supabase,
-      opts.osId,
-      opts.observacao ?? "Serviço concluído — receita registrada"
-    );
+    try {
+      await sincronizarFinanceiroConclusaoOs(
+        supabase,
+        opts.osId,
+        opts.observacao ?? "Serviço concluído — receita registrada"
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("Não foi possível concluir")) throw err;
+      throw new Error(
+        msg ||
+          "Não foi possível concluir a OS no financeiro. Verifique o orçamento e os pagamentos registrados."
+      );
+    }
   }
 
   const update: Record<string, unknown> = { status: opts.status, ...opts.extras };

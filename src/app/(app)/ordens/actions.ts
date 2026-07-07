@@ -33,7 +33,7 @@ import {
 } from "@/lib/notificacoes";
 import type { StatusOS, TipoAtendimento } from "@/types/database";
 import { podeAbrirRetornoGarantia } from "@/lib/os-garantia";
-import { safeAction, type ActionResult } from "@/lib/action-result";
+import { assertFormData, safeAction, type ActionResult } from "@/lib/action-result";
 
 function lerTipoAtendimento(formData: FormData): TipoAtendimento {
   const t = str(formData.get("tipo_atendimento"));
@@ -481,9 +481,10 @@ async function atualizarOrdemImpl(id: string, formData: FormData) {
 }
 
 async function alterarStatusFormImpl(id: string, formData: FormData) {
-  const status = String(formData.get("status") || "aberta") as StatusOS;
-  const observacao = str(formData.get("observacao")) || undefined;
-  await alterarStatusImpl(id, status, observacao, formData);
+  const fd = assertFormData(formData);
+  const status = String(fd.get("status") || "aberta") as StatusOS;
+  const observacao = str(fd.get("observacao")) || undefined;
+  await alterarStatusImpl(id, status, observacao, fd);
 }
 
 async function alterarStatusImpl(
@@ -570,7 +571,7 @@ async function alterarStatusImpl(
     }
   }
 
-  if (result.mudou && (status === "aprovada" || status === "cancelada" || status === "concluida")) {
+  if (result.mudou && (statusEfetivo === "cancelada" || statusEfetivo === "concluida")) {
     revalidatePath("/financeiro");
     revalidatePath("/dashboard");
     revalidatePath("/dre");
@@ -970,6 +971,7 @@ async function abrirRetornoGarantiaImpl(osOrigemId: string, formData: FormData) 
 
 async function registrarPagamentoOsImpl(osId: string, formData: FormData) {
   await requirePermissao("ordens");
+  const fd = assertFormData(formData);
   const supabase = await createClient();
 
   const { data: os } = await supabase
@@ -984,10 +986,10 @@ async function registrarPagamentoOsImpl(osId: string, formData: FormData) {
     throw new Error("Use o check-out de campo para registrar pagamento em retorno de garantia.");
   }
 
-  const valor = parseNumForm(formData.get("valor"));
+  const valor = parseNumForm(fd.get("valor"));
   if (valor <= 0) throw new Error("Informe um valor maior que zero.");
 
-  const tipoRaw = String(formData.get("tipo") || "sinal");
+  const tipoRaw = String(fd.get("tipo") || "sinal");
   const tipo = (["visita", "sinal", "saldo", "parcial", "outro"].includes(tipoRaw)
     ? tipoRaw
     : "sinal") as "visita" | "sinal" | "saldo" | "parcial" | "outro";
@@ -1001,8 +1003,8 @@ async function registrarPagamentoOsImpl(osId: string, formData: FormData) {
     osId,
     valor,
     tipo,
-    formaPagamento: str(formData.get("forma_pagamento")),
-    observacao: str(formData.get("observacao")) ?? undefined,
+    formaPagamento: str(fd.get("forma_pagamento")),
+    observacao: str(fd.get("observacao")) ?? undefined,
   });
 
   revalidatePath(`/ordens/${osId}`);

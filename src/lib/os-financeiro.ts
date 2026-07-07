@@ -326,6 +326,61 @@ export async function criarReceitaPendenteOs(supabase: Db, osId: string): Promis
   return true;
 }
 
+/** Alinha receita existente antes da conclusão (evita falha quando há pagamentos parciais). */
+export async function prepararReceitaConclusaoOs(supabase: Db, osId: string): Promise<void> {
+  const { data: os } = await supabase
+    .from("ordens_servico")
+    .select(
+      "valor_itens, valor_visita, abater_visita, desconto, acrescimo, aprovado, motivo_atendimento"
+    )
+    .eq("id", osId)
+    .single();
+
+  if (!os || isRetornoGarantia(os)) return;
+
+  const faturamento = calcReceitaFaturamentoOs(
+    Number(os.valor_itens),
+    Number(os.valor_visita),
+    os.abater_visita,
+    Number(os.desconto),
+    Number(os.acrescimo)
+  );
+
+  const receita = await buscarReceitaAtivaOs(supabase, osId);
+  const pago = Number(receita?.valor_pago) || 0;
+
+  if (faturamento <= 0) {
+    if (!receita || pago <= 0) {
+      throw new Error(
+        "Não é possível concluir: inclua serviços/peças no orçamento ou registre o pagamento da visita."
+      );
+    }
+    return;
+  }
+
+  if (receita) {
+    const valorAtual = Number(receita.valor) || 0;
+    const novoValor = Math.round(Math.max(faturamento, pago, valorAtual) * 100) / 100;
+    if (Math.abs(novoValor - valorAtual) > 0.001) {
+      const status = statusReceitaComPagamento(novoValor, pago);
+      const { error } = await supabase
+        .from("lancamentos_financeiros")
+        .update({
+          valor: novoValor,
+          status,
+          valor_liquido: status === "pago" ? novoValor : null,
+        })
+        .eq("id", receita.id);
+      if (error) throw new Error(error.message);
+    }
+  } else if (os.aprovado) {
+    const ok = await criarReceitaPendenteOs(supabase, osId);
+    if (!ok) {
+      throw new Error("Não foi possível preparar a receita da OS para conclusão.");
+    }
+  }
+}
+
 /** Financeiro na conclusão — receita normal ou custo de retorno em garantia. */
 export async function sincronizarFinanceiroConclusaoOs(
   supabase: Db,
@@ -345,6 +400,7 @@ export async function sincronizarFinanceiroConclusaoOs(
       observacao ?? "Retorno em garantia concluído — custo registrado; pagamento manual"
     );
   } else {
+    await prepararReceitaConclusaoOs(supabase, osId);
     await sincronizarReceitaOsInterno(
       supabase,
       osId,
@@ -369,7 +425,7 @@ export async function sincronizarReceitaOsInterno(
   }
   if (!data) {
     throw new Error(
-      "Não foi possível registrar o financeiro da OS. Verifique se há valores no orçamento."
+      "Não foi possível registrar o financeiro da OS. Confira se há itens no orçamento e se os pagamentos não excedem o total."
     );
   }
 }
