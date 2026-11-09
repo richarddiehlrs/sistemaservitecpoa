@@ -61,7 +61,16 @@ export type CaixaConta = { id: string; nome: string; saldo: number; configurada:
 export async function caixaPorConta(
   supabase: SupabaseClient<Database>,
   ate: string
-): Promise<{ contas: CaixaConta[]; semConta: number; total: number }> {
+): Promise<{
+  contas: CaixaConta[];
+  semConta: number;
+  total: number;
+  configurado: boolean;
+  /** Data mais recente em que um saldo de conta foi informado. */
+  dataSaldoInformado: string | null;
+  /** Todos os saldos informados são zero (provavelmente não preenchidos). */
+  saldosZerados: boolean;
+}> {
   const { data: contas } = await supabase
     .from("contas_financeiras")
     .select("id, nome, saldo_inicial, data_saldo_inicial")
@@ -78,17 +87,27 @@ export async function caixaPorConta(
     });
   }
 
+  // Saldo real só existe quando todas as contas têm saldo inicial (extrato) numa data.
+  // Pagamentos até essa data já estão dentro do saldo informado; só contam os posteriores.
+  const configurado = lista.length > 0 && lista.every((c) => c.configurada);
+  const corte = (contas || [])
+    .map((c) => c.data_saldo_inicial)
+    .filter((d): d is string => Boolean(d))
+    .sort()[0];
+
   // Pagamentos sem conta: não dá para saber onde o dinheiro está
   type Row = { valor: number; taxa: number; lancamentos_financeiros: { tipo: "receita" | "despesa" } | null };
   let semConta = 0;
   for (let de = 0; ; de += 1000) {
-    const { data, error } = await supabase
+    let q = supabase
       .from("os_pagamentos")
       .select("valor, taxa, lancamentos_financeiros!inner(tipo)")
       .is("conta_id", null)
       .lte("data_pagamento", ate)
       .order("id")
       .range(de, de + 999);
+    if (corte) q = q.gt("data_pagamento", corte);
+    const { data, error } = await q;
     if (error) throw new Error(error.message);
     for (const r of (data || []) as unknown as Row[]) {
       semConta += r.lancamentos_financeiros?.tipo === "despesa" ? -Number(r.valor) : Number(r.valor) - Number(r.taxa || 0);
@@ -98,5 +117,14 @@ export async function caixaPorConta(
   semConta = Math.round(semConta * 100) / 100;
 
   const total = Math.round((lista.reduce((s, c) => s + c.saldo, 0) + semConta) * 100) / 100;
-  return { contas: lista, semConta, total };
+  const datas = (contas || []).map((c) => c.data_saldo_inicial).filter((d): d is string => Boolean(d)).sort();
+  const saldosZerados = (contas || []).every((c) => Number(c.saldo_inicial || 0) === 0);
+  return {
+    contas: lista,
+    semConta,
+    total,
+    configurado,
+    dataSaldoInformado: datas.length ? datas[datas.length - 1] : null,
+    saldosZerados,
+  };
 }

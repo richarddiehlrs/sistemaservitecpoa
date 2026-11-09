@@ -104,3 +104,76 @@ export function projetarFluxo(opts: {
   atraso.itens.sort((a, b) => (a.data_vencimento ?? "").localeCompare(b.data_vencimento ?? ""));
   return { linhas, atraso, semVencimento };
 }
+
+// ------------------------------------------------------------------
+// Extrato do mês (realizado): um movimento por pagamento, na data dele
+// ------------------------------------------------------------------
+
+export type MovimentoCaixa = {
+  id: string;
+  data: string; // YYYY-MM-DD
+  tipo: "receita" | "despesa";
+  valor: number;
+  /** Taxa retida (maquininha) — não entra no caixa. */
+  taxa: number;
+  descricao: string;
+  categoria: string | null;
+  conta: string | null;
+  lancamentoId: string | null;
+};
+
+export type DiaExtrato = {
+  data: string;
+  movimentos: (MovimentoCaixa & { liquido: number })[];
+  entradas: number;
+  saidas: number;
+  /** Saldo ao fim do dia (se o saldo inicial for conhecido) ou acumulado do mês. */
+  saldo: number;
+};
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Efeito do movimento no caixa: entrada líquida de taxa, saída negativa. */
+export function efeitoNoCaixa(m: Pick<MovimentoCaixa, "tipo" | "valor" | "taxa">): number {
+  return m.tipo === "receita" ? r2(Number(m.valor) - Number(m.taxa || 0)) : -r2(Number(m.valor));
+}
+
+/**
+ * Agrupa por dia (mais recente primeiro na exibição, mas o saldo é calculado em ordem).
+ * `saldoInicial` null = mostra o acumulado do mês a partir de zero.
+ */
+export function extratoMes(
+  movimentos: MovimentoCaixa[],
+  saldoInicial: number | null
+): { dias: DiaExtrato[]; entradas: number; saidas: number; taxas: number; resultado: number; saldoFinal: number } {
+  const ordenados = [...movimentos].sort((a, b) => a.data.localeCompare(b.data) || a.id.localeCompare(b.id));
+  const porDia = new Map<string, DiaExtrato>();
+  let saldo = saldoInicial ?? 0;
+  let entradas = 0;
+  let saidas = 0;
+  let taxas = 0;
+
+  for (const m of ordenados) {
+    const liquido = efeitoNoCaixa(m);
+    saldo = r2(saldo + liquido);
+    if (liquido >= 0) entradas = r2(entradas + liquido);
+    else saidas = r2(saidas - liquido);
+    if (m.tipo === "receita") taxas = r2(taxas + Number(m.taxa || 0));
+
+    const dia = porDia.get(m.data) ?? { data: m.data, movimentos: [], entradas: 0, saidas: 0, saldo };
+    dia.movimentos.push({ ...m, liquido });
+    if (liquido >= 0) dia.entradas = r2(dia.entradas + liquido);
+    else dia.saidas = r2(dia.saidas - liquido);
+    dia.saldo = saldo;
+    porDia.set(m.data, dia);
+  }
+
+  return {
+    dias: [...porDia.values()].sort((a, b) => b.data.localeCompare(a.data)),
+    entradas,
+    saidas,
+    taxas,
+    resultado: r2(entradas - saidas),
+    saldoFinal: saldo,
+  };
+}

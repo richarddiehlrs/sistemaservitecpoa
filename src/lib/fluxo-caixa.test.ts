@@ -69,3 +69,33 @@ describe("projetarFluxo", () => {
     expect(r.linhas.reduce((s, l) => s + l.entradas, 0)).toBe(0);
   });
 });
+
+import { extratoMes } from "./fluxo-caixa";
+
+describe("extratoMes", () => {
+  const m = (id: string, data: string, tipo: "receita" | "despesa", valor: number, taxa = 0) => ({
+    id, data, tipo, valor, taxa, descricao: id, categoria: null, conta: null, lancamentoId: null,
+  });
+
+  it("saldo a partir do saldo inicial, entrada líquida de taxa e dias do mais recente para o mais antigo", () => {
+    const r = extratoMes(
+      [m("a", "2026-11-03", "receita", 200, 5), m("b", "2026-11-03", "despesa", 50), m("c", "2026-11-05", "receita", 100)],
+      1000
+    );
+    expect(r.entradas).toBe(295);
+    expect(r.saidas).toBe(50);
+    expect(r.taxas).toBe(5);
+    expect(r.resultado).toBe(245);
+    expect(r.saldoFinal).toBe(1245);
+    expect(r.dias.map((d) => [d.data, d.saldo])).toEqual([
+      ["2026-11-05", 1245],
+      ["2026-11-03", 1145],
+    ]);
+  });
+
+  it("sem saldo inicial mostra o acumulado do mês a partir de zero", () => {
+    const r = extratoMes([m("x", "2026-11-01", "despesa", 30)], null);
+    expect(r.saldoFinal).toBe(-30);
+    expect(r.dias[0].saidas).toBe(30);
+  });
+});
