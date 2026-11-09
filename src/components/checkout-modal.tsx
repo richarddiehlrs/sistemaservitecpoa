@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { obterPosicaoGps } from "@/lib/geo";
 import { amanhaYmdLocal, formatCurrency, hojeYmdLocal, parseNumForm } from "@/lib/format";
@@ -115,15 +116,22 @@ export function CheckoutModal({
   const valor30 = calcValorSinal(saldoExibicao, 30);
   const valor50 = calcValorSinal(saldoExibicao, 50);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-5 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[90] flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
+      <div className="flex h-[100dvh] w-full max-w-md flex-col bg-white shadow-xl sm:h-auto sm:max-h-[90dvh] sm:rounded-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <h3 className="text-lg font-semibold text-slate-900">Finalizar visita</h3>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="-mr-2 p-2 text-slate-400 hover:text-slate-600"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3">
         <p className="mb-4 text-sm text-slate-600">
           Informe o que foi feito nesta visita. Pagamentos registrados vão direto ao financeiro.
         </p>
@@ -442,16 +450,18 @@ export function CheckoutModal({
           </div>
         )}
 
-        <div className="mt-5 flex gap-2">
-          <button type="button" onClick={onClose} className="btn-secondary flex-1" disabled={pending}>
+        </div>
+        <div className="flex shrink-0 gap-2 border-t border-slate-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1 py-2.5" disabled={pending}>
             Cancelar
           </button>
-          <button type="button" onClick={confirmar} className="btn-primary flex-1" disabled={pending}>
+          <button type="button" onClick={confirmar} className="btn-primary flex-1 py-2.5" disabled={pending}>
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar check-out"}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
