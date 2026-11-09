@@ -6,6 +6,7 @@ import { PortalQrCodes } from "@/components/portal-qr-codes";
 import { PortalAcompanhamento } from "@/components/portal-visita";
 import { PortalRetornoAgendado } from "@/components/portal-retorno-agendado";
 import { PortalNps } from "@/components/portal-nps";
+import { PortalLinhaTempo, type EtapaPortal } from "@/components/portal-linha-tempo";
 import { PrintButton } from "@/components/print-button";
 import {
   formatCurrency,
@@ -30,8 +31,13 @@ export default async function PortalOsPage({
   const { token } = await params;
   const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc("os_publica", { p_token: token });
+  const [{ data, error }, { data: etapasData }] = await Promise.all([
+    supabase.rpc("os_publica", { p_token: token }),
+    // Linha do tempo (0040); se a função ainda não existir, o portal segue sem ela
+    supabase.rpc("os_publica_etapas" as never, { p_token: token } as never),
+  ]);
   const os = data as any;
+  const etapasPortal = (Array.isArray(etapasData) ? etapasData : []) as EtapaPortal[];
 
   if (error || !os || !os.numero) notFound();
 
@@ -164,6 +170,8 @@ export default async function PortalOsPage({
         </div>
 
         <PortalRetornoAgendado agendamento={proximoAgendamento} />
+
+        <PortalLinhaTempo etapas={etapasPortal} />
 
         <PortalAcompanhamento
           status={os.status}

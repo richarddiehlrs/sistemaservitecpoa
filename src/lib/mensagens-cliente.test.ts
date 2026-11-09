@@ -110,3 +110,20 @@ describe("cobrança", () => {
     expect(msg).toContain("desconsidere");
   });
 });
+
+import { mensagemEtapa } from "./mensagens-cliente";
+
+describe("mensagens das etapas", () => {
+  const base = { empresa: "ServitecPoa", cliente: "ana souza", numero: 140, hora: 9, equipamento: "Geladeira Brastemp", garantiaDias: 90 };
+  it("todas têm saudação e assinatura, sem lixo", () => {
+    for (const e of ["coletado_oficina", "recebido_oficina", "diagnostico", "peca_solicitada", "peca_recebida", "reparo_iniciado", "testes", "pronto", "saiu_entrega", "entregue"] as const) {
+      const m = mensagemEtapa(e, base);
+      expect(m, e).toMatch(/^Bom dia, Ana! Tudo bem\?/);
+      expect(m, e).toContain("Atenciosamente");
+      expect(m, e).not.toMatch(/undefined|null|\n{3,}/);
+    }
+  });
+  it("peça solicitada mostra a previsão", () => {
+    expect(mensagemEtapa("peca_solicitada", { ...base, previsao: "2026-11-20" })).toContain("*Previsão de chegada:* 20/11/2026");
+  });
+});

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, Home, Wrench } from "lucide-react";
 import { formatDate, formatNumeroOS, STATUS_OS_LABEL } from "@/lib/format";
+import { ETAPAS, type EtapaOs } from "@/lib/etapas-os";
 import {
   PAINEL_GRUPOS,
   STATUS_PAINEL_ATIVOS,
@@ -23,7 +24,22 @@ export type OsPainel = {
   data_previsao: string | null;
   prioridade: string;
   cliente_nome: string;
+  local?: "cliente" | "oficina" | "transito" | "entregue";
+  etapa?: string | null;
+  /** Desde quando está na etapa atual (ISO). */
+  desde?: string | null;
 };
+
+/** Aparelho está na oficina (aberta como oficina ou coletada em visita). */
+export function naOficina(o: OsPainel): boolean {
+  if (o.local === "oficina" || o.local === "transito") return true;
+  return o.tipo_atendimento === "oficina" && o.local !== "entregue";
+}
+
+function diasDesde(iso?: string | null): number | null {
+  if (!iso) return null;
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+}
 
 function filtrar(lista: OsPainel[], busca: string) {
   const q = busca.trim().toLowerCase();
@@ -40,8 +56,8 @@ export function PainelAtendimentos({ ordens }: { ordens: OsPainel[] }) {
   const [busca, setBusca] = useState("");
 
   const filtradas = useMemo(() => filtrar(ordens, busca), [ordens, busca]);
-  const domicilio = filtradas.filter((o) => o.tipo_atendimento !== "oficina");
-  const oficina = filtradas.filter((o) => o.tipo_atendimento === "oficina");
+  const domicilio = filtradas.filter((o) => !naOficina(o));
+  const oficina = filtradas.filter((o) => naOficina(o));
 
   const contagem = useMemo(() => {
     const map: Record<string, number> = {};
@@ -132,7 +148,7 @@ function SecaoOficina({ ordens }: { ordens: OsPainel[] }) {
     <div className="card overflow-hidden">
       <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-4 py-3">
         <Wrench className="h-5 w-5 text-slate-600" />
-        <h2 className="font-semibold text-slate-900">{TIPO_ATENDIMENTO_LABEL.oficina}</h2>
+        <h2 className="font-semibold text-slate-900">Oficina — aparelhos na bancada</h2>
         <span className="badge bg-slate-200 text-slate-700">{ordens.length}</span>
       </div>
       <div className="overflow-x-auto p-3">
@@ -165,7 +181,9 @@ function SecaoOficina({ ordens }: { ordens: OsPainel[] }) {
                 href={`/ordens/${os.id}`}
                 className="flex flex-col items-center justify-center rounded border border-black/10 px-0.5 text-center shadow-sm transition hover:scale-105 hover:shadow-md"
                 style={{ background: cor, color: texto }}
-                title={`${formatNumeroOS(os.numero)} — ${os.cliente_nome} — ${STATUS_OS_LABEL[os.status] || os.status}`}
+                title={`${formatNumeroOS(os.numero)} — ${os.cliente_nome} — ${
+                  os.etapa ? ETAPAS[os.etapa as EtapaOs]?.label ?? "" : STATUS_OS_LABEL[os.status] || os.status
+                }${diasDesde(os.desde) != null ? ` há ${diasDesde(os.desde)} dia(s)` : ""}`}
               >
                 <span className="text-[11px] font-bold leading-tight">{os.numero}</span>
                 <span className="max-w-full truncate text-[8px] opacity-90">{os.cliente_nome.split(" ")[0]}</span>
@@ -174,6 +192,36 @@ function SecaoOficina({ ordens }: { ordens: OsPainel[] }) {
           })}
         </div>
       </div>
+      {ordens.length > 0 && (
+        <div className="border-t border-slate-200">
+          <p className="bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Na bancada — mais antigos primeiro</p>
+          <ul className="divide-y divide-slate-100">
+            {[...ordens]
+              .sort((a, b) => (a.desde ?? "").localeCompare(b.desde ?? ""))
+              .map((os) => {
+                const dias = diasDesde(os.desde);
+                const { cor } = corPainelStatus(os.status);
+                return (
+                  <li key={os.id}>
+                    <Link href={`/ordens/${os.id}`} className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-slate-50">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: cor }} />
+                      <span className="w-20 shrink-0 font-semibold text-slate-800">{formatNumeroOS(os.numero)}</span>
+                      <span className="min-w-0 flex-1 truncate text-slate-600">{os.cliente_nome}</span>
+                      <span className="hidden shrink-0 text-xs text-slate-500 sm:inline">
+                        {os.etapa ? ETAPAS[os.etapa as EtapaOs]?.label : STATUS_OS_LABEL[os.status] || os.status}
+                      </span>
+                      {dias != null && (
+                        <span className={`shrink-0 text-xs font-medium ${dias >= 7 ? "text-red-600" : dias >= 3 ? "text-amber-600" : "text-slate-400"}`}>
+                          {dias === 0 ? "hoje" : `${dias} d`}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+          </ul>
+        </div>
+      )}
       {ordens.length > totalCelulas && (
         <p className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
           + {ordens.length - totalCelulas} OS na oficina fora do grid — conclua ou entregue para liberar posição.

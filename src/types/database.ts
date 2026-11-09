@@ -73,6 +73,9 @@ export type OrdemServico = {
   prioridade: "baixa" | "normal" | "alta" | "urgente";
   data_abertura: string;
   data_previsao: string | null;
+  local_equipamento?: "cliente" | "oficina" | "transito" | "entregue";
+  etapa_atual?: string | null;
+  etapa_em?: string | null;
   data_conclusao: string | null;
   data_entrega: string | null;
   valor_visita: number;
@@ -313,6 +316,16 @@ export type OsPagamento = {
   updated_at: string;
 };
 
+export type OsEtapa = {
+  id: string;
+  os_id: string;
+  etapa: string;
+  observacao: string | null;
+  previsao: string | null;
+  registrado_por: string | null;
+  created_at: string;
+};
+
 export type ContaFinanceira = {
   id: string;
   nome: string;
@@ -443,6 +456,7 @@ export type Database = {
       metas_faturamento: TableDef<MetaFaturamento>;
       os_pagamentos: TableDef<OsPagamento>;
       contas_financeiras: TableDef<ContaFinanceira>;
+      os_etapas: TableDef<OsEtapa>;
       extrato_importacoes: TableDef<ExtratoImportacao>;
       extrato_transacoes: TableDef<ExtratoTransacao>;
       notificacoes: TableDef<Notificacao>;

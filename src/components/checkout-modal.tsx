@@ -10,7 +10,7 @@ import { useToast } from "@/components/toast";
 import type { OsResumoCheckout } from "@/lib/os-valores";
 import type { ActionResult } from "@/lib/action-result";
 
-type Resultado = "visita" | "servico_concluido" | "aguardando_peca";
+type Resultado = "visita" | "servico_concluido" | "aguardando_peca" | "coletado_oficina";
 
 export function CheckoutModal({
   open,
@@ -353,6 +353,49 @@ export function CheckoutModal({
                       </span>
                     </label>
                   )}
+                </div>
+              )}
+            </div>
+          </label>
+
+          <label className="flex cursor-pointer gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
+            <input
+              type="radio"
+              name="resultado"
+              checked={resultado === "coletado_oficina"}
+              onChange={() => setResultado("coletado_oficina")}
+              className="mt-1"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-slate-900">Coletei o produto para a oficina</p>
+              <p className="text-xs text-slate-500">
+                O aparelho vai para a bancada: a OS entra no painel da oficina e o cliente pode ser avisado
+              </p>
+              {resultado === "coletado_oficina" && (
+                <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
+                  <input
+                    name="obs_coleta"
+                    className="input py-1.5 text-sm"
+                    placeholder="O que foi levado? (ex.: placa e gaveta; sem acessórios)"
+                  />
+                  {osResumo && osResumo.valorVisita > 0 && !osResumo.visitaPaga && (
+                    <label className="flex items-start gap-2 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={visitaCobrada}
+                        onChange={(e) => setVisitaCobrada(e.target.checked)}
+                      />
+                      <span>
+                        Cliente pagou a visita ({formatCurrency(osResumo.valorVisita)}) — abate do reparo
+                      </span>
+                    </label>
+                  )}
+                  <p className="text-[11px] text-slate-500">
+                    {osResumo?.aprovado
+                      ? "Orçamento já aprovado — a OS segue para reparo na oficina."
+                      : "Sem orçamento aprovado — a OS fica em análise na oficina até o diagnóstico."}
+                  </p>
                 </div>
               )}
             </div>

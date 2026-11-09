@@ -40,16 +40,28 @@ export function WhatsAppEnviar({
   className,
   children,
   desabilitadoMsg = "Cliente sem telefone válido",
+  abertoExterno,
+  onFechar,
 }: {
   telefone?: string | null;
   mensagem: string;
   titulo: string;
   destinatario?: string | null;
   className?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   desabilitadoMsg?: string;
+  /** Controle externo (abre a prévia sem clicar no botão, ex.: após registrar etapa). */
+  abertoExterno?: boolean;
+  onFechar?: () => void;
 }) {
-  const [aberto, setAberto] = useState(false);
+  const [abertoInterno, setAbertoInterno] = useState(false);
+  const controlado = abertoExterno !== undefined;
+  const aberto = controlado ? Boolean(abertoExterno) : abertoInterno;
+  const setAberto = (v: boolean) => {
+    if (controlado) {
+      if (!v) onFechar?.();
+    } else setAbertoInterno(v);
+  };
   const [texto, setTexto] = useState(mensagem);
   const [copiado, setCopiado] = useState(false);
   const temTelefone = Boolean(telefoneComDDI(telefone));
@@ -72,15 +84,17 @@ export function WhatsAppEnviar({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setAberto(true)}
-        disabled={!temTelefone}
-        title={temTelefone ? titulo : desabilitadoMsg}
-        className={`${className ?? ""} ${temTelefone ? "" : "cursor-not-allowed opacity-50"}`}
-      >
-        {children}
-      </button>
+      {children && (
+        <button
+          type="button"
+          onClick={() => setAberto(true)}
+          disabled={!temTelefone}
+          title={temTelefone ? titulo : desabilitadoMsg}
+          className={`${className ?? ""} ${temTelefone ? "" : "cursor-not-allowed opacity-50"}`}
+        >
+          {children}
+        </button>
+      )}
 
       {aberto &&
         typeof document !== "undefined" &&

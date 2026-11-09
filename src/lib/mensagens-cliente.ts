@@ -294,3 +294,93 @@ export function mensagemWhatsAppCliente(evento: EventoWhatsAppCliente, ctx: Cont
       return mensagemStatusOs(ctx);
   }
 }
+
+// ------------------------------------------------------------------
+// Etapas da OS (linha do tempo) — mensagem ao registrar cada marco
+// ------------------------------------------------------------------
+
+export type EtapaMensagem =
+  | "coletado_oficina"
+  | "recebido_oficina"
+  | "diagnostico"
+  | "peca_solicitada"
+  | "peca_recebida"
+  | "reparo_iniciado"
+  | "testes"
+  | "pronto"
+  | "saiu_entrega"
+  | "entregue";
+
+export function mensagemEtapa(
+  etapa: EtapaMensagem,
+  ctx: ContextoMensagemCliente & { previsao?: string | null; observacao?: string | null }
+): string {
+  const os = formatNumeroOS(ctx.numero);
+  const ola = `${saudacao(ctx.cliente, ctx.hora)} Tudo bem?`;
+  const eu = `Aqui é da *${ctx.empresa}*.`;
+  const aparelho = ctx.equipamento ? `seu aparelho (${ctx.equipamento})` : "seu aparelho";
+  const prev = ctx.previsao ? formatDate(ctx.previsao) : null;
+  const obs = ctx.observacao?.trim() ? `_${ctx.observacao.trim()}_` : null;
+  const link = ctx.portalUrl ? `Acompanhe cada etapa pelo link:\n${ctx.portalUrl}` : null;
+  const assina = assinatura(ctx.empresa, ctx.empresaTelefone);
+  const valor = ctx.valorTotal != null && ctx.valorTotal > 0 ? formatCurrency(ctx.valorTotal) : null;
+
+  switch (etapa) {
+    case "coletado_oficina":
+      return blocos(ola, `${eu} Retiramos ${aparelho} referente à OS ${os} e ele já está a caminho da nossa oficina.`, "Assim que concluirmos o diagnóstico, enviaremos o orçamento para sua aprovação.", obs, link, assina);
+    case "recebido_oficina":
+      return blocos(ola, `${eu} ${aparelho.charAt(0).toUpperCase() + aparelho.slice(1)} chegou à nossa oficina (OS ${os}) e já entrou na fila de diagnóstico.`, obs, link, assina);
+    case "diagnostico":
+      return blocos(
+        ola,
+        `${eu} Concluímos o diagnóstico da OS ${os}.`,
+        obs,
+        valor ? `*Valor do orçamento:* ${valor}` : null,
+        ctx.portalUrl ? `Veja os detalhes e *aprove* pelo link:\n${ctx.portalUrl}` : "Para aprovar, basta responder esta mensagem.",
+        assina
+      );
+    case "peca_solicitada":
+      return blocos(
+        ola,
+        `${eu} Para o reparo da OS ${os}, *solicitamos a peça* ao fornecedor.`,
+        prev ? `*Previsão de chegada:* ${prev}` : null,
+        "Assim que ela chegar, avisamos e seguimos com o serviço.",
+        obs,
+        link,
+        assina
+      );
+    case "peca_recebida":
+      return blocos(ola, `${eu} A *peça chegou*! Vamos dar sequência ao reparo da OS ${os}.`, obs, link, assina);
+    case "reparo_iniciado":
+      return blocos(ola, `${eu} *Iniciamos o reparo* de ${aparelho} (OS ${os}).`, "Avisaremos assim que estiver pronto.", obs, link, assina);
+    case "testes":
+      return blocos(ola, `${eu} O reparo da OS ${os} foi feito e ${aparelho} está *em testes de funcionamento*, para garantir que tudo está perfeito.`, obs, assina);
+    case "pronto":
+      return blocos(
+        ola,
+        `${eu} Boa notícia: ${aparelho} está *pronto*! (OS ${os})`,
+        valor ? `*Valor do serviço:* ${valor}` : null,
+        ctx.garantiaDias ? `O serviço tem *garantia de ${ctx.garantiaDias} dias*.` : null,
+        "Vamos combinar a entrega ou a retirada? É só responder esta mensagem.",
+        link,
+        assina
+      );
+    case "saiu_entrega":
+      return blocos(
+        ola,
+        `${eu} ${aparelho.charAt(0).toUpperCase() + aparelho.slice(1)} *saiu para entrega* (OS ${os}).`,
+        prev ? `*Previsão:* ${prev}` : null,
+        "Pedimos que haja alguém no local para receber.",
+        obs,
+        assina
+      );
+    case "entregue":
+      return blocos(
+        ola,
+        `${eu} Confirmamos a *entrega* de ${aparelho} (OS ${os}). Obrigado pela confiança!`,
+        ctx.garantiaDias ? `Lembrando: o serviço tem *garantia de ${ctx.garantiaDias} dias*. Qualquer problema, fale conosco.` : null,
+        `Se puder, avalie nosso atendimento no Google:\n${GOOGLE_REVIEW_URL}`,
+        assina
+      );
+  }
+}

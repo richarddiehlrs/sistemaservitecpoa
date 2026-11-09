@@ -15,8 +15,9 @@ export default async function PainelAtendimentosPage() {
 
   let query = supabase
     .from("ordens_servico")
-    .select("id, numero, status, tipo_atendimento, tecnico, data_previsao, prioridade, clientes(nome)")
-    .in("status", STATUS_PAINEL_ATIVOS)
+    .select("id, numero, status, tipo_atendimento, tecnico, data_previsao, prioridade, local_equipamento, etapa_atual, etapa_em, created_at, clientes(nome)")
+    // Ativas + concluídas que ainda estão na oficina (prontas, aguardando entrega)
+    .or(`status.in.(${STATUS_PAINEL_ATIVOS.join(",")}),and(status.eq.concluida,local_equipamento.in.(oficina,transito))`)
     .order("numero", { ascending: true });
 
   if (profile.papel === "tecnico") {
@@ -36,13 +37,16 @@ export default async function PainelAtendimentosPage() {
     prioridade: o.prioridade,
     // @ts-expect-error relação
     cliente_nome: o.clientes?.nome || "—",
+    local: ((o as { local_equipamento?: string }).local_equipamento ?? "cliente") as OsPainel["local"],
+    etapa: (o as { etapa_atual?: string | null }).etapa_atual ?? null,
+    desde: (o as { etapa_em?: string | null }).etapa_em ?? (o as { created_at?: string }).created_at ?? null,
   }));
 
   return (
     <div>
       <PageHeader
         title="Painel de atendimentos"
-        subtitle="Visão em tempo real — domicílio por status e oficina em grade de bancada"
+        subtitle="Domicílio por status e bancada da oficina — inclui aparelhos coletados em visita"
         action={
           <div className="flex flex-wrap gap-2">
             <Link href="/ordens/nova?tipo=domicilio" className="btn-secondary">

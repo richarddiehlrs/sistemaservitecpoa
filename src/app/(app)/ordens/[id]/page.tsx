@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { ImageIcon, PenLine, Link2 } from "lucide-react";
 import { OsStatusControl } from "@/components/os-status-control";
+import { LinhaTempoOs, type EtapaRegistrada } from "@/components/linha-tempo-os";
+import { etapasDisponiveis, type LocalEquipamento } from "@/lib/etapas-os";
 import { OsShare } from "@/components/os-share";
 import { WhatsAppStatusCliente } from "@/components/whatsapp-status-cliente";
 import { OsFotos } from "@/components/os-fotos";
@@ -41,7 +43,7 @@ import { calcLucroOs } from "@/lib/metricas-financeiras";
 import { atualizarLancamento, excluirLancamento } from "@/app/(app)/financeiro/actions";
 import { transicoesPermitidas } from "@/lib/transicao-status";
 import type { StatusOS } from "@/types/database";
-import { alterarStatusForm, abrirRetornoGarantia, excluirOrdem, lancarFinanceiro, registrarClienteAusente, registrarPagamentoOs } from "../actions";
+import { registrarEtapaOs, agendarDevolucaoOs, alterarStatusForm, abrirRetornoGarantia, excluirOrdem, lancarFinanceiro, registrarClienteAusente, registrarPagamentoOs } from "../actions";
 import { OsEtiquetaPrompt } from "@/components/os-etiqueta-prompt";
 import { OsFinanceiroResumo } from "@/components/os-financeiro-resumo";
 import { PagamentosLista } from "@/components/pagamentos-lista";
@@ -87,6 +89,7 @@ export default async function OrdemDetalhePage({
     { data: agendamentos },
     config,
     equipamentosOs,
+    { data: etapasOs },
   ] = await Promise.all([
       supabase.from("os_itens").select("*").eq("os_id", id).order("created_at"),
       supabase
@@ -108,6 +111,7 @@ export default async function OrdemDetalhePage({
         .order("data", { ascending: false }),
       getConfig(),
       carregarEquipamentosOs(supabase, id),
+      supabase.from("os_etapas" as never).select("id, etapa, observacao, previsao, created_at").eq("os_id", id).order("created_at"),
     ]);
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
@@ -394,6 +398,38 @@ export default async function OrdemDetalhePage({
               aprovado={Boolean(os.aprovado)}
             />
           </div>
+
+          <LinhaTempoOs
+            etapas={(etapasOs || []) as unknown as EtapaRegistrada[]}
+            disponiveis={etapasDisponiveis({
+              status: os.status as StatusOS,
+              aprovado: Boolean(os.aprovado),
+              local: ((os as { local_equipamento?: string }).local_equipamento ?? "cliente") as LocalEquipamento,
+              tipoAtendimento: os.tipo_atendimento,
+            })}
+            local={((os as { local_equipamento?: string }).local_equipamento ?? "cliente") as LocalEquipamento}
+            action={registrarEtapaOs.bind(null, id)}
+            agendarEntrega={
+              os.status === "concluida" && (os as { local_equipamento?: string }).local_equipamento === "oficina"
+                ? agendarDevolucaoOs.bind(null, id)
+                : undefined
+            }
+            entregaAgendada={
+              (agendamentos || []).find((a) => a.tipo === "entrega" && ["agendado", "confirmado"].includes(a.status))?.data ?? null
+            }
+            telefone={cliente?.telefone}
+            ctxMensagem={{
+              empresa: config.nome,
+              empresaTelefone: config.telefone,
+              cliente: cliente?.nome,
+              numero: os.numero,
+              status: os.status,
+              valorTotal,
+              portalUrl,
+              equipamento: equips.length ? textoEquipamentos(equips) : null,
+              garantiaDias: os.garantia_dias,
+            }}
+          />
 
           {/* Enviar ao cliente */}
           <div className="card p-5">

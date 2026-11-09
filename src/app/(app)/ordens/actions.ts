@@ -24,6 +24,8 @@ import {
   registrarPagamentoReceitaOsCheckout,
 } from "@/lib/os-financeiro";
 import { transicionarStatusOs } from "@/lib/transicao-os";
+import { aplicarEtapaOs } from "@/lib/etapas-os-servidor";
+import { ORDEM_ETAPAS, type EtapaOs } from "@/lib/etapas-os";
 import { STATUS_OS_BLOQUEADO_EDICAO, validarTransicaoStatus } from "@/lib/transicao-status";
 import { sincronizarAgendamentoOs } from "@/lib/agenda-os";
 import { limparDadosVinculadosOs } from "@/lib/limpar-os";
@@ -215,6 +217,7 @@ async function criarOrdemImpl(formData: FormData) {
       cliente_id: clienteId,
       equipamento_id: equipamentoId,
       tipo_atendimento: tipo,
+      local_equipamento: tipo === "oficina" ? "oficina" : "cliente",
       status,
       defeito_relatado: str(formData.get("defeito_relatado")),
       diagnostico: str(formData.get("diagnostico")),
@@ -1158,4 +1161,99 @@ export async function registrarPagamentoOs(
 
 export async function excluirOrdem(id: string): Promise<ActionResult> {
   return safeAction(() => excluirOrdemImpl(id));
+}
+
+// ===================== LINHA DO TEMPO (ETAPAS) =====================
+
+async function registrarEtapaOsImpl(osId: string, formData: FormData) {
+  const profile = await requirePermissao("ordens");
+  const fd = assertFormData(formData);
+  const supabase = await createClient();
+
+  const { data: os } = await supabase
+    .from("ordens_servico")
+    .select("tecnico_id, tecnico")
+    .eq("id", osId)
+    .single();
+  if (!os) throw new Error("Ordem não encontrada.");
+  assertOsAtribuida(profile, os);
+
+  const etapa = String(fd.get("etapa") || "") as EtapaOs;
+  if (!ORDEM_ETAPAS.includes(etapa)) throw new Error("Etapa inválida.");
+  const previsao = str(fd.get("previsao"));
+  if (previsao && !/^\d{4}-\d{2}-\d{2}$/.test(previsao)) throw new Error("Data prevista inválida.");
+
+  const r = await aplicarEtapaOs(supabase, {
+    osId,
+    etapa,
+    observacao: str(fd.get("observacao")),
+    previsao,
+    origem: profile.papel === "tecnico" ? "técnico" : "ERP",
+  });
+
+  revalidatePath(`/ordens/${osId}`);
+  revalidatePath("/ordens");
+  revalidatePath("/painel");
+  revalidatePath("/campo");
+  revalidatePath("/agenda");
+  if (r.status === "concluida") {
+    revalidatePath("/financeiro");
+    revalidatePath("/resultados");
+    revalidatePath("/dashboard");
+  }
+}
+
+export async function registrarEtapaOs(osId: string, formData: FormData): Promise<ActionResult> {
+  return safeAction(() => registrarEtapaOsImpl(osId, formData));
+}
+
+/** Agenda a devolução (entrega) do aparelho que está pronto na oficina. */
+async function agendarDevolucaoOsImpl(osId: string, formData: FormData) {
+  const profile = await requirePermissao("agenda_criar");
+  const fd = assertFormData(formData);
+  const supabase = await createClient();
+
+  const data = str(fd.get("data"));
+  if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new Error("Informe a data da entrega.");
+  if (data < hojeYmdLocal()) throw new Error("A data da entrega não pode ser no passado.");
+  const turno = (["manha", "tarde", "dia"].includes(String(fd.get("turno"))) ? String(fd.get("turno")) : "dia") as "manha" | "tarde" | "dia";
+
+  const { data: os } = await supabase
+    .from("ordens_servico")
+    .select("numero, cliente_id, tecnico, tecnico_id, clientes(nome, logradouro, numero, complemento, bairro, cidade, uf)")
+    .eq("id", osId)
+    .single();
+  if (!os) throw new Error("Ordem não encontrada.");
+  assertOsAtribuida(profile, os);
+
+  const cli = (os as unknown as { clientes?: Record<string, string | null> | null }).clientes;
+  const endereco = cli
+    ? [cli.logradouro, cli.numero, cli.complemento, cli.bairro, cli.cidade && `${cli.cidade}/${cli.uf ?? ""}`].filter(Boolean).join(", ")
+    : null;
+  const { horarioTurno } = await import("@/lib/turnos");
+  const { inicio, fim } = horarioTurno(turno);
+
+  const { error } = await supabase.from("agendamentos").insert({
+    os_id: osId,
+    cliente_id: os.cliente_id,
+    titulo: `Entrega OS-${String(os.numero).padStart(5, "0")}${cli?.nome ? ` - ${cli.nome}` : ""}`,
+    tipo: "entrega",
+    turno,
+    data,
+    hora_inicio: inicio,
+    hora_fim: fim,
+    tecnico: os.tecnico,
+    tecnico_id: os.tecnico_id,
+    endereco,
+    status: "agendado",
+  } as never);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/ordens/${osId}`);
+  revalidatePath("/agenda");
+  revalidatePath("/campo");
+}
+
+export async function agendarDevolucaoOs(osId: string, formData: FormData): Promise<ActionResult> {
+  return safeAction(() => agendarDevolucaoOsImpl(osId, formData));
 }

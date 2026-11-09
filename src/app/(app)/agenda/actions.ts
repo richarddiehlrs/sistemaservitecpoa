@@ -539,7 +539,9 @@ async function checkoutAgendamentoImpl(id: string, formData?: FormData) {
             ? proximo === "aguardando_peca"
               ? "Check-out: aguardando peça (fornecedor)"
               : "Check-out: diagnóstico — peça necessária, aguardando aprovação do orçamento"
-            : "Check-out: serviço executado nesta visita";
+            : resultado === "coletado_oficina"
+              ? "Check-out: aparelho coletado para a oficina"
+              : "Check-out: serviço executado nesta visita";
 
       const clientePagou = formData?.get("cliente_pagou_agora") === "on";
       const formaCheckout = str(formData?.get("forma_pagamento")) || os.forma_pagamento;
@@ -556,6 +558,18 @@ async function checkoutAgendamentoImpl(id: string, formData?: FormData) {
           origem: "check-out",
           sistema: true,
           papel: profile.papel,
+        });
+      }
+
+      // Coleta: linha do tempo + aparelho na oficina (entra no painel da oficina)
+      if (resultado === "coletado_oficina") {
+        const { aplicarEtapaOs } = await import("@/lib/etapas-os-servidor");
+        await aplicarEtapaOs(supabase, {
+          osId: ag.os_id,
+          etapa: "coletado_oficina",
+          observacao: str(formData?.get("obs_coleta")),
+          origem: "check-out",
+          ignorarValidacao: true,
         });
       }
 

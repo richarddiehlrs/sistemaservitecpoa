@@ -35,14 +35,15 @@ const TRANSICOES_TECNICO: Partial<Record<StatusOS, StatusOS[]>> = {
 
 /** Transições automáticas do sistema (check-in, check-out, etc.) — não exigem papel. */
 const TRANSICOES_SISTEMA: Partial<Record<StatusOS, StatusOS[]>> = {
-  em_roteiro: ["em_execucao", "cliente_ausente", "aguardando_aprovacao"],
-  em_execucao: ["aguardando_aprovacao", "concluida", "cliente_ausente", "aguardando_peca", "aprovada"],
-  aguardando_peca: ["em_execucao", "aguardando_aprovacao"],
-  aprovada: ["em_execucao", "aguardando_aprovacao"],
-  em_analise: ["em_execucao", "aguardando_aprovacao"],
-  aberta: ["em_execucao", "aguardando_aprovacao"],
-  aguardando_aprovacao: ["em_execucao"],
-  concluida: ["garantia"],
+  em_roteiro: ["em_execucao", "cliente_ausente", "aguardando_aprovacao", "em_analise", "aprovada"],
+  em_execucao: ["aguardando_aprovacao", "concluida", "cliente_ausente", "aguardando_peca", "aprovada", "em_analise"],
+  aguardando_peca: ["em_execucao", "aguardando_aprovacao", "aprovada", "em_analise"],
+  aprovada: ["em_execucao", "aguardando_aprovacao", "aguardando_peca", "concluida"],
+  em_analise: ["em_execucao", "aguardando_aprovacao", "aguardando_peca"],
+  aberta: ["em_execucao", "aguardando_aprovacao", "em_analise", "aprovada"],
+  aguardando_aprovacao: ["em_execucao", "aguardando_peca"],
+  cliente_ausente: ["em_analise", "aprovada", "aguardando_aprovacao"],
+  concluida: ["garantia", "entregue"],
   entregue: ["garantia"],
   garantia: ["em_execucao"],
 };
@@ -87,7 +88,7 @@ export function validarTransicaoStatus(
 }
 
 /** Resultado informado pelo técnico no check-out. */
-export type CheckoutResultado = "visita" | "servico_concluido" | "aguardando_peca";
+export type CheckoutResultado = "visita" | "servico_concluido" | "aguardando_peca" | "coletado_oficina";
 
 /** Status após check-out de visita domicílio. */
 export function statusPosCheckout(
@@ -102,6 +103,9 @@ export function statusPosCheckout(
   if (os.status !== "em_execucao") return null;
 
   switch (resultado) {
+    case "coletado_oficina":
+      // Status e local são definidos pela etapa "Coletado para a oficina"
+      return null;
     case "aguardando_peca":
       // Sem orçamento aprovado: aguarda aprovação do cliente (peça entra no orçamento).
       // Com aprovação: pedido de peça no fornecedor.
