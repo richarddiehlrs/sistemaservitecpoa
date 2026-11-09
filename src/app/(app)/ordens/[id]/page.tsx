@@ -6,6 +6,8 @@ import { PageHeader, StatusBadge } from "@/components/ui";
 import { ImageIcon, PenLine, Link2 } from "lucide-react";
 import { OsStatusControl } from "@/components/os-status-control";
 import { LinhaTempoOs, type EtapaRegistrada } from "@/components/linha-tempo-os";
+import { ReagendarVisita } from "@/components/reagendar-visita";
+import { reagendarVisitaOs } from "../../agenda/actions";
 import { etapasDisponiveis, type LocalEquipamento } from "@/lib/etapas-os";
 import { OsShare } from "@/components/os-share";
 import { WhatsAppStatusCliente } from "@/components/whatsapp-status-cliente";
@@ -398,6 +400,28 @@ export default async function OrdemDetalhePage({
               aprovado={Boolean(os.aprovado)}
             />
           </div>
+
+          {["cliente_ausente", "em_roteiro", "aprovada", "aguardando_peca", "em_execucao", "aguardando_aprovacao"].includes(os.status) &&
+            os.tipo_atendimento === "domicilio" && (
+              <div className="card flex items-center justify-between gap-2 p-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-700">Visita</p>
+                  <p className="text-xs text-slate-500">
+                    {os.data_previsao ? `Prevista para ${formatDate(os.data_previsao)}` : "Sem data definida"}
+                    {os.status === "cliente_ausente" ? " • cliente ausente — reagende" : ""}
+                  </p>
+                </div>
+                <ReagendarVisita
+                  action={reagendarVisitaOs.bind(null, id)}
+                  telefone={cliente?.telefone}
+                  clienteNome={cliente?.nome}
+                  osNumero={os.numero}
+                  tecnicoNome={os.tecnico}
+                  empresa={config.nome}
+                  empresaTelefone={config.telefone}
+                />
+              </div>
+            )}
 
           <LinhaTempoOs
             etapas={(etapasOs || []) as unknown as EtapaRegistrada[]}

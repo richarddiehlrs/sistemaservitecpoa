@@ -760,3 +760,163 @@ export async function checkoutAgendamento(
 ): Promise<ActionResult> {
   return safeAction(() => checkoutAgendamentoImpl(id, formData));
 }
+
+// ===================== REAGENDAR VISITA =====================
+
+async function reagendarVisitaImpl(id: string, formData: FormData) {
+  const profile = await requirePermissao("agenda_checkin");
+  const supabase = await createClient();
+  await validarAgendamentoTecnico(supabase, id, profile);
+
+  const { MOTIVOS_REAGENDAMENTO, motivoValido } = await import("@/lib/reagendamento");
+  const { horarioTurno, TURNO_LABEL } = await import("@/lib/turnos");
+
+  const motivo = String(formData.get("motivo") || "");
+  if (!motivoValido(motivo)) throw new Error("Escolha o motivo do reagendamento.");
+  const detalhe = str(formData.get("detalhe"));
+  const novaData = str(formData.get("data"));
+  if (!novaData || !/^\d{4}-\d{2}-\d{2}$/.test(novaData)) throw new Error("Informe a nova data.");
+  if (novaData < hojeYmdLocal()) throw new Error("A nova data não pode ser no passado.");
+  const turnoRaw = String(formData.get("turno") || "dia");
+  const turno = (["manha", "tarde", "dia"].includes(turnoRaw) ? turnoRaw : "dia") as "manha" | "tarde" | "dia";
+
+  const { data: ag } = await supabase
+    .from("agendamentos")
+    .select("id, status, os_id, cliente_id, titulo, tipo, endereco, tecnico, tecnico_id")
+    .eq("id", id)
+    .single();
+  if (!ag) throw new Error("Agendamento não encontrado.");
+  if (!["agendado", "confirmado", "em_atendimento"].includes(ag.status)) {
+    throw new Error("Só é possível reagendar visitas ainda não finalizadas.");
+  }
+
+  const rotulo = MOTIVOS_REAGENDAMENTO[motivo].label;
+  const textoMotivo = detalhe ? `${rotulo} — ${detalhe}` : rotulo;
+
+  const { error: e1 } = await supabase
+    .from("agendamentos")
+    .update({
+      status: "reagendado",
+      motivo_reagendamento: textoMotivo,
+      reagendado_para: novaData,
+    } as never)
+    .eq("id", id);
+  if (e1) throw new Error(e1.message);
+
+  const { inicio, fim } = horarioTurno(turno);
+  const { error: e2 } = await supabase.from("agendamentos").insert({
+    os_id: ag.os_id,
+    cliente_id: ag.cliente_id,
+    titulo: ag.titulo,
+    tipo: ag.tipo,
+    endereco: ag.endereco,
+    tecnico: ag.tecnico,
+    tecnico_id: ag.tecnico_id ?? (profile.papel === "tecnico" ? profile.id : null),
+    data: novaData,
+    turno,
+    hora_inicio: inicio,
+    hora_fim: fim,
+    status: "agendado",
+    reagendado_de: id,
+  } as never);
+  if (e2) throw new Error(e2.message);
+
+  if (ag.os_id) {
+    const { data: os } = await supabase.from("ordens_servico").select("status").eq("id", ag.os_id).single();
+    await supabase.from("ordens_servico").update({ data_previsao: novaData, turno }).eq("id", ag.os_id);
+    const obs = `Visita reagendada para ${novaData.split("-").reverse().join("/")} (${TURNO_LABEL[turno] ?? turno}) — ${textoMotivo}`;
+    if (os && ["em_execucao", "cliente_ausente"].includes(os.status)) {
+      await transicionarStatusOs(supabase, {
+        osId: ag.os_id,
+        status: "em_roteiro",
+        observacao: obs,
+        origem: "reagendamento",
+        sistema: true,
+        skipNotificacao: true,
+      });
+    } else if (os) {
+      await supabase.from("os_status_historico").insert({ os_id: ag.os_id, status: os.status, observacao: obs });
+    }
+  }
+
+  revalidatePath("/agenda");
+  revalidatePath("/campo");
+  revalidatePath("/campo/ordens");
+  if (ag.os_id) revalidatePath(`/ordens/${ag.os_id}`);
+}
+
+export async function reagendarVisita(id: string, formData: FormData): Promise<ActionResult> {
+  return safeAction(() => reagendarVisitaImpl(id, formData));
+}
+
+/**
+ * Reagendar pela OS: usa a visita pendente (se houver) ou cria uma nova —
+ * caso típico: cliente ausente (a visita anterior já foi encerrada).
+ */
+async function reagendarVisitaOsImpl(osId: string, formData: FormData) {
+  const profile = await requirePermissao("agenda_checkin");
+  const supabase = await createClient();
+
+  const { data: pendente } = await supabase
+    .from("agendamentos")
+    .select("id")
+    .eq("os_id", osId)
+    .in("status", ["agendado", "confirmado", "em_atendimento"])
+    .order("data", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (pendente) return reagendarVisitaImpl(pendente.id, formData);
+
+  const { MOTIVOS_REAGENDAMENTO, motivoValido } = await import("@/lib/reagendamento");
+  const { TURNO_LABEL } = await import("@/lib/turnos");
+  const { sincronizarAgendamentoOs } = await import("@/lib/agenda-os");
+
+  const motivo = String(formData.get("motivo") || "");
+  if (!motivoValido(motivo)) throw new Error("Escolha o motivo do reagendamento.");
+  const detalhe = str(formData.get("detalhe"));
+  const novaData = str(formData.get("data"));
+  if (!novaData || !/^\d{4}-\d{2}-\d{2}$/.test(novaData)) throw new Error("Informe a nova data.");
+  if (novaData < hojeYmdLocal()) throw new Error("A nova data não pode ser no passado.");
+  const turnoRaw = String(formData.get("turno") || "dia");
+  const turno = (["manha", "tarde", "dia"].includes(turnoRaw) ? turnoRaw : "dia") as "manha" | "tarde" | "dia";
+
+  const { data: os } = await supabase
+    .from("ordens_servico")
+    .select("id, numero, status, cliente_id, tecnico, tecnico_id")
+    .eq("id", osId)
+    .single();
+  if (!os) throw new Error("OS não encontrada.");
+  if (profile.papel === "tecnico" && os.tecnico_id && os.tecnico_id !== profile.id) {
+    throw new Error("Esta OS não está atribuída a você.");
+  }
+  const tecnicoId = os.tecnico_id ?? (profile.papel === "tecnico" ? profile.id : null);
+  if (!tecnicoId) throw new Error("Defina o técnico responsável na OS antes de reagendar.");
+
+  await supabase.from("ordens_servico").update({ data_previsao: novaData, turno, tecnico_id: tecnicoId }).eq("id", osId);
+  await sincronizarAgendamentoOs(supabase, {
+    osId,
+    clienteId: os.cliente_id,
+    numero: os.numero,
+    data: novaData,
+    turno,
+    tecnico: os.tecnico ?? nomeTecnico(profile),
+    tecnico_id: tecnicoId,
+  });
+
+  const textoMotivo = detalhe ? `${MOTIVOS_REAGENDAMENTO[motivo].label} — ${detalhe}` : MOTIVOS_REAGENDAMENTO[motivo].label;
+  const obs = `Visita reagendada para ${novaData.split("-").reverse().join("/")} (${TURNO_LABEL[turno] ?? turno}) — ${textoMotivo}`;
+  if (["cliente_ausente", "em_execucao"].includes(os.status)) {
+    await transicionarStatusOs(supabase, { osId, status: "em_roteiro", observacao: obs, origem: "reagendamento", sistema: true, skipNotificacao: true });
+  } else {
+    await supabase.from("os_status_historico").insert({ os_id: osId, status: os.status, observacao: obs });
+  }
+
+  revalidatePath("/agenda");
+  revalidatePath("/campo");
+  revalidatePath("/campo/ordens");
+  revalidatePath(`/ordens/${osId}`);
+}
+
+export async function reagendarVisitaOs(osId: string, formData: FormData): Promise<ActionResult> {
+  return safeAction(() => reagendarVisitaOsImpl(osId, formData));
+}

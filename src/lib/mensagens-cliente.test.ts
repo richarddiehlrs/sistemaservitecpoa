@@ -127,3 +127,17 @@ describe("mensagens das etapas", () => {
     expect(mensagemEtapa("peca_solicitada", { ...base, previsao: "2026-11-20" })).toContain("*Previsão de chegada:* 20/11/2026");
   });
 });
+
+import { mensagemReagendamento } from "./mensagens-cliente";
+
+describe("reagendamento", () => {
+  it("traz motivo e nova data com turno", () => {
+    const m = mensagemReagendamento({
+      empresa: "ServitecPoa", cliente: "joao", numero: 77, hora: 15, tecnico: "Richard",
+      textoMotivo: "Conforme combinado, remarcamos a sua visita.", novaData: "2026-11-14", turnoNovo: "tarde",
+    });
+    expect(m).toMatch(/^Boa tarde, Joao!/);
+    expect(m).toContain("*Nova data:* 14/11/2026, turno da tarde");
+    expect(m).toContain("remarcamos");
+  });
+});

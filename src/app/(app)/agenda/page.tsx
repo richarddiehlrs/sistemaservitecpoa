@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, MapPin, Clock, Phone, Sun, Sunset, Wrench, C
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard } from "@/components/ui";
 import { mapTecnicos } from "@/lib/tecnicos";
-import { formatHora, formatNumeroOS, formatTelefone, hojeYmdLocal, ymdLocal, STATUS_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_COLOR } from "@/lib/format";
+import { formatDate, formatHora, formatNumeroOS, formatTelefone, hojeYmdLocal, ymdLocal, STATUS_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_LABEL, TIPO_AGENDAMENTO_COLOR } from "@/lib/format";
 import { TURNOS } from "@/lib/turnos";
 import { CheckinButtons } from "@/components/checkin-buttons";
 import { ExcluirAgendamentoButton } from "@/components/excluir-agendamento-button";
@@ -15,7 +15,9 @@ import { nomeTecnico, temPermissao } from "@/lib/permissoes";
 import { STATUS_OS_ABERTAS } from "@/lib/os-status";
 import { resumoFinanceiroOs } from "@/lib/os-valores";
 import { getConfig } from "@/lib/config";
-import { checkinAgendamento, checkoutAgendamento, criarAgendamento, excluirAgendamento } from "./actions";
+import { checkinAgendamento, checkoutAgendamento, criarAgendamento, excluirAgendamento, reagendarVisita } from "./actions";
+import { ReagendarVisita } from "@/components/reagendar-visita";
+import { EMPRESA } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -296,13 +298,14 @@ function CardAgendamento({
     motivo_atendimento?: string;
   } | null;
   const cancelado = a.status === "cancelado";
+  const reagendado = a.status === "reagendado";
   const realizado = a.status === "realizado";
   const emAtendimento = a.status === "em_atendimento";
   const pendente = a.status === "agendado" || a.status === "confirmado";
   const vinculadoOs = Boolean(a.os_id);
 
   return (
-    <div className={`rounded-lg border-l-4 p-2 text-xs ${TIPO_AGENDAMENTO_COLOR[a.tipo as string] || ""} ${cancelado ? "opacity-50" : ""}`}>
+    <div className={`rounded-lg border-l-4 p-2 text-xs ${TIPO_AGENDAMENTO_COLOR[a.tipo as string] || ""} ${cancelado || reagendado ? "opacity-50" : ""}`}>
       <div className="flex items-center justify-between gap-1">
         <span className="font-semibold">{TIPO_AGENDAMENTO_LABEL[a.tipo as string] || String(a.tipo)}</span>
         <span className={`badge text-[9px] ${
@@ -310,6 +313,7 @@ function CardAgendamento({
           emAtendimento ? "bg-blue-100 text-blue-700" :
           pendente ? "bg-amber-100 text-amber-700" :
           cancelado ? "bg-red-100 text-red-600" :
+          reagendado ? "bg-amber-100 text-amber-800" :
           "bg-slate-100 text-slate-600"
         }`}>
           {STATUS_AGENDAMENTO_LABEL[a.status as string] || String(a.status)}
@@ -346,13 +350,35 @@ function CardAgendamento({
         </p>
       )}
 
+      {reagendado && (
+        <p className="mt-0.5 text-[10px] text-amber-800">
+          → {a.reagendado_para ? formatDate(String(a.reagendado_para)) : "nova data"}
+          {a.motivo_reagendamento ? ` • ${String(a.motivo_reagendamento)}` : ""}
+        </p>
+      )}
+
+      {podeCheckin && (pendente || emAtendimento) && (
+        <div className="mt-1">
+          <ReagendarVisita
+            compacto
+            action={reagendarVisita.bind(null, a.id as string)}
+            telefone={cli?.telefone}
+            clienteNome={cli?.nome}
+            osNumero={os?.numero ?? null}
+            tecnicoNome={a.tecnico ? String(a.tecnico) : null}
+            empresa={EMPRESA.nome}
+            empresaTelefone={EMPRESA.telefone}
+          />
+        </div>
+      )}
+
       {a.os_id && (
         <Link href={`/ordens/${a.os_id}`} className="mt-1 flex items-center gap-0.5 font-medium text-brand-600 hover:underline">
           <Wrench className="h-3 w-3" /> Abrir ordem de serviço
         </Link>
       )}
 
-      {podeCheckin && !cancelado && !realizado && (
+      {podeCheckin && !cancelado && !realizado && !reagendado && (
         <div className="mt-1">
           <CheckinButtons
             agendamento={a as never}

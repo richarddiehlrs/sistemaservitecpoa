@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MapPin, CalendarDays, QrCode, Bell, Receipt } from "lucide-react";
+import { MapPin, CalendarDays, QrCode, ClipboardList, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITENS = [
@@ -10,7 +10,7 @@ const ITENS = [
   { href: "/agenda", label: "Agenda", icon: CalendarDays, match: (p: string) => p.startsWith("/agenda") },
   { href: "/escanear", label: "Escanear", icon: QrCode, match: (p: string) => p.startsWith("/escanear") },
   { href: "/campo?nova-despesa=1", label: "Despesa", icon: Receipt, match: () => false },
-  { href: "/campo#alertas", label: "Alertas", icon: Bell, match: () => false },
+  { href: "/campo/ordens", label: "Minhas OS", icon: ClipboardList, match: (p: string) => p.startsWith("/campo/ordens") },
 ] as const;
 
 export function CampoNavMobile() {

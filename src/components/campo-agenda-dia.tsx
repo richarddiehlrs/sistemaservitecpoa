@@ -4,8 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { MapPin, WifiOff } from "lucide-react";
 import { CheckinButtons } from "@/components/checkin-buttons";
+import { ReagendarVisita } from "@/components/reagendar-visita";
 import { CampoVisitaAcoes } from "@/components/campo-visita-acoes";
-import { formatCurrency, formatHora, TIPO_AGENDAMENTO_LABEL } from "@/lib/format";
+import {
+  formatCurrency,
+  formatHora,
+  TIPO_AGENDAMENTO_LABEL,
+} from "@/lib/format";
 import type { OsResumoCheckout } from "@/lib/os-valores";
 import type { ActionResult } from "@/lib/action-result";
 
@@ -55,6 +60,9 @@ export function CampoAgendaDia({
   tecnicoNome,
   checkinAgendamento,
   checkoutAgendamento,
+  reagendarAgendamento,
+  empresa = "ServitecPoa",
+  empresaTelefone,
   percentualSinalPadrao = 50,
 }: {
   visitas: VisitaCampoDia[];
@@ -62,7 +70,16 @@ export function CampoAgendaDia({
   userId: string;
   tecnicoNome: string;
   checkinAgendamento: (id: string, formData: FormData) => Promise<ActionResult>;
-  checkoutAgendamento: (id: string, formData?: FormData) => Promise<ActionResult>;
+  checkoutAgendamento: (
+    id: string,
+    formData?: FormData,
+  ) => Promise<ActionResult>;
+  reagendarAgendamento?: (
+    id: string,
+    formData: FormData,
+  ) => Promise<ActionResult>;
+  empresa?: string;
+  empresaTelefone?: string | null;
   percentualSinalPadrao?: number;
 }) {
   const [online, setOnline] = useState(true);
@@ -110,12 +127,19 @@ export function CampoAgendaDia({
             </span>
           )}
           {online ? (
-            <Link href="/agenda" className="text-sm text-brand-600 hover:underline">
+            <Link
+              href="/agenda"
+              className="text-sm text-brand-600 hover:underline"
+            >
               Ver semana
             </Link>
           ) : cache?.savedAt ? (
             <span className="text-xs text-slate-400">
-              Salvo {new Date(cache.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              Salvo{" "}
+              {new Date(cache.savedAt).toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </span>
           ) : null}
         </div>
@@ -123,16 +147,20 @@ export function CampoAgendaDia({
 
       {!online && (
         <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          Sem internet — exibindo a última agenda salva neste aparelho. Check-in e check-out exigem conexão.
+          Sem internet — exibindo a última agenda salva neste aparelho. Check-in
+          e check-out exigem conexão.
         </p>
       )}
 
       {offlineSemCache ? (
         <p className="py-6 text-center text-sm text-slate-400">
-          Sem conexão e nenhuma agenda salva. Abra o Campo com internet pelo menos uma vez hoje.
+          Sem conexão e nenhuma agenda salva. Abra o Campo com internet pelo
+          menos uma vez hoje.
         </p>
       ) : exibir.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-400">Nenhuma visita pendente para hoje.</p>
+        <p className="py-6 text-center text-sm text-slate-400">
+          Nenhuma visita pendente para hoje.
+        </p>
       ) : (
         <div className="space-y-3">
           {exibir.map((a) => (
@@ -155,14 +183,19 @@ export function CampoAgendaDia({
                       {TIPO_AGENDAMENTO_LABEL[a.tipo] || a.tipo}
                     </span>
                     {a.status === "em_atendimento" && (
-                      <span className="badge bg-blue-100 text-blue-700 text-[10px]">Em atendimento</span>
+                      <span className="badge bg-blue-100 text-blue-700 text-[10px]">
+                        Em atendimento
+                      </span>
                     )}
                   </div>
                   <p className="mt-1 font-medium text-slate-800">{a.titulo}</p>
-                  {a.clienteNome && <p className="text-sm text-slate-500">{a.clienteNome}</p>}
+                  {a.clienteNome && (
+                    <p className="text-sm text-slate-500">{a.clienteNome}</p>
+                  )}
                   {a.endereco && (
                     <p className="mt-1 flex items-start gap-1 text-xs text-slate-400">
-                      <MapPin className="mt-0.5 h-3 w-3 shrink-0" /> {a.endereco}
+                      <MapPin className="mt-0.5 h-3 w-3 shrink-0" />{" "}
+                      {a.endereco}
                     </p>
                   )}
                   {a.osResumo && a.osResumo.saldoCliente > 0 && (
@@ -183,7 +216,9 @@ export function CampoAgendaDia({
                         </span>
                       )}
                       {a.osResumo.aprovado && (
-                        <span className="badge bg-blue-100 text-blue-800 text-[10px]">Aprovada</span>
+                        <span className="badge bg-blue-100 text-blue-800 text-[10px]">
+                          Aprovada
+                        </span>
                       )}
                     </div>
                   )}
@@ -209,15 +244,34 @@ export function CampoAgendaDia({
                     percentualSinalPadrao={percentualSinalPadrao}
                   />
                 ) : (
-                  <span className="text-[10px] text-slate-400">Check-in offline indisponível</span>
+                  <span className="text-[10px] text-slate-400">
+                    Check-in offline indisponível
+                  </span>
                 )}
               </div>
-              {a.os_id && (
-                <div className="mt-2 flex flex-wrap gap-3">
-                  <Link href={`/ordens/${a.os_id}`} className="text-xs font-medium text-brand-600 hover:underline">
-                    Abrir ordem →
-                  </Link>
-                  {online && (
+              {(a.os_id || (online && reagendarAgendamento)) && (
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  {online && reagendarAgendamento && (
+                    <ReagendarVisita
+                      compacto
+                      action={reagendarAgendamento.bind(null, a.id)}
+                      telefone={a.clienteTelefone}
+                      clienteNome={a.clienteNome}
+                      osNumero={a.osNumero}
+                      tecnicoNome={tecnicoNome}
+                      empresa={empresa}
+                      empresaTelefone={empresaTelefone}
+                    />
+                  )}
+                  {a.os_id && (
+                    <Link
+                      href={`/ordens/${a.os_id}`}
+                      className="text-xs font-medium text-brand-600 hover:underline"
+                    >
+                      Abrir ordem →
+                    </Link>
+                  )}
+                  {online && a.os_id && (
                     <Link
                       href={`/ordens/${a.os_id}/editar`}
                       className="text-xs font-medium text-brand-600 hover:underline"

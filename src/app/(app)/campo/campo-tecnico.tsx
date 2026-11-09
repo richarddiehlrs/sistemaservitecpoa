@@ -16,7 +16,7 @@ import { InstalarIphone } from "@/components/instalar-iphone";
 import { resumoFinanceiroOs } from "@/lib/os-valores";
 import { registrarPosicaoTecnico } from "./actions";
 import { MinhasDespesasCampo } from "./minhas-despesas";
-import { checkinAgendamento, checkoutAgendamento } from "../agenda/actions";
+import { checkinAgendamento, checkoutAgendamento, reagendarVisita } from "../agenda/actions";
 
 export async function CampoTecnico({ profile }: { profile: Profile }) {
   const tecnico = tecnicoDoProfile(profile);
@@ -148,10 +148,12 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       : null,
   }));
 
+  const clienteAusente = (osAbertas || []).filter((o) => o.status === "cliente_ausente");
   const pendencias = [
-    osAtrasadas.length > 0 && { href: "/ordens", texto: `${osAtrasadas.length} atrasada(s)`, tom: "text-red-700" },
+    osAtrasadas.length > 0 && { href: "/campo/ordens?aba=atrasadas", texto: `${osAtrasadas.length} atrasada(s)`, tom: "text-red-700" },
+    clienteAusente.length > 0 && { href: "/campo/ordens?aba=ausente", texto: `${clienteAusente.length} para reagendar`, tom: "text-red-700" },
     semCheckin.length > 0 && { href: "#visitas", texto: `${semCheckin.length} sem check-in`, tom: "text-amber-700" },
-    semAssinatura.length > 0 && { href: "/ordens", texto: `${semAssinatura.length} sem assinatura`, tom: "text-amber-700" },
+    semAssinatura.length > 0 && { href: "/campo/ordens?aba=assinatura", texto: `${semAssinatura.length} sem assinatura`, tom: "text-amber-700" },
   ].filter(Boolean) as { href: string; texto: string; tom: string }[];
 
   const dataHoje = new Date(`${hoje}T12:00:00`).toLocaleDateString("pt-BR", {
@@ -206,12 +208,15 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
           tecnicoNome={profile.nome || tecnico}
           checkinAgendamento={checkinAgendamento}
           checkoutAgendamento={checkoutAgendamento}
+          reagendarAgendamento={reagendarVisita}
+          empresa={config.nome}
+          empresaTelefone={config.telefone}
           percentualSinalPadrao={config.percentual_sinal_padrao}
         />
       </div>
 
       {/* Minhas OS: só o atalho, sem a lista inteira */}
-      <Link href="/ordens" className="card flex items-center justify-between px-4 py-3 text-sm hover:bg-slate-50">
+      <Link href="/campo/ordens" className="card flex items-center justify-between px-4 py-3 text-sm hover:bg-slate-50">
         <span className="flex items-center gap-2 font-medium text-slate-800">
           <Wrench className="h-4 w-4 text-slate-400" /> Minhas ordens em aberto
         </span>

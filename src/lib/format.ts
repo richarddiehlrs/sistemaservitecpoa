@@ -248,6 +248,7 @@ export const STATUS_AGENDAMENTO_LABEL: Record<string, string> = {
   em_atendimento: "Em atendimento",
   realizado: "Realizado",
   cancelado: "Cancelado",
+  reagendado: "Reagendado",
 };
 
 export const STATUS_OS_COLOR: Record<string, string> = {

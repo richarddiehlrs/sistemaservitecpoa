@@ -384,3 +384,21 @@ export function mensagemEtapa(
       );
   }
 }
+
+/** Aviso de visita reagendada (motivo em linguagem para o cliente). */
+export function mensagemReagendamento(
+  ctx: ContextoMensagemCliente & { textoMotivo: string; novaData: string; turnoNovo?: string | null }
+): string {
+  const quando = textoVisita({ ...ctx, dataPrevisao: ctx.novaData, turno: ctx.turnoNovo ?? null, horaInicio: null });
+  return blocos(
+    `${saudacao(ctx.cliente, ctx.hora)} Tudo bem?`,
+    `Aqui é da *${ctx.empresa}*. ${ctx.textoMotivo}`,
+    dados([
+      ["OS", formatNumeroOS(ctx.numero)],
+      ["Nova data", quando],
+      ["Técnico", ctx.tecnico],
+    ]),
+    "Se esse horário não for bom para você, é só responder esta mensagem que ajustamos.",
+    assinatura(ctx.empresa, ctx.empresaTelefone)
+  );
+}

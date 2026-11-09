@@ -36,13 +36,13 @@ const TRANSICOES_TECNICO: Partial<Record<StatusOS, StatusOS[]>> = {
 /** Transições automáticas do sistema (check-in, check-out, etc.) — não exigem papel. */
 const TRANSICOES_SISTEMA: Partial<Record<StatusOS, StatusOS[]>> = {
   em_roteiro: ["em_execucao", "cliente_ausente", "aguardando_aprovacao", "em_analise", "aprovada"],
-  em_execucao: ["aguardando_aprovacao", "concluida", "cliente_ausente", "aguardando_peca", "aprovada", "em_analise"],
+  em_execucao: ["aguardando_aprovacao", "concluida", "cliente_ausente", "aguardando_peca", "aprovada", "em_analise", "em_roteiro"],
   aguardando_peca: ["em_execucao", "aguardando_aprovacao", "aprovada", "em_analise"],
   aprovada: ["em_execucao", "aguardando_aprovacao", "aguardando_peca", "concluida"],
   em_analise: ["em_execucao", "aguardando_aprovacao", "aguardando_peca"],
   aberta: ["em_execucao", "aguardando_aprovacao", "em_analise", "aprovada"],
   aguardando_aprovacao: ["em_execucao", "aguardando_peca"],
-  cliente_ausente: ["em_analise", "aprovada", "aguardando_aprovacao"],
+  cliente_ausente: ["em_analise", "aprovada", "aguardando_aprovacao", "em_roteiro"],
   concluida: ["garantia", "entregue"],
   entregue: ["garantia"],
   garantia: ["em_execucao"],
