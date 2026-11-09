@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Camera,
   CloudOff,
@@ -60,8 +60,18 @@ export function DespesaCampoApp({
   contas: ContaDespesa[];
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
   const toast = useToast();
   const [aberto, setAberto] = useState(false);
+
+  // Atalho "Lançar despesa" (dashboard / barra do celular) abre o formulário direto
+  useEffect(() => {
+    if (params.get("nova-despesa") === "1") {
+      setAberto(true);
+      router.replace(pathname, { scroll: false });
+    }
+  }, [params, pathname, router]);
   const [pendentes, setPendentes] = useState<DespesaPendente[]>([]);
   const [online, setOnline] = useState(true);
   const [enviando, setEnviando] = useState(false);

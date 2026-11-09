@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Wrench, Users, DollarSign, AlertCircle, CalendarDays, MapPin, PiggyBank, TrendingDown, Percent } from "lucide-react";
+import { Plus, Receipt, Wrench, Users, DollarSign, AlertCircle, CalendarDays, MapPin, PiggyBank, TrendingDown, Percent } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
@@ -297,9 +297,14 @@ export default async function DashboardPage() {
         title="Dashboard"
         subtitle="Visão geral da operação"
         action={
-          <Link href="/ordens/nova" className="btn-primary">
-            <Plus className="h-4 w-4" /> Nova OS
-          </Link>
+          <>
+            <Link href="/campo?nova-despesa=1" className="btn-secondary">
+              <Receipt className="h-4 w-4" /> Lançar despesa
+            </Link>
+            <Link href="/ordens/nova" className="btn-primary">
+              <Plus className="h-4 w-4" /> Nova OS
+            </Link>
+          </>
         }
       />
 

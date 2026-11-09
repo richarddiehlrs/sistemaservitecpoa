@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MapPin, CalendarDays, QrCode, Bell } from "lucide-react";
+import { MapPin, CalendarDays, QrCode, Bell, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITENS = [
   { href: "/campo", label: "Campo", icon: MapPin, match: (p: string) => p === "/campo" },
   { href: "/agenda", label: "Agenda", icon: CalendarDays, match: (p: string) => p.startsWith("/agenda") },
   { href: "/escanear", label: "Escanear", icon: QrCode, match: (p: string) => p.startsWith("/escanear") },
-  { href: "/campo#alertas", label: "Alertas", icon: Bell, match: (p: string) => p === "/campo" },
+  { href: "/campo?nova-despesa=1", label: "Despesa", icon: Receipt, match: () => false },
+  { href: "/campo#alertas", label: "Alertas", icon: Bell, match: () => false },
 ] as const;
 
 export function CampoNavMobile() {

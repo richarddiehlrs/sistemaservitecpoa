@@ -6,7 +6,7 @@ import { InstalarIphone } from "@/components/instalar-iphone";
 import { STATUS_OS_ABERTAS } from "@/lib/os-status";
 import { formatCurrency, formatDate, formatNumeroOS, hojeYmdLocal } from "@/lib/format";
 
-/** Bloco de despesas pelo celular para o administrador (dono que também atende). */
+/** Bloco de despesas pelo celular (topo da tela Campo — técnico e administrador). */
 export async function MinhasDespesasCampo({ profileId }: { profileId: string }) {
   const supabase = await createClient();
   const hoje = hojeYmdLocal();
