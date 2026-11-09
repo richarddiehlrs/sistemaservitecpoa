@@ -46,6 +46,10 @@ async function resolverTecnicoParaOs(
   profile: Awaited<ReturnType<typeof requirePermissao>>,
   tipo: TipoAtendimento
 ): Promise<{ tecnico_id: string | null; tecnico: string | null }> {
+  // Técnico que abre a OS é sempre o responsável (o banco só deixa ele ver/editar as OS dele)
+  if (profile.papel === "tecnico") {
+    return { tecnico_id: profile.id, tecnico: nomeTecnico(profile) };
+  }
   if (tipo === "oficina") {
     const tecnico_id = str(formData.get("tecnico_id"));
     if (!tecnico_id) return { tecnico_id: null, tecnico: null };
@@ -150,17 +154,39 @@ async function resolverCliente(
   return data!.id;
 }
 
+/** Mensagem clara para erros de permissão do banco (RLS). */
+function mensagemErroOs(msg: string): string {
+  const m = msg.match(/row-level security policy for table "?(\w+)"?/i);
+  if (!m) return msg;
+  const tabela: Record<string, string> = {
+    equipamentos: "cadastrar o equipamento",
+    os_equipamentos: "vincular o equipamento à OS",
+    ordens_servico: "criar a ordem de serviço",
+    clientes: "cadastrar o cliente",
+    os_itens: "salvar os itens da OS",
+  };
+  return `Sem permissão para ${tabela[m[1]] ?? m[1]}. Peça ao administrador para rodar a migration 0038 no Supabase. (${m[1]})`;
+}
+
 async function criarOrdemImpl(formData: FormData) {
   const profile = await requirePermissao("ordens_criar");
   const supabase = await createClient();
 
   const clienteId = await resolverCliente(supabase, formData);
+  const equipamentosNovos: string[] = [];
   const equipamentoIds = await resolverEquipamentosOs(
     supabase,
     clienteId,
-    str(formData.get("equipamentos_json"))
+    str(formData.get("equipamentos_json")),
+    equipamentosNovos
   );
   const equipamentoId = equipamentoIds[0] ?? null;
+  // Se a OS não for criada, remove os equipamentos recém-cadastrados para não ficarem soltos
+  const desfazerEquipamentos = async () => {
+    if (equipamentosNovos.length) {
+      await supabase.from("equipamentos").delete().in("id", equipamentosNovos);
+    }
+  };
 
   const itens = lerItens(formData);
   const tipo = lerTipoAtendimento(formData);
@@ -214,7 +240,10 @@ async function criarOrdemImpl(formData: FormData) {
     .select("id, numero")
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error || !os) {
+    await desfazerEquipamentos();
+    throw new Error(mensagemErroOs(error?.message ?? "Não foi possível criar a ordem de serviço."));
+  }
 
   if (itens.length > 0) {
     const { error: itensErr } = await supabase.from("os_itens").insert(
@@ -230,7 +259,11 @@ async function criarOrdemImpl(formData: FormData) {
     if (itensErr) throw new Error(itensErr.message);
   }
 
-  await salvarVinculosEquipamentosOs(supabase, os!.id, equipamentoIds);
+  try {
+    await salvarVinculosEquipamentosOs(supabase, os!.id, equipamentoIds);
+  } catch (e) {
+    throw new Error(mensagemErroOs(e instanceof Error ? e.message : String(e)));
+  }
 
   await supabase.from("os_status_historico").insert({
     os_id: os!.id,

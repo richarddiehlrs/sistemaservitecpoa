@@ -98,7 +98,9 @@ function str(v: unknown): string {
 export async function resolverEquipamentosOs(
   supabase: Db,
   clienteId: string,
-  json: string
+  json: string,
+  /** Recebe os ids dos equipamentos criados agora (para desfazer se a OS falhar). */
+  novos?: string[]
 ): Promise<string[]> {
   let itens: EquipamentoInput[] = [];
   try {
@@ -130,8 +132,16 @@ export async function resolverEquipamentosOs(
       })
       .select("id")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (/row-level security/i.test(error.message)) {
+        throw new Error(
+          'Sem permissão para cadastrar o equipamento. Peça ao administrador para rodar a migration 0038 no Supabase. (equipamentos)'
+        );
+      }
+      throw new Error(error.message);
+    }
     ids.push(data!.id);
+    novos?.push(data!.id);
   }
   return ids;
 }
