@@ -1,7 +1,8 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
-import { linkWhatsApp, mensagemCobranca } from "@/lib/whatsapp";
+import { mensagemCobranca } from "@/lib/whatsapp";
+import { WhatsAppEnviar } from "./whatsapp-enviar";
 
 export function CobrancaWhatsApp({
   telefone,
@@ -10,6 +11,7 @@ export function CobrancaWhatsApp({
   valor,
   vencimento,
   empresa,
+  empresaTelefone,
 }: {
   telefone?: string | null;
   cliente?: string | null;
@@ -17,22 +19,18 @@ export function CobrancaWhatsApp({
   valor: number;
   vencimento?: string | null;
   empresa: string;
+  empresaTelefone?: string | null;
 }) {
-  const href = linkWhatsApp(
-    telefone,
-    mensagemCobranca({ cliente, descricao, valor, vencimento, empresa })
-  );
-  if (!href) return null;
-
+  if (!telefone?.trim()) return null;
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
+    <WhatsAppEnviar
+      telefone={telefone}
+      destinatario={cliente}
+      titulo="Cobrança pelo WhatsApp"
+      mensagem={mensagemCobranca({ cliente, descricao, valor, vencimento, empresa, empresaTelefone })}
       className="rounded p-1.5 text-green-600 hover:bg-green-50"
-      title="Cobrar no WhatsApp"
     >
       <MessageCircle className="h-4 w-4" />
-    </a>
+    </WhatsAppEnviar>
   );
 }

@@ -412,6 +412,7 @@ export default async function OrdemDetalhePage({
               msgTemplate={config.msg_whatsapp}
               clienteNomeRaw={cliente?.nome}
               empresaNome={config.nome}
+              empresaTelefone={config.telefone}
               portalUrl={portalUrl}
             />
             <div className="mt-4 border-t border-slate-100 pt-4">
@@ -427,6 +428,9 @@ export default async function OrdemDetalhePage({
                 horaInicio={agendamentos?.[0]?.hora_inicio}
                 tecnico={os.tecnico}
                 empresaNome={config.nome}
+                empresaTelefone={config.telefone}
+                equipamento={equips.length ? textoEquipamentos(equips) : null}
+                garantiaDias={os.garantia_dias}
                 msgTemplate={config.msg_whatsapp}
               />
             </div>

@@ -1,7 +1,8 @@
 import { MapPin, MessageCircle, Phone } from "lucide-react";
 import { linkMapa, linkMapaEndereco } from "@/lib/geo";
-import { formatHora, formatTelefone, onlyDigits } from "@/lib/format";
-import { mensagemWhatsAppCliente } from "@/lib/mensagens-cliente";
+import { formatHora, formatTelefone } from "@/lib/format";
+import { assinatura, mensagemWhatsAppCliente, saudacao } from "@/lib/mensagens-cliente";
+import { linkWhatsApp, telefoneComDDI } from "@/lib/whatsapp";
 import { TURNO_LABEL } from "@/lib/turnos";
 import { EMPRESA } from "@/lib/utils";
 
@@ -17,12 +18,6 @@ type Props = {
   osNumero?: number | null;
 };
 
-function telefoneComDDI(telefone: string | null | undefined): string {
-  const tel = onlyDigits(telefone || "");
-  if (tel.length < 10) return "";
-  return tel.startsWith("55") ? tel : `55${tel}`;
-}
-
 function textoPeriodoVisita(p: Props): string {
   if (p.turno && TURNO_LABEL[p.turno]) return TURNO_LABEL[p.turno].toLowerCase();
   if (p.horaInicio) return formatHora(p.horaInicio);
@@ -31,13 +26,17 @@ function textoPeriodoVisita(p: Props): string {
 
 function mensagemVisitaCampo(p: Props): string {
   if (p.osNumero == null) {
-    return (
-      `Olá ${p.clienteNome || ""}! Sou ${p.tecnicoNome || "o técnico"} da ${EMPRESA.nome}. ` +
-      `Estou a caminho para o atendimento agendado para ${textoPeriodoVisita(p)}.`
-    );
+    return [
+      `${saudacao(p.clienteNome)} Tudo bem?`,
+      `Aqui é ${p.tecnicoNome ? `*${p.tecnicoNome}*, técnico` : "o técnico"} da *${EMPRESA.nome}*. ` +
+        `Estou *a caminho* para o atendimento agendado para ${textoPeriodoVisita(p)}.`,
+      "Se houver algum imprevisto, por favor me avise por aqui.",
+      assinatura(EMPRESA.nome, EMPRESA.telefone),
+    ].join("\n\n");
   }
   return mensagemWhatsAppCliente("tecnico_caminho", {
     empresa: EMPRESA.nome,
+    empresaTelefone: EMPRESA.telefone,
     cliente: p.clienteNome,
     numero: p.osNumero,
     turno: p.turno,
@@ -58,9 +57,7 @@ export function CampoVisitaAcoes(props: Props) {
 
   const ddi = telefoneComDDI(telefone);
   const telHref = ddi ? `tel:+${ddi}` : null;
-  const waHref = ddi
-    ? `https://wa.me/${ddi}?text=${encodeURIComponent(mensagemVisitaCampo(props))}`
-    : null;
+  const waHref = ddi ? linkWhatsApp(telefone, mensagemVisitaCampo(props)) : null;
 
   if (!mapHref && !telHref && !waHref) return null;
 

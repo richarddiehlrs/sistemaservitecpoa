@@ -189,6 +189,7 @@ export default async function FinanceiroPage({
             </div>
             <CobrancaWhatsAppLote
               empresa={config.nome}
+              empresaTelefone={config.telefone}
               items={inadimplentes.map((l) => {
                 // @ts-expect-error relação
                 const cli = l.clientes;
@@ -375,6 +376,7 @@ export default async function FinanceiroPage({
                             valor={saldoAberto}
                             vencimento={l.data_vencimento}
                             empresa={config.nome}
+                            empresaTelefone={config.telefone}
                           />
                         )}
                         {Number(l.valor_pago) > 0 && (

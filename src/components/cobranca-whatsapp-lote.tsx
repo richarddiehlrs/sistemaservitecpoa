@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronRight, MessageCircle, X } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { linkWhatsApp, mensagemCobranca, telefoneComDDI } from "@/lib/whatsapp";
+import { Previa } from "./whatsapp-enviar";
 
 export type CobrancaLoteItem = {
   id: string;
@@ -17,9 +18,11 @@ export type CobrancaLoteItem = {
 export function CobrancaWhatsAppLote({
   items,
   empresa,
+  empresaTelefone,
 }: {
   items: CobrancaLoteItem[];
   empresa: string;
+  empresaTelefone?: string | null;
 }) {
   const comTel = items.filter((i) => telefoneComDDI(i.telefone));
   const [aberto, setAberto] = useState(false);
@@ -37,6 +40,7 @@ export function CobrancaWhatsAppLote({
           valor: atual.valor,
           vencimento: atual.vencimento,
           empresa,
+          empresaTelefone,
         })
       )
     : null;
@@ -75,6 +79,21 @@ export function CobrancaWhatsAppLote({
                     <span className="text-red-600"> • venceu {formatDate(atual.vencimento)}</span>
                   )}
                 </p>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs font-medium text-brand-700">Ver mensagem</summary>
+                  <div className="mt-2 max-h-56 overflow-y-auto">
+                    <Previa
+                      texto={mensagemCobranca({
+                        cliente: atual.cliente,
+                        descricao: atual.descricao,
+                        valor: atual.valor,
+                        vencimento: atual.vencimento,
+                        empresa,
+                        empresaTelefone,
+                      })}
+                    />
+                  </div>
+                </details>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <a
                     href={hrefAtual}
@@ -111,6 +130,7 @@ export function CobrancaWhatsAppLote({
                     valor: item.valor,
                     vencimento: item.vencimento,
                     empresa,
+                    empresaTelefone,
                   })
                 );
                 return (

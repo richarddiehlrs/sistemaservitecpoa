@@ -1,5 +1,7 @@
 "use client";
 
+import { MODELO_STATUS_ANTIGO } from "@/lib/mensagens-cliente";
+
 import { useState } from "react";
 import { Loader2, Upload, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -118,11 +120,18 @@ export function ConfigForm({
             <textarea name="politica_os" rows={3} defaultValue={config.politica_os} className="input" />
           </div>
           <div>
-            <label className="label">Modelo de mensagem WhatsApp</label>
-            <textarea name="msg_whatsapp" rows={2} defaultValue={config.msg_whatsapp} className="input" />
+            <label className="label">Mensagem de “Avisar status atual” (WhatsApp)</label>
+            <textarea
+              name="msg_whatsapp"
+              rows={4}
+              defaultValue={config.msg_whatsapp === MODELO_STATUS_ANTIGO ? "" : config.msg_whatsapp}
+              placeholder="Deixe em branco para usar o texto padrão (saudação, dados da OS, link e assinatura)."
+              className="input"
+            />
             <p className="mt-1 text-xs text-slate-400">
-              Variáveis disponíveis: <code>{"{empresa}"}</code>, <code>{"{os}"}</code>,{" "}
-              <code>{"{status}"}</code>, <code>{"{cliente}"}</code>, <code>{"{total}"}</code>.
+              Variáveis: <code>{"{empresa}"}</code>, <code>{"{os}"}</code>, <code>{"{status}"}</code>,{" "}
+              <code>{"{cliente}"}</code> (primeiro nome), <code>{"{total}"}</code>. Use *texto* para negrito. As demais mensagens
+              (orçamento, visita, cobrança…) já seguem um padrão profissional e podem ser ajustadas na prévia antes de enviar.
             </p>
           </div>
         </div>
