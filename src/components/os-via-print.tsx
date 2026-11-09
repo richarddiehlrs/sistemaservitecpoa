@@ -323,14 +323,16 @@ export function OsViaPrint(props: OsViaPrintData) {
         <div className="via-historico">
           <div className="via-bloco-titulo">ACOMPANHAMENTO</div>
           <ul>
-            {historico.map((h, i) => (
-              <li key={i}>
-                <span className="via-hist-data">{formatDateTime(h.created_at)}</span>
-                {" — "}
-                <strong>{STATUS_OS_LABEL[h.status] || h.status}</strong>
-                {h.observacao ? ` — ${h.observacao}` : ""}
-              </li>
-            ))}
+            {/* Resumido: só data e etapa (sem observações internas), sem repetir o mesmo status seguido */}
+            {historico
+              .filter((h, i, arr) => h.status !== "cancelada" && (i === 0 || arr[i - 1].status !== h.status))
+              .map((h, i) => (
+                <li key={i}>
+                  <span className="via-hist-data">{formatDate(h.created_at)}</span>
+                  {" — "}
+                  <strong>{STATUS_OS_LABEL[h.status] || h.status}</strong>
+                </li>
+              ))}
           </ul>
         </div>
       )}
