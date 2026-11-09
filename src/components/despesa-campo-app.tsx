@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Camera,
@@ -17,7 +18,12 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { formatCurrency, formatDate, hojeYmdLocal, parseNumForm } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDate,
+  hojeYmdLocal,
+  parseNumForm,
+} from "@/lib/format";
 import { comprimirFoto } from "@/lib/imagem";
 import {
   guardarDespesa,
@@ -38,9 +44,19 @@ const CATEGORIAS = [
   { id: "outro", label: "Outros", icon: Receipt },
 ] as const;
 
-const FORMAS = ["PIX", "Cartão de débito", "Cartão de crédito", "Dinheiro"] as const;
+const FORMAS = [
+  "PIX",
+  "Cartão de débito",
+  "Cartão de crédito",
+  "Dinheiro",
+] as const;
 
-export type ContaDespesa = { id: string; nome: string; tipo: string; formas_padrao: string[] };
+export type ContaDespesa = {
+  id: string;
+  nome: string;
+  tipo: string;
+  formas_padrao: string[];
+};
 
 /** Conta sugerida para a forma de pagamento (nunca a maquininha, que só recebe). */
 function contaSugerida(contas: ContaDespesa[], forma: string): string {
@@ -79,7 +95,10 @@ export function DespesaCampoApp({
   const [online, setOnline] = useState(true);
   const [enviando, setEnviando] = useState(false);
 
-  const atualizarFila = useCallback(async () => setPendentes(await listarPendentes()), []);
+  const atualizarFila = useCallback(
+    async () => setPendentes(await listarPendentes()),
+    [],
+  );
 
   const sincronizar = useCallback(
     async (avisar = false) => {
@@ -88,12 +107,16 @@ export function DespesaCampoApp({
       setEnviando(false);
       await atualizarFila();
       if (r.enviados > 0) {
-        if (avisar) toast.push(`${r.enviados} despesa(s) enviada(s) ao financeiro.`, "success");
+        if (avisar)
+          toast.push(
+            `${r.enviados} despesa(s) enviada(s) ao financeiro.`,
+            "success",
+          );
         router.refresh();
       }
       return r;
     },
-    [atualizarFila, router, toast]
+    [atualizarFila, router, toast],
   );
 
   useEffect(() => {
@@ -105,7 +128,8 @@ export function DespesaCampoApp({
       sincronizar(true);
     };
     const off = () => setOnline(false);
-    const visivel = () => document.visibilityState === "visible" && sincronizar(true);
+    const visivel = () =>
+      document.visibilityState === "visible" && sincronizar(true);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     document.addEventListener("visibilitychange", visivel);
@@ -121,20 +145,35 @@ export function DespesaCampoApp({
     setAberto(false);
     await atualizarFila();
     if (!navigator.onLine) {
-      toast.push("Sem sinal: despesa salva no celular. Será enviada sozinha quando a internet voltar.", "success");
+      toast.push(
+        "Sem sinal: despesa salva no celular. Será enviada sozinha quando a internet voltar.",
+        "success",
+      );
       return;
     }
     const r = await sincronizar(false);
-    const ficou = (await listarPendentes()).find((p) => p.idCliente === d.idCliente);
-    if (!ficou) toast.push("Despesa lançada e já paga no financeiro.", "success");
-    else if (ficou.erro) toast.push(`Não foi possível lançar: ${ficou.erro}`, "error");
-    else if (r.falhas) toast.push("Sinal fraco: despesa salva no celular, será reenviada automaticamente.", "success");
+    const ficou = (await listarPendentes()).find(
+      (p) => p.idCliente === d.idCliente,
+    );
+    if (!ficou)
+      toast.push("Despesa lançada e já paga no financeiro.", "success");
+    else if (ficou.erro)
+      toast.push(`Não foi possível lançar: ${ficou.erro}`, "error");
+    else if (r.falhas)
+      toast.push(
+        "Sinal fraco: despesa salva no celular, será reenviada automaticamente.",
+        "success",
+      );
   }
 
   return (
     <div className="space-y-2">
       {mostrarBotao && (
-        <button type="button" onClick={() => setAberto(true)} className="btn-primary w-full sm:w-auto">
+        <button
+          type="button"
+          onClick={() => setAberto(true)}
+          className="btn-primary w-full sm:w-auto"
+        >
           <Plus className="h-4 w-4" /> Lançar despesa
         </button>
       )}
@@ -144,28 +183,52 @@ export function DespesaCampoApp({
           <div className="flex items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 font-medium">
               <CloudOff className="h-4 w-4" />
-              {online ? `${pendentes.length} despesa(s) aguardando envio` : `Sem internet — ${pendentes.length} salva(s) no celular`}
+              {online
+                ? `${pendentes.length} despesa(s) aguardando envio`
+                : `Sem internet — ${pendentes.length} salva(s) no celular`}
             </p>
             {online && pendentes.length > 0 && (
-              <button type="button" className="btn-secondary py-1 text-xs" onClick={() => sincronizar(true)} disabled={enviando}>
-                {enviando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Enviar agora
+              <button
+                type="button"
+                className="btn-secondary py-1 text-xs"
+                onClick={() => sincronizar(true)}
+                disabled={enviando}
+              >
+                {enviando ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}{" "}
+                Enviar agora
               </button>
             )}
           </div>
           {pendentes.length > 0 && (
             <ul className="mt-2 space-y-1 text-xs">
               {pendentes.map((p) => (
-                <li key={p.idCliente} className="flex items-center justify-between gap-2">
+                <li
+                  key={p.idCliente}
+                  className="flex items-center justify-between gap-2"
+                >
                   <span className="min-w-0 truncate">
-                    {formatDate(p.data)} • {CATEGORIAS.find((c) => c.id === p.categoria)?.label} • {formatCurrency(p.valor)}
-                    {p.erro && <span className="block text-red-700">Erro: {p.erro}</span>}
+                    {formatDate(p.data)} •{" "}
+                    {CATEGORIAS.find((c) => c.id === p.categoria)?.label} •{" "}
+                    {formatCurrency(p.valor)}
+                    {p.erro && (
+                      <span className="block text-red-700">Erro: {p.erro}</span>
+                    )}
                   </span>
                   {p.erro && (
                     <button
                       type="button"
                       className="shrink-0 text-red-700 underline"
                       onClick={async () => {
-                        if (!window.confirm("Descartar esta despesa salva no celular?")) return;
+                        if (
+                          !window.confirm(
+                            "Descartar esta despesa salva no celular?",
+                          )
+                        )
+                          return;
                         await removerPendente(p.idCliente);
                         atualizarFila();
                       }}
@@ -180,7 +243,14 @@ export function DespesaCampoApp({
         </div>
       )}
 
-      {aberto && <FormDespesa osOpcoes={osOpcoes} contas={contas} onClose={() => setAberto(false)} onSalvar={salvar} />}
+      {aberto && (
+        <FormDespesa
+          osOpcoes={osOpcoes}
+          contas={contas}
+          onClose={() => setAberto(false)}
+          onSalvar={salvar}
+        />
+      )}
     </div>
   );
 }
@@ -199,7 +269,9 @@ function FormDespesa({
   const hoje = hojeYmdLocal();
   const [categoria, setCategoria] = useState<string>("combustivel");
   const [forma, setForma] = useState<string>("PIX");
-  const [conta, setConta] = useState<string>(() => contaSugerida(contas, "PIX"));
+  const [conta, setConta] = useState<string>(() =>
+    contaSugerida(contas, "PIX"),
+  );
   const [foto, setFoto] = useState<Blob | null>(null);
   const [previa, setPrevia] = useState<string | null>(null);
   const [processandoFoto, setProcessandoFoto] = useState(false);
@@ -207,9 +279,12 @@ function FormDespesa({
   const [erro, setErro] = useState<string | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => () => {
-    if (previa) URL.revokeObjectURL(previa);
-  }, [previa]);
+  useEffect(
+    () => () => {
+      if (previa) URL.revokeObjectURL(previa);
+    },
+    [previa],
+  );
 
   async function escolherFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -260,18 +335,30 @@ function FormDespesa({
 
   const contasPagaveis = contas.filter((c) => c.tipo !== "maquininha");
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
-      <div className="flex max-h-[94vh] w-full max-w-md flex-col rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+  if (typeof document === "undefined") return null;
+
+  // Portal no <body>: fora de cartões com efeito (transform), a janela ocupa a tela de verdade.
+  // Celular: tela cheia (100dvh desconta as barras do iPhone), título fixo e botão Salvar sempre visível.
+  return createPortal(
+    <div className="fixed inset-0 z-[90] flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
+      <form
+        onSubmit={submit}
+        className="flex h-[100dvh] w-full max-w-md flex-col bg-white shadow-xl sm:h-auto sm:max-h-[90dvh] sm:rounded-2xl"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <h3 className="text-lg font-semibold">Nova despesa</h3>
-          <button type="button" onClick={onClose} className="text-slate-400">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-slate-400 hover:bg-slate-100"
+            aria-label="Fechar"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={submit} className="flex-1 space-y-4 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <div className="grid grid-cols-3 gap-2">
+        <div className="flex-1 space-y-3.5 overflow-y-auto overscroll-contain px-4 py-3">
+          <div className="grid grid-cols-3 gap-1.5">
             {CATEGORIAS.map((c) => {
               const Icon = c.icon;
               return (
@@ -279,11 +366,13 @@ function FormDespesa({
                   key={c.id}
                   type="button"
                   onClick={() => setCategoria(c.id)}
-                  className={`flex flex-col items-center gap-1 rounded-xl border p-2.5 text-xs font-medium ${
-                    categoria === c.id ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"
+                  className={`flex flex-col items-center gap-0.5 rounded-xl border px-1 py-2 text-[11px] font-medium leading-tight ${
+                    categoria === c.id
+                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                      : "border-slate-200 text-slate-600"
                   }`}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-4 w-4" />
                   {c.label}
                 </button>
               );
@@ -292,16 +381,33 @@ function FormDespesa({
 
           <div>
             <label className="label">Valor (R$)</label>
-            <input name="valor" inputMode="decimal" required autoFocus className="input text-2xl font-semibold" placeholder="0,00" />
+            <input
+              name="valor"
+              inputMode="decimal"
+              required
+              className="input text-xl font-semibold"
+              placeholder="0,00"
+            />
           </div>
 
           <div>
             <label className="label">Comprovante</label>
-            <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={escolherFoto} />
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={escolherFoto}
+            />
             {previa ? (
               <div className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={previa} alt="Comprovante" className="max-h-48 w-full rounded-lg object-contain ring-1 ring-slate-200" />
+                <img
+                  src={previa}
+                  alt="Comprovante"
+                  className="max-h-32 w-full rounded-lg object-contain ring-1 ring-slate-200"
+                />
                 <button
                   type="button"
                   onClick={() => {
@@ -314,8 +420,17 @@ function FormDespesa({
                 </button>
               </div>
             ) : (
-              <button type="button" onClick={() => cameraRef.current?.click()} className="btn-secondary w-full py-3" disabled={processandoFoto}>
-                {processandoFoto ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+              <button
+                type="button"
+                onClick={() => cameraRef.current?.click()}
+                className="btn-secondary w-full py-2.5"
+                disabled={processandoFoto}
+              >
+                {processandoFoto ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Camera className="h-5 w-5" />
+                )}
                 Fotografar nota / cupom
               </button>
             )}
@@ -334,12 +449,20 @@ function FormDespesa({
                   }}
                   className={`rounded-lg border px-2 py-2 text-sm ${forma === f ? "border-brand-500 bg-brand-50 font-semibold text-brand-700" : "border-slate-200 text-slate-600"}`}
                 >
-                  {f === "Cartão de débito" ? "Débito" : f === "Cartão de crédito" ? "Crédito" : f}
+                  {f === "Cartão de débito"
+                    ? "Débito"
+                    : f === "Cartão de crédito"
+                      ? "Crédito"
+                      : f}
                 </button>
               ))}
             </div>
             {contasPagaveis.length > 1 && (
-              <select value={conta} onChange={(e) => setConta(e.target.value)} className="input mt-2 text-sm">
+              <select
+                value={conta}
+                onChange={(e) => setConta(e.target.value)}
+                className="input mt-2 text-sm"
+              >
                 {contasPagaveis.map((c) => (
                   <option key={c.id} value={c.id}>
                     Saiu de: {c.nome}
@@ -353,18 +476,32 @@ function FormDespesa({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="label">Km do carro</label>
-                <input name="km" inputMode="numeric" className="input" placeholder="Ex.: 85320" />
+                <input
+                  name="km"
+                  inputMode="numeric"
+                  className="input"
+                  placeholder="Ex.: 85320"
+                />
               </div>
               <div>
                 <label className="label">Litros</label>
-                <input name="litros" inputMode="decimal" className="input" placeholder="Ex.: 40,5" />
+                <input
+                  name="litros"
+                  inputMode="decimal"
+                  className="input"
+                  placeholder="Ex.: 40,5"
+                />
               </div>
             </div>
           )}
 
           {osOpcoes.length > 0 && (
             <div>
-              <label className="label">{categoria === "pecas" ? "Peça para qual OS?" : "Vincular à OS (opcional)"}</label>
+              <label className="label">
+                {categoria === "pecas"
+                  ? "Peça para qual OS?"
+                  : "Vincular à OS (opcional)"}
+              </label>
               <select name="os_id" className="input text-sm" defaultValue="">
                 <option value="">— Nenhuma —</option>
                 {osOpcoes.map((o) => (
@@ -374,7 +511,9 @@ function FormDespesa({
                 ))}
               </select>
               {categoria === "pecas" && (
-                <p className="mt-1 text-[11px] text-slate-500">Vinculada à OS, a peça entra no custo e no lucro daquela OS.</p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Vinculada à OS, a peça entra no custo e no lucro daquela OS.
+                </p>
               )}
             </div>
           )}
@@ -382,25 +521,49 @@ function FormDespesa({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="label">Data</label>
-              <input name="data" type="date" max={hoje} defaultValue={hoje} className="input" />
+              <input
+                name="data"
+                type="date"
+                max={hoje}
+                defaultValue={hoje}
+                className="input"
+              />
             </div>
             <div>
               <label className="label">Onde / o quê</label>
-              <input name="descricao" className="input" placeholder={categoria === "combustivel" ? "Posto" : "Descrição"} />
+              <input
+                name="descricao"
+                className="input"
+                placeholder={
+                  categoria === "combustivel" ? "Posto" : "Descrição"
+                }
+              />
             </div>
           </div>
 
-          {erro && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
+          {erro && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {erro}
+            </p>
+          )}
+        </div>
 
-          <button type="submit" className="btn-primary w-full py-3 text-base" disabled={salvando || processandoFoto}>
+        <div className="shrink-0 border-t border-slate-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            type="submit"
+            className="btn-primary w-full py-3 text-base"
+            disabled={salvando || processandoFoto}
+          >
             {salvando && <Loader2 className="h-5 w-5 animate-spin" />}
             Salvar despesa
           </button>
-          <p className="text-center text-[11px] text-slate-400">
-            Entra como paga no financeiro. Sem internet, fica salva no celular e é enviada depois.
+          <p className="mt-1.5 text-center text-[11px] text-slate-400">
+            Entra como paga no financeiro. Sem internet, fica salva e é enviada
+            depois.
           </p>
-        </form>
-      </div>
-    </div>
+        </div>
+      </form>
+    </div>,
+    document.body,
   );
 }

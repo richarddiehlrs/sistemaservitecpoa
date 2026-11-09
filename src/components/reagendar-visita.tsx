@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { CalendarClock, Loader2, X } from "lucide-react";
 import { amanhaYmdLocal, hojeYmdLocal } from "@/lib/format";
-import { MOTIVOS_REAGENDAMENTO, type MotivoReagendamento } from "@/lib/reagendamento";
+import {
+  MOTIVOS_REAGENDAMENTO,
+  type MotivoReagendamento,
+} from "@/lib/reagendamento";
 import { mensagemReagendamento } from "@/lib/mensagens-cliente";
 import { telefoneComDDI } from "@/lib/whatsapp";
 import type { ActionResult } from "@/lib/action-result";
@@ -33,7 +37,11 @@ export function ReagendarVisita({
   const [aberto, setAberto] = useState(false);
   const [motivo, setMotivo] = useState<MotivoReagendamento>("cliente_pediu");
   const [avisar, setAvisar] = useState(true);
-  const [whats, setWhats] = useState<{ data: string; turno: string; texto: string } | null>(null);
+  const [whats, setWhats] = useState<{
+    data: string;
+    turno: string;
+    texto: string;
+  } | null>(null);
   const { run, pending } = useAction();
   const temTelefone = Boolean(telefoneComDDI(telefone));
 
@@ -47,7 +55,12 @@ export function ReagendarVisita({
       successMsg: "Visita reagendada.",
       onSuccess: () => {
         setAberto(false);
-        if (avisar && temTelefone && osNumero) setWhats({ data, turno, texto: MOTIVOS_REAGENDAMENTO[motivo].cliente });
+        if (avisar && temTelefone && osNumero)
+          setWhats({
+            data,
+            turno,
+            texto: MOTIVOS_REAGENDAMENTO[motivo].cliente,
+          });
       },
     });
   }
@@ -66,59 +79,111 @@ export function ReagendarVisita({
         <CalendarClock className="h-3.5 w-3.5" /> Reagendar
       </button>
 
-      {aberto && (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={() => setAberto(false)}>
-          <div className="w-full max-w-md rounded-t-2xl bg-white shadow-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h3 className="font-semibold text-slate-900">Reagendar visita</h3>
-              <button type="button" onClick={() => setAberto(false)} className="text-slate-400">
-                <X className="h-5 w-5" />
-              </button>
+      {aberto &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[90] flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
+            onClick={() => setAberto(false)}
+          >
+            <div
+              className="flex max-h-[100dvh] w-full max-w-md flex-col overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:max-h-[90dvh] sm:rounded-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                <h3 className="font-semibold text-slate-900">
+                  Reagendar visita
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setAberto(false)}
+                  className="text-slate-400"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <form
+                onSubmit={enviar}
+                className="space-y-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+              >
+                <div>
+                  <p className="label">Motivo</p>
+                  <div className="grid gap-1.5">
+                    {(
+                      Object.keys(
+                        MOTIVOS_REAGENDAMENTO,
+                      ) as MotivoReagendamento[]
+                    ).map((m) => (
+                      <label
+                        key={m}
+                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                          motivo === m
+                            ? "border-brand-500 bg-brand-50 text-brand-800"
+                            : "border-slate-200 text-slate-700"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="motivo_radio"
+                          checked={motivo === m}
+                          onChange={() => setMotivo(m)}
+                        />
+                        {MOTIVOS_REAGENDAMENTO[m].label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label">Nova data</label>
+                    <input
+                      name="data"
+                      type="date"
+                      min={hojeYmdLocal()}
+                      defaultValue={amanhaYmdLocal()}
+                      required
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Turno</label>
+                    <select name="turno" className="input" defaultValue="manha">
+                      <option value="manha">Manhã</option>
+                      <option value="tarde">Tarde</option>
+                      <option value="dia">Dia todo</option>
+                    </select>
+                  </div>
+                </div>
+                <input
+                  name="detalhe"
+                  className="input"
+                  placeholder="Detalhe (opcional, fica no histórico)"
+                />
+                <label
+                  className={`flex items-center gap-2 text-xs ${temTelefone ? "text-slate-600" : "text-slate-400"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={avisar && temTelefone}
+                    disabled={!temTelefone}
+                    onChange={(e) => setAvisar(e.target.checked)}
+                  />
+                  Avisar o cliente pelo WhatsApp{" "}
+                  {temTelefone ? "(abre a prévia)" : "(cliente sem telefone)"}
+                </label>
+                <button
+                  type="submit"
+                  className="btn-primary w-full py-2.5"
+                  disabled={pending}
+                >
+                  {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Confirmar reagendamento
+                </button>
+              </form>
             </div>
-            <form onSubmit={enviar} className="space-y-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              <div>
-                <p className="label">Motivo</p>
-                <div className="grid gap-1.5">
-                  {(Object.keys(MOTIVOS_REAGENDAMENTO) as MotivoReagendamento[]).map((m) => (
-                    <label
-                      key={m}
-                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
-                        motivo === m ? "border-brand-500 bg-brand-50 text-brand-800" : "border-slate-200 text-slate-700"
-                      }`}
-                    >
-                      <input type="radio" name="motivo_radio" checked={motivo === m} onChange={() => setMotivo(m)} />
-                      {MOTIVOS_REAGENDAMENTO[m].label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="label">Nova data</label>
-                  <input name="data" type="date" min={hojeYmdLocal()} defaultValue={amanhaYmdLocal()} required className="input" />
-                </div>
-                <div>
-                  <label className="label">Turno</label>
-                  <select name="turno" className="input" defaultValue="manha">
-                    <option value="manha">Manhã</option>
-                    <option value="tarde">Tarde</option>
-                    <option value="dia">Dia todo</option>
-                  </select>
-                </div>
-              </div>
-              <input name="detalhe" className="input" placeholder="Detalhe (opcional, fica no histórico)" />
-              <label className={`flex items-center gap-2 text-xs ${temTelefone ? "text-slate-600" : "text-slate-400"}`}>
-                <input type="checkbox" checked={avisar && temTelefone} disabled={!temTelefone} onChange={(e) => setAvisar(e.target.checked)} />
-                Avisar o cliente pelo WhatsApp {temTelefone ? "(abre a prévia)" : "(cliente sem telefone)"}
-              </label>
-              <button type="submit" className="btn-primary w-full py-2.5" disabled={pending}>
-                {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Confirmar reagendamento
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       {whats && osNumero && (
         <WhatsAppEnviar
