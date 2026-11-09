@@ -47,6 +47,9 @@ export default async function ManutencaoPage() {
         subtitle="Corrija ordens com fluxo inconsistente e remova visitas/lançamentos órfãos"
         action={
           <div className="flex flex-wrap gap-2">
+            <Link href="/manutencao/encerrar-antigas" className="btn-secondary">
+              Encerrar OS antigas
+            </Link>
             {osInconsistentes.length > 0 && (
               <ConfirmButton
                 action={repararTodasOsInconsistentes}

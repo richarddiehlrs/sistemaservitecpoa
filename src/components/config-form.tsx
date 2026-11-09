@@ -170,6 +170,13 @@ export function ConfigForm({
               Botão rápido após aprovação (ex.: 30, 50). Não é obrigatório — valor livre também.
             </p>
           </div>
+          <div>
+            <label className="label">Início do controle financeiro</label>
+            <input name="financeiro_inicio" type="date" defaultValue={config.financeiro_inicio ?? ""} className="input" />
+            <p className="mt-1 text-xs text-slate-400">
+              Títulos vencidos antes desta data não entram em pendências, “a receber” nem previsões (ficam como histórico).
+            </p>
+          </div>
         </div>
       </div>
 

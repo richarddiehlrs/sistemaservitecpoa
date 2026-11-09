@@ -118,6 +118,7 @@ export type Configuracao = {
   msg_whatsapp: string | null;
   comissao_percent: number | null;
   percentual_sinal_padrao: number | null;
+  financeiro_inicio?: string | null;
   created_at: string;
   updated_at: string;
 };

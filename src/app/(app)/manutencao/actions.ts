@@ -125,3 +125,39 @@ function revalidarManutencao() {
   revalidatePath("/campo");
   revalidatePath("/dashboard");
 }
+
+// ===================== CORTE DO FINANCEIRO =====================
+
+/** Encerra em lote OS antigas (antes do início do financeiro), sem gerar lançamentos. */
+export async function encerrarOsAntigas(
+  formData: FormData
+): Promise<ActionResult<{ encerradas: number; erros: string[] }>> {
+  return safeAction(async () => {
+    await requirePermissao("ordens_excluir");
+    const { encerrarOsNoCorte } = await import("@/lib/corte-financeiro");
+    const { getConfig } = await import("@/lib/config");
+    const supabase = await createClient();
+    const config = await getConfig();
+    const corte = config.financeiro_inicio;
+    if (!corte) throw new Error("Defina a data de início do financeiro em Configurações.");
+
+    const ids = [...new Set(formData.getAll("ids").map(String).filter(Boolean))];
+    if (!ids.length) throw new Error("Selecione ao menos uma OS.");
+    const modo = String(formData.get("modo")) === "nao_feita" ? "nao_feita" : "feita";
+
+    let encerradas = 0;
+    const erros: string[] = [];
+    for (const id of ids) {
+      try {
+        await encerrarOsNoCorte(supabase, id, modo, corte);
+        encerradas++;
+      } catch (e) {
+        erros.push(e instanceof Error ? e.message : String(e));
+      }
+    }
+    for (const p of ["/manutencao", "/manutencao/encerrar-antigas", "/ordens", "/painel", "/financeiro", "/financeiro/pendencias", "/financeiro/fluxo", "/dashboard", "/resultados", "/dre", "/agenda", "/campo"]) {
+      revalidatePath(p);
+    }
+    return { encerradas, erros };
+  });
+}

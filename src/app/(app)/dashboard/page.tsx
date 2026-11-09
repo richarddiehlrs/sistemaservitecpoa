@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, Receipt, Wrench, Users, DollarSign, AlertCircle, CalendarDays, MapPin, PiggyBank, TrendingDown, Percent } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getConfig } from "@/lib/config";
 import { PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { MonthlyBars, HBarList } from "@/components/charts";
 import { MetaCard } from "@/components/meta-card";
@@ -236,8 +237,10 @@ export default async function DashboardPage() {
     lancamentos_financeiros: { tipo: "receita" | "despesa"; categorias_financeiras?: { grupo_dre?: string | null } | null } | null;
   };
   const receitaMes = ((recebimentos || []) as unknown as PagLanc[]).reduce((s, r) => s + Number(r.valor), 0);
-  const aReceber = (contasReceber || []).reduce((s, r) => s + saldoEmAberto(r), 0);
-  const aReceberVencido = (contasReceber || [])
+  const corteFin = (await getConfig()).financeiro_inicio;
+  const receberValidos = (contasReceber || []).filter((r) => !corteFin || !r.data_vencimento || r.data_vencimento >= corteFin);
+  const aReceber = receberValidos.reduce((s, r) => s + saldoEmAberto(r), 0);
+  const aReceberVencido = receberValidos
     .filter((r) => r.data_vencimento && r.data_vencimento < hojeStr)
     .reduce((s, r) => s + saldoEmAberto(r), 0);
 

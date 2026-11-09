@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
+import { getConfig } from "@/lib/config";
 import { PageHeader, EmptyState } from "@/components/ui";
 import { PendenciasLista, type PendenciaItem } from "@/components/pendencias-lista";
 import { formatCurrency, formatNumeroOS, hojeYmdLocal, STATUS_OS_LABEL } from "@/lib/format";
@@ -28,6 +29,7 @@ export default async function PendenciasPage() {
   await requirePermissao("financeiro");
   const supabase = await createClient();
   const hoje = hojeYmdLocal();
+  const { financeiro_inicio: corte } = await getConfig();
 
   const rows: Row[] = [];
   for (let de = 0; ; de += 1000) {
@@ -36,6 +38,7 @@ export default async function PendenciasPage() {
       .select("id, tipo, descricao, valor, valor_pago, juros, multa, data_vencimento, os_id, clientes(nome), ordens_servico(numero, status, data_conclusao)")
       .in("status", ["pendente", "parcial"])
       .lt("data_vencimento", hoje)
+      .gte("data_vencimento", corte ?? "1900-01-01")
       .order("data_vencimento")
       .range(de, de + 999);
     if (error) throw new Error(error.message);
@@ -73,7 +76,7 @@ export default async function PendenciasPage() {
       </Link>
       <PageHeader
         title="Pendências do financeiro"
-        subtitle={`Títulos vencidos em aberto — a receber ${formatCurrency(soma(receber))} • a pagar ${formatCurrency(soma(pagar))}`}
+        subtitle={`Títulos vencidos em aberto${corte ? ` desde ${corte.split("-").reverse().join("/")}` : ""} — a receber ${formatCurrency(soma(receber))} • a pagar ${formatCurrency(soma(pagar))}`}
       />
       <p className="mb-4 max-w-3xl text-sm text-slate-600">
         Se o cliente já pagou (ou você já pagou a conta) e isso não foi registrado, marque e use <strong>“Já foi recebido/pago”</strong> —

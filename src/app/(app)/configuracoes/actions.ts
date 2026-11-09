@@ -28,6 +28,9 @@ export async function salvarConfig(formData: FormData): Promise<ActionResult> {
         msg_whatsapp: str(formData.get("msg_whatsapp")),
         comissao_percent:
           Number(String(formData.get("comissao_percent") || "0").replace(",", ".")) || 0,
+        financeiro_inicio: /^\d{4}-\d{2}-\d{2}$/.test(String(formData.get("financeiro_inicio") || ""))
+          ? String(formData.get("financeiro_inicio"))
+          : null,
         percentual_sinal_padrao: Math.min(
           100,
           Math.max(
@@ -43,5 +46,7 @@ export async function salvarConfig(formData: FormData): Promise<ActionResult> {
     revalidatePath("/configuracoes");
     revalidatePath("/dashboard");
     revalidatePath("/relatorios");
+    revalidatePath("/financeiro/fluxo");
+    revalidatePath("/financeiro/pendencias");
   });
 }

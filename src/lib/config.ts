@@ -15,6 +15,8 @@ export type EmpresaConfig = {
   msg_whatsapp: string;
   comissao_percent: number;
   percentual_sinal_padrao: number;
+  /** Início do controle financeiro (YYYY-MM-DD) — antes disso é histórico. */
+  financeiro_inicio: string | null;
 };
 
 // Carrega as configurações da empresa do banco, com fallback nas variáveis de ambiente.
@@ -42,6 +44,7 @@ export async function getConfig(): Promise<EmpresaConfig> {
         'Olá! Aqui é da {empresa}. Sobre sua OS {os}: status "{status}".',
       comissao_percent: Number(c?.comissao_percent ?? 0),
       percentual_sinal_padrao: Number(c?.percentual_sinal_padrao ?? 50),
+      financeiro_inicio: (c as { financeiro_inicio?: string | null } | null)?.financeiro_inicio ?? null,
     };
   } catch {
     return {
@@ -57,6 +60,7 @@ export async function getConfig(): Promise<EmpresaConfig> {
       msg_whatsapp: 'Olá! Aqui é da {empresa}. Sobre sua OS {os}: status "{status}".',
       comissao_percent: 0,
       percentual_sinal_padrao: 50,
+      financeiro_inicio: null,
     };
   }
 }

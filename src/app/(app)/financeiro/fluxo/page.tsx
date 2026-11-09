@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeft, ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, Landmark, ListChecks } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
+import { getConfig } from "@/lib/config";
 import { PageHeader } from "@/components/ui";
 import { formatCurrency, formatDate, hojeYmdLocal } from "@/lib/format";
 import { saldoEmAberto } from "@/lib/financeiro";
@@ -95,6 +96,14 @@ export default async function FluxoPage({ searchParams }: { searchParams: Promis
     if (error) throw new Error(error.message);
     titulos.push(...((data || []) as TituloAberto[]));
     if (!data || data.length < 1000) break;
+  }
+  // Antes do início do controle financeiro é histórico: não entra em previsão nem em vencidos
+  const { financeiro_inicio: corte } = await getConfig();
+  if (corte) {
+    for (let i = titulos.length - 1; i >= 0; i--) {
+      const v = titulos[i].data_vencimento;
+      if (v && v < corte) titulos.splice(i, 1);
+    }
   }
 
   // Despesas fixas ainda não geradas (aluguel etc.) entram na previsão
