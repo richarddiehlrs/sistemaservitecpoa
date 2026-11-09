@@ -261,7 +261,7 @@ export function OsViaPrint(props: OsViaPrintData) {
       <div className="via-rodape-financeiro">
         <div className="via-qrs">
           {publicUrl && <QrBox img={qrImageUrl(publicUrl, qrSize)} titulo="Portal OS" sub="Acompanhe sua OS" />}
-          <QrBox img={qrImageUrl(pixPayload, qrSize)} titulo="PIX" sub={`CNPJ ${formatPixCnpj(PIX_CHAVE_CNPJ)}`} />
+          <QrBox img={qrImageUrl(pixPayload, qrSize)} titulo="PIX" sub={`CNPJ ${formatPixCnpj(PIX_CHAVE_CNPJ)}`} pix />
           {showGoogleQr && <QrBox img={qrImageUrl(GOOGLE_REVIEW_URL, qrSize)} titulo="Avalie" sub="Google Reviews" />}
         </div>
         <table className="via-totais">
@@ -393,9 +393,9 @@ function LinhaTotal({ titulo, valor }: { titulo: string; valor: string }) {
   );
 }
 
-function QrBox({ img, titulo, sub }: { img: string; titulo: string; sub: string }) {
+function QrBox({ img, titulo, sub, pix }: { img: string; titulo: string; sub: string; pix?: boolean }) {
   return (
-    <div className="via-qr">
+    <div className={pix ? "via-qr via-qr--pix" : "via-qr"}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={img} alt={titulo} />
       <div className="via-qr-titulo">{titulo}</div>

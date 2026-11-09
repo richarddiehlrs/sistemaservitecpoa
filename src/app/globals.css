@@ -312,6 +312,10 @@ body {
 
 .via-os--meia-pagina .via-qr img { width: 58px; height: 58px; }
 .via-os--pagina-inteira .via-qr img { width: 78px; height: 78px; }
+/* PIX tem ~150 caracteres: precisa de mais área para a câmera do banco ler */
+.via-os--meia-pagina .via-qr--pix img { width: 78px; height: 78px; }
+.via-os--pagina-inteira .via-qr--pix img { width: 100px; height: 100px; }
+.via-qr img { image-rendering: pixelated; }
 
 .via-qr-titulo {
   font-weight: 700;
@@ -468,6 +472,10 @@ body {
 .via-os--compacta .via-qrs img {
   width: 52px !important;
   height: 52px !important;
+}
+.via-os--compacta .via-qrs .via-qr--pix img {
+  width: 70px !important;
+  height: 70px !important;
 }
 .via-os--compacta .via-garantia {
   font-size: 7pt;

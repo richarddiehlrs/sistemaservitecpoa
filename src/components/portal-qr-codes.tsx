@@ -1,6 +1,7 @@
 import { pixCopiaCola, PIX_CHAVE_CNPJ, GOOGLE_REVIEW_URL, formatPixCnpj } from "@/lib/pix";
 import { qrImageUrl } from "@/lib/qrcode";
 import { formatCurrency } from "@/lib/format";
+import { CopiarPix } from "./copiar-pix";
 
 export function PortalQrCodes({
   empresaNome,
@@ -43,6 +44,7 @@ export function PortalQrCodes({
           {valorTotal != null && valorTotal > 0 && (
             <p className="mt-2 text-lg font-bold text-slate-900">{formatCurrency(valorTotal)}</p>
           )}
+          <CopiarPix codigo={pixPayload} />
         </div>
         <div className="flex flex-col items-center rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
