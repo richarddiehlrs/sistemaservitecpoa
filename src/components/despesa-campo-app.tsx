@@ -55,9 +55,12 @@ function contaSugerida(contas: ContaDespesa[], forma: string): string {
 export function DespesaCampoApp({
   osOpcoes,
   contas,
+  mostrarBotao = true,
 }: {
   osOpcoes: { id: string; label: string }[];
   contas: ContaDespesa[];
+  /** false = só fila/aviso e o formulário (aberto por /campo?nova-despesa=1). */
+  mostrarBotao?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -130,9 +133,11 @@ export function DespesaCampoApp({
 
   return (
     <div className="space-y-2">
-      <button type="button" onClick={() => setAberto(true)} className="btn-primary w-full sm:w-auto">
-        <Plus className="h-4 w-4" /> Lançar despesa
-      </button>
+      {mostrarBotao && (
+        <button type="button" onClick={() => setAberto(true)} className="btn-primary w-full sm:w-auto">
+          <Plus className="h-4 w-4" /> Lançar despesa
+        </button>
+      )}
 
       {(pendentes.length > 0 || !online) && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">

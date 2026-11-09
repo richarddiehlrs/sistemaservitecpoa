@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { Wrench, Plus, Clock, AlertTriangle, PenLine, LogIn, Calendar, Trophy } from "lucide-react";
+import { Wrench, Plus, AlertTriangle, Calendar, Receipt, QrCode, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getConfig } from "@/lib/config";
-import { OsPendentesLista } from "@/components/os-pendentes-lista";
 import { PushAtivar } from "@/components/push-ativar";
-import { PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { STATUS_OS_ABERTAS, ordenarOsPendentes } from "@/lib/os-status";
 import { STATUS_AGENDA_PENDENTE, STATUS_OS_ATRASO, hojeYmd } from "@/lib/alertas";
 import { CampoAgendaDia, type VisitaCampoDia } from "@/components/campo-agenda-dia";
@@ -12,7 +10,9 @@ import { CompartilharGps } from "@/components/compartilhar-gps";
 import { tecnicoDoProfile } from "@/lib/auth-guard";
 import { calcComissaoTecnico, calcLucroOsSimples } from "@/lib/produtividade-tecnico";
 import type { Profile } from "@/types/database";
-import { formatCurrency, formatDate, formatNumeroOS } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
+import { saudacao } from "@/lib/mensagens-cliente";
+import { InstalarIphone } from "@/components/instalar-iphone";
 import { resumoFinanceiroOs } from "@/lib/os-valores";
 import { registrarPosicaoTecnico } from "./actions";
 import { MinhasDespesasCampo } from "./minhas-despesas";
@@ -148,84 +148,56 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       : null,
   }));
 
+  const pendencias = [
+    osAtrasadas.length > 0 && { href: "/ordens", texto: `${osAtrasadas.length} atrasada(s)`, tom: "text-red-700" },
+    semCheckin.length > 0 && { href: "#visitas", texto: `${semCheckin.length} sem check-in`, tom: "text-amber-700" },
+    semAssinatura.length > 0 && { href: "/ordens", texto: `${semAssinatura.length} sem assinatura`, tom: "text-amber-700" },
+  ].filter(Boolean) as { href: string; texto: string; tom: string }[];
+
+  const dataHoje = new Date(`${hoje}T12:00:00`).toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  });
+
   return (
-    <div>
-      <MinhasDespesasCampo profileId={profile.id} />
-      <PageHeader
-        title={`Olá, ${profile.nome || tecnico}`}
-        subtitle="Seu painel de campo — visitas, ordens e alertas do dia"
-        action={
-          <Link href="/ordens/nova" className="btn-primary">
-            <Plus className="h-4 w-4" /> Nova OS
-          </Link>
-        }
-      />
+    <div className="mx-auto max-w-2xl space-y-4 pb-6">
+      <InstalarIphone />
 
-      <PushAtivar />
-
-      <div className="mb-6">
-        <CompartilharGps
-          action={registrarPosicaoTecnico}
-          emAtendimento={emAtendimento.length > 0}
-          agendamentoId={atendimentoAtivo?.id}
-        />
+      {/* Cabeçalho do dia */}
+      <div>
+        <p className="text-sm capitalize text-slate-500">{dataHoje}</p>
+        <h1 className="text-2xl font-bold text-slate-900">
+          {saudacao(profile.nome || tecnico).replace("!", "")}
+        </h1>
+        <p className="mt-0.5 text-sm text-slate-500">
+          {visitasPendentes.length === 0
+            ? "Nenhuma visita pendente hoje."
+            : `${visitasPendentes.length} visita(s) hoje${emAtendimento.length ? " • 1 em atendimento" : ""}`}
+        </p>
       </div>
 
-      {/* Alertas rápidos */}
-      <div id="alertas" className="mb-6 grid scroll-mt-20 grid-cols-2 gap-2 sm:grid-cols-4">
-        <AlertaCard
-          href="/campo#visitas"
-          label="Visitas hoje"
-          valor={visitasPendentes.length}
-          icon={<Calendar className="h-4 w-4" />}
-          tom="blue"
-        />
-        <AlertaCard
-          href="/ordens"
-          label="Atrasadas"
-          valor={osAtrasadas.length}
-          icon={<AlertTriangle className="h-4 w-4" />}
-          tom={osAtrasadas.length > 0 ? "red" : "default"}
-        />
-        <AlertaCard
-          href="/ordens"
-          label="Sem assinatura"
-          valor={semAssinatura.length}
-          icon={<PenLine className="h-4 w-4" />}
-          tom={semAssinatura.length > 0 ? "amber" : "default"}
-        />
-        <AlertaCard
-          href="/campo#visitas"
-          label="Sem check-in"
-          valor={semCheckin.length}
-          icon={<LogIn className="h-4 w-4" />}
-          tom={semCheckin.length > 0 ? "amber" : "default"}
-        />
+      {/* Ações rápidas */}
+      <div className="grid grid-cols-4 gap-2">
+        <AcaoRapida href="/ordens/nova" label="Nova OS" icon={<Plus className="h-5 w-5" />} destaque />
+        <AcaoRapida href="/campo?nova-despesa=1" label="Despesa" icon={<Receipt className="h-5 w-5" />} />
+        <AcaoRapida href="/escanear" label="Escanear" icon={<QrCode className="h-5 w-5" />} />
+        <AcaoRapida href="/agenda" label="Agenda" icon={<Calendar className="h-5 w-5" />} />
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard title="Visitas hoje" value={String(visitasPendentes.length)} icon={<Clock className="h-5 w-5" />} tone="blue" />
-        <StatCard title="Em atendimento" value={String(emAtendimento.length)} tone="amber" />
-        <StatCard title="OS em aberto" value={String(osAbertas?.length || 0)} icon={<Wrench className="h-5 w-5" />} />
-        <StatCard title="Despesas do mês" value={formatCurrency(totalDespesasMes)} tone="red" />
-      </div>
-
-      {config.comissao_percent > 0 && (
-        <div className="card mb-6 border-amber-100 bg-amber-50/40 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
-                <Trophy className="h-4 w-4" /> Comissão estimada ({config.comissao_percent}%)
-              </p>
-              <p className="mt-1 text-xs text-amber-800">
-                {osConcluidasMes?.length || 0} OS concluída(s) no mês • lucro {formatCurrency(lucroMes)}
-              </p>
-            </div>
-            <p className="text-2xl font-bold text-amber-700">{formatCurrency(comissaoMes)}</p>
-          </div>
+      {/* Pendências numa linha só */}
+      {pendencias.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          {pendencias.map((p) => (
+            <Link key={p.texto} href={p.href} className={`font-medium hover:underline ${p.tom}`}>
+              {p.texto}
+            </Link>
+          ))}
         </div>
       )}
 
+      {/* Visitas de hoje — o trabalho do dia */}
       <div id="visitas" className="scroll-mt-20">
         <CampoAgendaDia
           visitas={visitasSerializadas}
@@ -238,81 +210,90 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
         />
       </div>
 
-      {/* OS que precisam de atenção */}
-      {(osAtrasadas.length > 0 || semAssinatura.length > 0) && (
-        <div className="card mb-6 p-4">
-          <h2 className="mb-3 font-semibold text-slate-900">Precisa da sua atenção</h2>
-          <div className="space-y-2">
-            {osAtrasadas.slice(0, 5).map((o) => (
-              <Link
-                key={`atraso-${o.id}`}
-                href={`/ordens/${o.id}`}
-                className="flex items-center justify-between rounded-lg border border-red-100 bg-red-50/50 px-3 py-2 text-sm hover:bg-red-50"
-              >
-                <span>
-                  <span className="font-semibold text-red-800">{formatNumeroOS(o.numero)}</span>
-                  <span className="ml-2 text-red-600">Visita atrasada ({formatDate(o.data_previsao!)})</span>
-                </span>
-                <StatusBadge status={o.status} />
-              </Link>
-            ))}
-            {semAssinatura.slice(0, 5).map((o) => (
-              <Link
-                key={`sig-${o.id}`}
-                href={`/ordens/${o.id}`}
-                className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 text-sm hover:bg-amber-50"
-              >
-                <span>
-                  <span className="font-semibold text-amber-900">{formatNumeroOS(o.numero)}</span>
-                  <span className="ml-2 text-amber-700">Assinatura pendente</span>
-                </span>
-                <StatusBadge status={o.status} />
-              </Link>
-            ))}
+      {/* Minhas OS: só o atalho, sem a lista inteira */}
+      <Link href="/ordens" className="card flex items-center justify-between px-4 py-3 text-sm hover:bg-slate-50">
+        <span className="flex items-center gap-2 font-medium text-slate-800">
+          <Wrench className="h-4 w-4 text-slate-400" /> Minhas ordens em aberto
+        </span>
+        <span className="flex items-center gap-1 text-slate-500">
+          {osPendentes.length} <ChevronRight className="h-4 w-4" />
+        </span>
+      </Link>
+
+      <MinhasDespesasCampo profileId={profile.id} compacto />
+
+      {/* Resumo do mês (recolhido) */}
+      <details className="card group p-0">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm">
+          <span className="font-medium text-slate-800">Resumo do mês</span>
+          <span className="text-slate-500">
+            {osConcluidasMes?.length || 0} OS concluída(s) <span className="ml-1 inline-block transition group-open:rotate-90">›</span>
+          </span>
+        </summary>
+        <dl className="grid grid-cols-2 gap-3 border-t border-slate-100 px-4 py-3 text-sm">
+          <div>
+            <dt className="text-xs text-slate-500">OS em aberto</dt>
+            <dd className="font-semibold text-slate-900">{osAbertas?.length || 0}</dd>
           </div>
-        </div>
-      )}
+          <div>
+            <dt className="text-xs text-slate-500">Despesas do mês</dt>
+            <dd className="font-semibold text-red-600">{formatCurrency(totalDespesasMes)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">Lucro das OS concluídas</dt>
+            <dd className="font-semibold text-slate-900">{formatCurrency(lucroMes)}</dd>
+          </div>
+          {config.comissao_percent > 0 && (
+            <div>
+              <dt className="text-xs text-slate-500">Comissão ({config.comissao_percent}%)</dt>
+              <dd className="font-semibold text-amber-700">{formatCurrency(comissaoMes)}</dd>
+            </div>
+          )}
+        </dl>
+      </details>
 
-      <div className="card mb-6 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">Todas as minhas ordens</h2>
-          <Link href="/ordens" className="text-sm text-brand-600 hover:underline">Ver todas</Link>
+      {/* Ajustes do app (recolhido) */}
+      <details className="card group p-0">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm">
+          <span className="font-medium text-slate-800">Notificações e localização</span>
+          <span className="text-slate-500">
+            {emAtendimento.length > 0 ? "em atendimento" : "ajustes"}{" "}
+            <span className="ml-1 inline-block transition group-open:rotate-90">›</span>
+          </span>
+        </summary>
+        <div className="space-y-3 border-t border-slate-100 p-4">
+          <PushAtivar />
+          <CompartilharGps
+            action={registrarPosicaoTecnico}
+            emAtendimento={emAtendimento.length > 0}
+            agendamentoId={atendimentoAtivo?.id}
+          />
         </div>
-        <OsPendentesLista
-          lista={osPendentes as never[]}
-          titulo={`${osPendentes.length} ordem(ns) atribuída(s) a você`}
-        />
-      </div>
-
+      </details>
     </div>
   );
 }
 
-function AlertaCard({
+function AcaoRapida({
   href,
   label,
-  valor,
   icon,
-  tom = "default",
+  destaque,
 }: {
   href: string;
   label: string;
-  valor: number;
   icon: React.ReactNode;
-  tom?: "default" | "red" | "amber" | "blue";
+  destaque?: boolean;
 }) {
-  const cores = {
-    default: "border-slate-200 bg-white text-slate-700",
-    red: "border-red-200 bg-red-50 text-red-800",
-    amber: "border-amber-200 bg-amber-50 text-amber-900",
-    blue: "border-brand-200 bg-brand-50 text-brand-800",
-  };
   return (
-    <Link href={href} className={`rounded-xl border p-3 transition hover:shadow-sm ${cores[tom]}`}>
-      <div className="flex items-center gap-2 text-xs font-medium opacity-80">
-        {icon} {label}
-      </div>
-      <p className="mt-1 text-2xl font-bold">{valor}</p>
+    <Link
+      href={href}
+      className={`flex flex-col items-center gap-1 rounded-xl border px-1 py-3 text-xs font-medium transition active:scale-95 ${
+        destaque ? "border-brand-600 bg-brand-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      {icon}
+      {label}
     </Link>
   );
 }
