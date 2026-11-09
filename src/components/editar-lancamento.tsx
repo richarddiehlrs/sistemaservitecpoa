@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Loader2, Pencil, X } from "lucide-react";
 import type { CategoriaFinanceira, LancamentoFinanceiro } from "@/types/database";
 import type { ActionResult } from "@/lib/action-result";
+import { formatCurrency } from "@/lib/format";
+import { FORMAS_PAGAMENTO } from "@/lib/formas-pagamento";
 import { useAction } from "./use-action";
 
 type LancamentoEdit = Pick<
@@ -122,41 +124,22 @@ export function EditarLancamento({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Situação</label>
-                  <select name="status" className="input" defaultValue={lancamento.status}>
-                    <option value="pendente">{lancamento.tipo === "receita" ? "A receber" : "A pagar"}</option>
-                    <option value="parcial">Parcial</option>
-                    <option value="pago">{lancamento.tipo === "receita" ? "Recebido" : "Pago"}</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Valor já pago (parcial)</label>
-                  <input name="valor_pago" type="number" step="0.01" min="0" className="input"
-                    defaultValue={lancamento.valor_pago || 0} />
-                </div>
+              <div>
+                <label className="label">Forma de pagamento prevista</label>
+                <select name="forma_pagamento" className="input" defaultValue={lancamento.forma_pagamento || ""}>
+                  <option value="">-</option>
+                  {FORMAS_PAGAMENTO.map((f) => (
+                    <option key={f}>{f}</option>
+                  ))}
+                </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Forma de pagamento</label>
-                  <select name="forma_pagamento" className="input" defaultValue={lancamento.forma_pagamento || ""}>
-                    <option value="">-</option>
-                    <option>Dinheiro</option>
-                    <option>PIX</option>
-                    <option>Cartão de débito</option>
-                    <option>Cartão de crédito</option>
-                    <option>Boleto</option>
-                    <option>Transferência</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Data pagamento</label>
-                  <input name="data_pagamento" type="date" className="input"
-                    defaultValue={lancamento.data_pagamento || ""} />
-                </div>
-              </div>
+              <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                Já pago: <strong>{formatCurrency(Number(lancamento.valor_pago || 0))}</strong>. Para lançar,
+                corrigir ou excluir pagamentos use a lista de pagamentos — a soma e a situação
+                ({lancamento.tipo === "receita" ? "a receber / parcial / recebido" : "a pagar / parcial / pago"})
+                são atualizadas automaticamente.
+              </p>
 
               {lancamento.tipo === "receita" && (
                 <div>

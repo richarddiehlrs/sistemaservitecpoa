@@ -969,6 +969,13 @@ async function abrirRetornoGarantiaImpl(osOrigemId: string, formData: FormData) 
   redirect(`/ordens/${nova!.id}/editar`);
 }
 
+/** Data informada no formulário (pagamento recebido em outro dia); nunca no futuro. */
+function dataPagamentoForm(v: string | null): string | null {
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  if (v > hojeYmdLocal()) throw new Error("A data do pagamento não pode ser no futuro.");
+  return v;
+}
+
 async function registrarPagamentoOsImpl(osId: string, formData: FormData) {
   await requirePermissao("ordens");
   const fd = assertFormData(formData);
@@ -1005,6 +1012,7 @@ async function registrarPagamentoOsImpl(osId: string, formData: FormData) {
     tipo,
     formaPagamento: str(fd.get("forma_pagamento")),
     observacao: str(fd.get("observacao")) ?? undefined,
+    dataPagamento: dataPagamentoForm(str(fd.get("data_pagamento"))),
   });
 
   revalidatePath(`/ordens/${osId}`);

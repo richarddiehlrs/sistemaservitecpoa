@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, HandCoins, X } from "lucide-react";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, hojeYmdLocal } from "@/lib/format";
+import { FORMAS_PAGAMENTO } from "@/lib/formas-pagamento";
 import { useToast } from "./toast";
 import type { FinanceiroActionResult } from "@/app/(app)/financeiro/actions";
 
@@ -19,9 +20,19 @@ function mensagemErro(err: unknown): string {
 export function RegistrarPagamento({
   lancamento,
   action,
+  contas = [],
 }: {
-  lancamento: { id: string; descricao: string; valor: number; valor_pago: number; juros: number; multa: number };
+  lancamento: {
+    id: string;
+    descricao: string;
+    valor: number;
+    valor_pago: number;
+    juros: number;
+    multa: number;
+    forma_pagamento?: string | null;
+  };
   action: (formData: FormData) => Promise<FinanceiroActionResult>;
+  contas?: { id: string; nome: string }[];
 }) {
   const [aberto, setAberto] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -97,22 +108,39 @@ export function RegistrarPagamento({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label">Data</label>
-                  <input name="data_pagamento" type="date" className="input" defaultValue={new Date().toISOString().slice(0, 10)} />
+                  <label className="label">Data do pagamento</label>
+                  <input name="data_pagamento" type="date" className="input" max={hojeYmdLocal()} defaultValue={hojeYmdLocal()} />
                 </div>
                 <div>
                   <label className="label">Forma</label>
-                  <select name="forma_pagamento" className="input">
+                  <select name="forma_pagamento" className="input" defaultValue={lancamento.forma_pagamento ?? ""}>
                     <option value="">-</option>
-                    <option>Dinheiro</option>
-                    <option>PIX</option>
-                    <option>Cartão de débito</option>
-                    <option>Cartão de crédito</option>
-                    <option>Boleto</option>
-                    <option>Transferência</option>
+                    {FORMAS_PAGAMENTO.map((f) => (
+                      <option key={f}>{f}</option>
+                    ))}
                   </select>
                 </div>
               </div>
+              {contas.length > 0 && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Conta</label>
+                    <select name="conta_id" className="input" defaultValue="">
+                      <option value="">Automática (pela forma)</option>
+                      {contas.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Taxa retida (R$)</label>
+                    <input name="taxa" type="number" step="0.01" min="0" defaultValue={0} className="input" />
+                  </div>
+                </div>
+              )}
+              <input name="observacao" className="input" placeholder="Observação (opcional)" />
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setAberto(false)} className="btn-secondary">Cancelar</button>
                 <button type="submit" className="btn-primary" disabled={pending}>

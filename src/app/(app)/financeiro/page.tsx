@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { TrendingUp, TrendingDown, Wallet, Clock, Receipt, CalendarCog, LineChart, RefreshCw, X, Ban, PiggyBank, Percent } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Clock, Receipt, CalendarCog, LineChart, RefreshCw, X, Ban, PiggyBank, Percent, Landmark, ListChecks } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getConfig } from "@/lib/config";
 import { requirePermissao } from "@/lib/auth-guard";
@@ -11,7 +11,7 @@ import { CobrancaWhatsAppLote } from "@/components/cobranca-whatsapp-lote";
 import { ConfirmButton } from "@/components/confirm-button";
 import { LancamentoAcoes } from "@/components/lancamento-acoes";
 import { ActionForm } from "@/components/use-action";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, hojeYmdLocal } from "@/lib/format";
 import { saldoEmAberto, valorDevido } from "@/lib/financeiro";
 import { calcMetricasCaixa, calcMetricasCompetencia } from "@/lib/metricas-financeiras";
 import { calcPrejuizoGarantiaPeriodo } from "@/lib/os-garantia";
@@ -47,7 +47,7 @@ export default async function FinanceiroPage({
   await requirePermissao("financeiro");
   const periodo = inicioFimMes(mes);
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeYmdLocal();
 
   let query = supabase
     .from("lancamentos_financeiros")
@@ -62,24 +62,44 @@ export default async function FinanceiroPage({
 
   const [{ data: lancamentos }, { data: lancamentosCaixa }, { data: categorias }, { data: osRetorno }, config] = await Promise.all([
     query,
+    // Caixa: cada pagamento conta no mês em que entrou/saiu (não na data do último)
     supabase
-      .from("lancamentos_financeiros")
-      .select("*, categorias_financeiras(grupo_dre)")
-      .in("status", ["pago", "parcial"])
-      .gt("valor_pago", 0)
+      .from("os_pagamentos")
+      .select("valor, lancamentos_financeiros!inner(tipo, status, categorias_financeiras(grupo_dre))")
       .gte("data_pagamento", periodo.inicio)
       .lte("data_pagamento", periodo.fim),
     supabase.from("categorias_financeiras").select("*").order("nome"),
     supabase.from("ordens_servico").select("id").eq("motivo_atendimento", "retorno_garantia"),
     getConfig(),
   ]);
+  const { data: contasFin } = await supabase
+    .from("contas_financeiras")
+    .select("id, nome")
+    .eq("ativo", true)
+    .order("nome");
 
   const lista = lancamentos || [];
   const ativos = lista.filter((l) => l.status !== "cancelado");
   const receitas = ativos.filter((l) => l.tipo === "receita");
   const despesas = ativos.filter((l) => l.tipo === "despesa");
 
-  const caixaAtivos = (lancamentosCaixa || []).filter((l) => l.status !== "cancelado");
+  type PagamentoCaixa = {
+    valor: number;
+    lancamentos_financeiros: {
+      tipo: "receita" | "despesa";
+      status: string;
+      categorias_financeiras: { grupo_dre?: string | null } | null;
+    } | null;
+  };
+  const caixaAtivos = ((lancamentosCaixa || []) as unknown as PagamentoCaixa[])
+    .filter((p) => p.lancamentos_financeiros)
+    .map((p) => ({
+      tipo: p.lancamentos_financeiros!.tipo,
+      valor: Number(p.valor),
+      valor_pago: Number(p.valor),
+      status: "pago",
+      categorias_financeiras: p.lancamentos_financeiros!.categorias_financeiras,
+    }));
   const receitasCaixa = caixaAtivos.filter((l) => l.tipo === "receita");
   const despesasCaixa = caixaAtivos.filter((l) => l.tipo === "despesa");
 
@@ -116,6 +136,9 @@ export default async function FinanceiroPage({
             </Link>
             <Link href="/financeiro/recorrentes" className="btn-secondary">
               <CalendarCog className="h-4 w-4" /> Despesas fixas
+            </Link>
+            <Link href="/financeiro/conciliacao" className="btn-secondary">
+              <Landmark className="h-4 w-4" /> Conciliação bancária
             </Link>
             <Link href="/manutencao" className="btn-secondary">
               Limpar órfãos
@@ -295,7 +318,9 @@ export default async function FinanceiroPage({
                       {vencido && <span className="block text-[10px] font-semibold uppercase">Vencido</span>}
                     </td>
                     <td className="font-medium">
-                      {l.descricao}
+                      <Link href={`/financeiro/lancamentos/${l.id}`} className="hover:text-brand-700 hover:underline">
+                        {l.descricao}
+                      </Link>
                       {l.origem === "campo" && (
                         <span className="ml-1 inline-block rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
                           Campo{l.tecnico ? ` • ${l.tecnico}` : ""}
@@ -337,8 +362,9 @@ export default async function FinanceiroPage({
                       <div className="flex items-center justify-end gap-1">
                         {l.status !== "pago" && l.status !== "cancelado" && (
                           <RegistrarPagamento
-                            lancamento={{ id: l.id, descricao: l.descricao, valor: l.valor, valor_pago: l.valor_pago, juros: l.juros, multa: l.multa }}
+                            lancamento={{ id: l.id, descricao: l.descricao, valor: l.valor, valor_pago: l.valor_pago, juros: l.juros, multa: l.multa, forma_pagamento: l.forma_pagamento }}
                             action={registrarPagamento}
+                            contas={contasFin || []}
                           />
                         )}
                         {l.tipo === "receita" && vencido && (
@@ -350,6 +376,11 @@ export default async function FinanceiroPage({
                             vencimento={l.data_vencimento}
                             empresa={config.nome}
                           />
+                        )}
+                        {Number(l.valor_pago) > 0 && (
+                          <Link href={`/financeiro/lancamentos/${l.id}`} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Ver / editar pagamentos">
+                            <ListChecks className="h-4 w-4" />
+                          </Link>
                         )}
                         {l.tipo === "receita" && Number(l.valor_pago) > 0 && (
                           <Link href={`/imprimir/recibo/${l.id}`} target="_blank" className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Recibo / comprovante">

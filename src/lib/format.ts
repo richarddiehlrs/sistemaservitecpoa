@@ -82,14 +82,26 @@ export function ymdLocal(d: Date = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Fuso da empresa — o servidor (Vercel) roda em UTC; "hoje" deve ser o de Porto Alegre. */
+export const FUSO_EMPRESA = "America/Sao_Paulo";
+
+/** YYYY-MM-DD de um instante no fuso da empresa. */
+export function ymdNoFuso(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: FUSO_EMPRESA,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
 export function hojeYmdLocal(): string {
-  return ymdLocal();
+  return ymdNoFuso();
 }
 
 export function amanhaYmdLocal(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return ymdLocal(d);
+  const [y, m, d] = ymdNoFuso().split("-").map(Number);
+  return ymdLocal(new Date(y, m - 1, d + 1));
 }
 
 export function formatDate(value: string | Date | null | undefined): string {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Banknote, Loader2 } from "lucide-react";
-import { formatCurrency, parseNumForm } from "@/lib/format";
+import { formatCurrency, hojeYmdLocal, parseNumForm } from "@/lib/format";
 import { calcValorSinal } from "@/lib/os-pagamentos";
 import { FORMAS_PAGAMENTO } from "@/lib/formas-pagamento";
 import type { ActionResult } from "@/lib/action-result";
@@ -146,11 +146,22 @@ export function RegistrarPagamentoOs({
           </div>
         </div>
 
-        <input
-          name="observacao"
-          className="input py-1.5 text-sm"
-          placeholder="Observação (opcional)"
-        />
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="label text-xs">Data do recebimento</label>
+            <input
+              name="data_pagamento"
+              type="date"
+              max={hojeYmdLocal()}
+              defaultValue={hojeYmdLocal()}
+              className="input py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="label text-xs">Observação</label>
+            <input name="observacao" className="input py-1.5 text-sm" placeholder="Opcional" />
+          </div>
+        </div>
 
         <button
           type="submit"

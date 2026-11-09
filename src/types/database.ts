@@ -290,15 +290,70 @@ export type MetaFaturamento = {
   updated_at: string;
 };
 
+/** Livro de pagamentos: uma linha por recebimento/pagamento (OS ou avulso). */
 export type OsPagamento = {
   id: string;
-  os_id: string;
+  os_id: string | null;
   lancamento_id: string | null;
-  tipo: "visita" | "sinal" | "saldo" | "parcial" | "outro";
+  tipo: "visita" | "sinal" | "saldo" | "parcial" | "outro" | "baixa";
   valor: number;
+  data_pagamento: string;
   forma_pagamento: string | null;
+  conta_id: string | null;
+  taxa: number;
+  extrato_transacao_id: string | null;
   observacao: string | null;
   registrado_por: string | null;
+  atualizado_por: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ContaFinanceira = {
+  id: string;
+  nome: string;
+  tipo: "banco" | "maquininha" | "caixa" | "outro";
+  banco: string | null;
+  agencia: string | null;
+  numero: string | null;
+  formas_padrao: string[];
+  saldo_inicial: number;
+  data_saldo_inicial: string | null;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ExtratoImportacao = {
+  id: string;
+  conta_id: string;
+  arquivo_nome: string | null;
+  formato: "ofx" | "csv" | "pdf" | "manual";
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  saldo_final: number | null;
+  qtd_transacoes: number;
+  qtd_duplicadas: number;
+  importado_por: string | null;
+  created_at: string;
+};
+
+export type ExtratoTransacao = {
+  id: string;
+  conta_id: string;
+  importacao_id: string | null;
+  data: string;
+  valor: number;
+  descricao: string;
+  documento: string | null;
+  chave: string;
+  status: "pendente" | "conciliado" | "ignorado";
+  lancamento_id: string | null;
+  taxa_ajuste: number;
+  taxa_pagamento_id: string | null;
+  observacao: string | null;
+  conciliado_por: string | null;
+  conciliado_em: string | null;
   created_at: string;
 };
 
@@ -383,6 +438,9 @@ export type Database = {
       despesas_recorrentes: TableDef<DespesaRecorrente>;
       metas_faturamento: TableDef<MetaFaturamento>;
       os_pagamentos: TableDef<OsPagamento>;
+      contas_financeiras: TableDef<ContaFinanceira>;
+      extrato_importacoes: TableDef<ExtratoImportacao>;
+      extrato_transacoes: TableDef<ExtratoTransacao>;
       notificacoes: TableDef<Notificacao>;
       preferencias_alertas: TableDef<PreferenciasAlertas>;
     };
@@ -436,8 +494,26 @@ export type Database = {
           p_tipo?: string | null;
           p_forma_pagamento?: string | null;
           p_observacao?: string | null;
+          p_data_pagamento?: string | null;
         };
         Returns: boolean;
+      };
+      conciliar_transacao: {
+        Args: { p_transacao_id: string; p_pagamento_ids: string[]; p_diferenca_como_taxa?: boolean };
+        Returns: undefined;
+      };
+      desconciliar_transacao: {
+        Args: { p_transacao_id: string };
+        Returns: undefined;
+      };
+      criar_lancamento_de_transacao: {
+        Args: {
+          p_transacao_id: string;
+          p_descricao: string;
+          p_categoria_id?: string | null;
+          p_cliente_id?: string | null;
+        };
+        Returns: string;
       };
       sincronizar_financeiro_retorno_garantia: {
         Args: { p_os_id: string; p_observacao?: string | null };

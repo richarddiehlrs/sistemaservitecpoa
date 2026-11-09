@@ -1,23 +1,30 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { hojeYmdLocal } from "@/lib/format";
 import { calcValorTotalCliente } from "@/lib/os-valores";
-import { criarReceitaPendenteOs, statusReceitaComPagamento } from "@/lib/os-financeiro";
+import { criarReceitaPendenteOs } from "@/lib/os-financeiro";
 import type { Database } from "@/types/database";
 
 type Db = SupabaseClient<Database>;
 
-export type TipoPagamentoOs = "visita" | "sinal" | "saldo" | "parcial" | "outro";
+export type TipoPagamentoOs = "visita" | "sinal" | "saldo" | "parcial" | "outro" | "baixa";
 
 export type OsPagamentoRow = {
   id: string;
-  os_id: string;
+  os_id: string | null;
   lancamento_id: string | null;
   tipo: TipoPagamentoOs;
   valor: number;
+  data_pagamento: string;
   forma_pagamento: string | null;
+  conta_id: string | null;
+  taxa: number;
+  extrato_transacao_id: string | null;
   observacao: string | null;
+  registrado_por: string | null;
   created_at: string;
 };
+
+export const COLUNAS_PAGAMENTO =
+  "id, os_id, lancamento_id, tipo, valor, data_pagamento, forma_pagamento, conta_id, taxa, extrato_transacao_id, observacao, registrado_por, created_at";
 
 /** Calcula valor de sinal com base no saldo e percentual configurável. */
 export function calcValorSinal(saldoCliente: number, percentual: number): number {
@@ -53,6 +60,8 @@ export async function registrarPagamentoOsComHistorico(
     tipo: TipoPagamentoOs;
     formaPagamento?: string | null;
     observacao?: string | null;
+    /** YYYY-MM-DD — permite lançar pagamento recebido em outro dia. */
+    dataPagamento?: string | null;
     garantirReceita?: boolean;
   }
 ): Promise<void> {
@@ -70,6 +79,7 @@ export async function registrarPagamentoOsComHistorico(
     p_tipo: opts.tipo,
     p_forma_pagamento: opts.formaPagamento ?? null,
     p_observacao: opts.observacao ?? null,
+    p_data_pagamento: opts.dataPagamento ?? null,
   });
 
   if (error) {
@@ -80,46 +90,15 @@ export async function registrarPagamentoOsComHistorico(
   }
 }
 
-/** Insere histórico de visita paga (quando receita criada diretamente no checkout). */
-export async function registrarHistoricoVisitaOs(
-  supabase: Db,
-  osId: string,
-  valor: number,
-  formaPagamento?: string | null
-): Promise<void> {
-  const visita = Math.round(Number(valor) * 100) / 100;
-  if (visita <= 0) return;
-
-  const { data: receita } = await supabase
-    .from("lancamentos_financeiros")
-    .select("id")
-    .eq("os_id", osId)
-    .eq("tipo", "receita")
-    .neq("status", "cancelado")
-    .maybeSingle();
-
-  const { error } = await supabase.from("os_pagamentos").insert({
-    os_id: osId,
-    lancamento_id: receita?.id ?? null,
-    tipo: "visita",
-    valor: visita,
-    forma_pagamento: formaPagamento ?? null,
-    observacao: "Visita técnica recebida no check-out",
-  });
-
-  if (error) {
-    console.error("[os-pagamentos] histórico visita:", error.message);
-  }
-}
-
 export async function listarPagamentosOs(
   supabase: Db,
   osId: string
 ): Promise<OsPagamentoRow[]> {
   const { data } = await supabase
     .from("os_pagamentos")
-    .select("id, os_id, lancamento_id, tipo, valor, forma_pagamento, observacao, created_at")
+    .select(COLUNAS_PAGAMENTO)
     .eq("os_id", osId)
+    .order("data_pagamento", { ascending: true })
     .order("created_at", { ascending: true });
 
   return (data || []) as OsPagamentoRow[];
@@ -131,6 +110,7 @@ export const LABEL_TIPO_PAGAMENTO: Record<TipoPagamentoOs, string> = {
   saldo: "Saldo final",
   parcial: "Pagamento parcial",
   outro: "Outro",
+  baixa: "Pagamento",
 };
 
 /** Resumo financeiro consolidado para OS (total, pago, saldo). */

@@ -140,7 +140,11 @@ export async function temReceitaAtivaOs(supabase: Db, osId: string): Promise<boo
 /** @deprecated Use temReceitaAtivaOs — mantido para compatibilidade. */
 export const temLancamentoAtivoOs = temReceitaAtivaOs;
 
-/** Registra no financeiro a visita técnica recebida no check-out (idempotente). */
+/**
+ * Registra no financeiro a visita técnica recebida no check-out (idempotente).
+ * Grava uma linha "visita" no livro de pagamentos; a soma/status da receita
+ * são recalculados pelo banco.
+ */
 export async function registrarReceitaVisitaCheckout(
   supabase: Db,
   osId: string,
@@ -161,65 +165,78 @@ export async function registrarReceitaVisitaCheckout(
   const hoje = hojeYmdLocal();
   const numeroFmt = `OS-${String(os.numero).padStart(5, "0")}`;
   const forma = formaPagamento || os.forma_pagamento || null;
-  const existente = await buscarReceitaAtivaOs(supabase, osId);
+  let receita = await buscarReceitaAtivaOs(supabase, osId);
 
-  if (existente) {
-    const pagoAtual = Number(existente.valor_pago) || 0;
-    if (pagoAtual + 0.001 >= visita) return true;
-
-    const novoPago = Math.max(pagoAtual, visita);
-    const valorLinha = Math.max(Number(existente.valor), novoPago);
-    const status = statusReceitaComPagamento(valorLinha, novoPago);
-
-    const { error } = await supabase
-      .from("lancamentos_financeiros")
-      .update({
-        valor: valorLinha,
-        valor_pago: novoPago,
-        valor_liquido: status === "pago" ? valorLinha : null,
-        status,
-        data_pagamento: hoje,
-        forma_pagamento: forma,
-        observacoes: "Visita técnica recebida no check-out",
-      })
-      .eq("id", existente.id);
-
-    if (error) {
-      console.error("[os-financeiro] Erro ao registrar visita:", error.message);
-      return false;
+  if (receita) {
+    const pagoAtual = Number(receita.valor_pago) || 0;
+    if (pagoAtual + 0.001 >= visita) return true; // visita já recebida
+    const falta = Math.round((visita - pagoAtual) * 100) / 100;
+    if (Number(receita.valor) + 0.001 < pagoAtual + falta) {
+      const { error } = await supabase
+        .from("lancamentos_financeiros")
+        .update({ valor: Math.round((pagoAtual + falta) * 100) / 100 })
+        .eq("id", receita.id);
+      if (error) {
+        console.error("[os-financeiro] Erro ao ajustar receita da visita:", error.message);
+        return false;
+      }
     }
-    const { registrarHistoricoVisitaOs } = await import("@/lib/os-pagamentos");
-    await registrarHistoricoVisitaOs(supabase, osId, visita, forma);
-    return true;
+    return inserirPagamentoVisita(supabase, osId, receita.id, falta, forma, hoje);
   }
 
   const { catReceita } = await buscarCategoriasFinanceiras(supabase);
+  const { data: criada, error } = await supabase
+    .from("lancamentos_financeiros")
+    .insert({
+      tipo: "receita",
+      descricao: `Receita ${numeroFmt}`,
+      categoria_id: catReceita?.id ?? null,
+      os_id: os.id,
+      cliente_id: os.cliente_id,
+      valor: visita,
+      valor_pago: 0,
+      data_competencia: hoje,
+      data_vencimento: hoje,
+      status: "pendente",
+      origem: "sistema",
+      forma_pagamento: forma,
+      observacoes: "Visita técnica recebida no check-out",
+    })
+    .select("id")
+    .single();
 
-  const { error } = await supabase.from("lancamentos_financeiros").insert({
-    tipo: "receita",
-    descricao: `Receita ${numeroFmt}`,
-    categoria_id: catReceita?.id ?? null,
-    os_id: os.id,
-    cliente_id: os.cliente_id,
-    valor: visita,
-    valor_pago: visita,
-    valor_liquido: visita,
-    data_competencia: hoje,
-    data_vencimento: hoje,
-    data_pagamento: hoje,
-    status: "pago",
-    origem: "sistema",
-    forma_pagamento: forma,
-    observacoes: "Visita técnica recebida no check-out",
-  });
-
-  if (error) {
-    console.error("[os-financeiro] Erro ao criar receita da visita:", error.message);
-    return false;
+  if (error || !criada) {
+    console.error("[os-financeiro] Erro ao criar receita da visita:", error?.message);
+    // Corrida com outra criação: usa a que já existe
+    receita = await buscarReceitaAtivaOs(supabase, osId);
+    if (!receita) return false;
+    return registrarReceitaVisitaCheckout(supabase, osId, visita, forma);
   }
 
-  const { registrarHistoricoVisitaOs } = await import("@/lib/os-pagamentos");
-  await registrarHistoricoVisitaOs(supabase, osId, visita, forma);
+  return inserirPagamentoVisita(supabase, osId, criada.id, visita, forma, hoje);
+}
+
+async function inserirPagamentoVisita(
+  supabase: Db,
+  osId: string,
+  lancamentoId: string,
+  valor: number,
+  forma: string | null,
+  data: string
+): Promise<boolean> {
+  const { error } = await supabase.from("os_pagamentos").insert({
+    os_id: osId,
+    lancamento_id: lancamentoId,
+    tipo: "visita",
+    valor,
+    data_pagamento: data,
+    forma_pagamento: forma,
+    observacao: "Visita técnica recebida no check-out",
+  });
+  if (error) {
+    console.error("[os-financeiro] Erro ao registrar pagamento da visita:", error.message);
+    return false;
+  }
   return true;
 }
 

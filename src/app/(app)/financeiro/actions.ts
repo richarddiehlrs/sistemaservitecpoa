@@ -6,6 +6,7 @@ import { requirePermissao } from "@/lib/auth-guard";
 import { hojeYmdLocal, parseNumForm, ymdLocal } from "@/lib/format";
 import { saldoEmAberto } from "@/lib/financeiro";
 import { safeAction, type ActionResult } from "@/lib/action-result";
+import { registrarPagamentoLancamento } from "./pagamentos-actions";
 
 export type FinanceiroActionResult = ActionResult;
 
@@ -64,6 +65,10 @@ export async function criarLancamento(formData: FormData): Promise<ActionResult>
         i === parcelas - 1
           ? Math.round((valorTotal - valorParcela * (parcelas - 1)) * 100) / 100
           : valorParcela;
+      const taxa =
+        i === parcelas - 1
+          ? Math.round((taxaCartao - taxaParcela * (parcelas - 1)) * 100) / 100
+          : taxaParcela;
       const pago = status === "pago";
       return {
         tipo,
@@ -73,8 +78,7 @@ export async function criarLancamento(formData: FormData): Promise<ActionResult>
         tecnico,
         valor,
         valor_pago: pago ? valor : 0,
-        taxa_cartao: taxaParcela,
-        valor_liquido: Math.round((valor - taxaParcela) * 100) / 100,
+        taxa_cartao: taxa,
         parcela_num: parcelas > 1 ? i + 1 : null,
         parcela_total: parcelas > 1 ? parcelas : null,
         data_competencia: competencia,
@@ -92,103 +96,41 @@ export async function criarLancamento(formData: FormData): Promise<ActionResult>
   });
 }
 
-// Registra pagamento total ou parcial, com juros/multa.
+// Registra pagamento total ou parcial (com juros/multa) no livro de pagamentos.
 export async function registrarPagamento(formData: FormData): Promise<ActionResult> {
-  return safeAction(async () => {
-    await requirePermissao("financeiro");
-    const id = String(formData.get("lancamento_id") || "").trim();
-    if (!id) throw new Error("Lançamento inválido.");
-
-    const supabase = await createClient();
-    const hoje = hojeYmdLocal();
-
-    const { data: l, error: errSel } = await supabase
-      .from("lancamentos_financeiros")
-      .select("valor, valor_pago, juros, multa, taxa_cartao, valor_liquido")
-      .eq("id", id)
-      .single();
-    if (errSel || !l) throw new Error("Lançamento não encontrado.");
-
-    const pagamento = num(formData.get("valor"));
-    if (pagamento <= 0) {
-      throw new Error("Informe um valor de pagamento maior que zero.");
-    }
-
-    const jurosNovos = num(formData.get("juros"));
-    const multaNovos = num(formData.get("multa"));
-    const forma = str(formData.get("forma_pagamento"));
-    const data = str(formData.get("data_pagamento")) || hoje;
-
-    const saldo = saldoEmAberto(l);
-    if (pagamento > saldo + 0.001) {
-      throw new Error(
-        `Pagamento excede o saldo em aberto (${saldo.toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        })}).`
-      );
-    }
-
-    const valorPagoAnterior = Number(l.valor_pago);
-    const jurosAnterior = Number(l.juros);
-    const multaAnterior = Number(l.multa);
-
-    const juros = jurosAnterior + jurosNovos;
-    const multa = multaAnterior + multaNovos;
-    const valorPago = valorPagoAnterior + pagamento;
-    const devido = Number(l.valor) + juros + multa;
-    const status = valorPago + 0.001 >= devido ? "pago" : "parcial";
-    const liquidoBase = Number(l.valor_liquido ?? Number(l.valor) - Number(l.taxa_cartao || 0));
-    const valorLiquidoRaw =
-      devido > 0 ? Math.round((valorPago / devido) * liquidoBase * 100) / 100 : liquidoBase;
-    const valorLiquido = Number.isFinite(valorLiquidoRaw) ? valorLiquidoRaw : liquidoBase;
-
-    const { data: atualizado, error } = await supabase
-      .from("lancamentos_financeiros")
-      .update({
-        valor_pago: Math.round(valorPago * 100) / 100,
-        juros,
-        multa,
-        valor_liquido: valorLiquido,
-        forma_pagamento: forma,
-        data_pagamento: data,
-        status,
-      })
-      .eq("id", id)
-      .eq("valor_pago", valorPagoAnterior)
-      .select("id")
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!atualizado) {
-      throw new Error(
-        "Outro pagamento foi registrado neste título. Atualize a página e tente novamente."
-      );
-    }
-    revalidarFinanceiro();
-  });
+  await requirePermissao("financeiro");
+  return registrarPagamentoLancamento(formData);
 }
 
 export async function marcarPago(id: string): Promise<ActionResult> {
   return safeAction(async () => {
     await requirePermissao("financeiro");
     const supabase = await createClient();
-    const hoje = hojeYmdLocal();
     const { data: l } = await supabase
       .from("lancamentos_financeiros")
-      .select("valor, juros, multa")
+      .select("valor, valor_pago, juros, multa, os_id, forma_pagamento")
       .eq("id", id)
       .single();
     if (!l) throw new Error("Lançamento não encontrado.");
-    const total = Number(l.valor) + Number(l.juros) + Number(l.multa);
-    const { error } = await supabase
-      .from("lancamentos_financeiros")
-      .update({ status: "pago", data_pagamento: hoje, valor_pago: total })
-      .eq("id", id);
+    const saldo = saldoEmAberto(l);
+    if (saldo <= 0) return;
+    const { error } = await supabase.from("os_pagamentos").insert({
+      lancamento_id: id,
+      os_id: l.os_id,
+      tipo: l.os_id ? "saldo" : "baixa",
+      valor: saldo,
+      data_pagamento: hojeYmdLocal(),
+      forma_pagamento: l.forma_pagamento,
+    });
     if (error) throw new Error(error.message);
     revalidarFinanceiro();
   });
 }
 
+/**
+ * Edita os dados do título. Valor pago, status e data de pagamento NÃO são
+ * editados aqui: vêm da lista de pagamentos (soma automática).
+ */
 export async function atualizarLancamento(
   id: string,
   formData: FormData
@@ -200,36 +142,13 @@ export async function atualizarLancamento(
 
     const { data: atual } = await supabase
       .from("lancamentos_financeiros")
-      .select("valor_pago, juros, multa, os_id")
+      .select("os_id, status")
       .eq("id", id)
       .single();
     if (!atual) throw new Error("Lançamento não encontrado.");
 
     const valor = num(formData.get("valor"));
-    const juros = num(formData.get("juros"));
-    const multa = num(formData.get("multa"));
-    const status = String(formData.get("status") || "pendente");
-    const devido = valor + juros + multa;
-
-    let valorPago = Number(atual.valor_pago);
-    let dataPagamento: string | null = str(formData.get("data_pagamento"));
-    if (status === "pago") {
-      valorPago = devido;
-      dataPagamento = dataPagamento || hoje;
-    } else if (status === "pendente") {
-      valorPago = 0;
-      dataPagamento = null;
-    } else if (status === "parcial") {
-      valorPago = Math.min(devido, num(formData.get("valor_pago")));
-      dataPagamento = valorPago > 0 ? dataPagamento || hoje : null;
-    }
-
-    const statusFinal =
-      status === "pago" || (status === "parcial" && valorPago + 0.001 >= devido)
-        ? "pago"
-        : status === "parcial" && valorPago > 0
-          ? "parcial"
-          : "pendente";
+    if (valor < 0) throw new Error("O valor não pode ser negativo.");
 
     const { error } = await supabase
       .from("lancamentos_financeiros")
@@ -239,13 +158,10 @@ export async function atualizarLancamento(
         categoria_id: str(formData.get("categoria_id")),
         tecnico: str(formData.get("tecnico")),
         valor,
-        juros,
-        multa,
-        valor_pago: Math.round(valorPago * 100) / 100,
+        juros: num(formData.get("juros")),
+        multa: num(formData.get("multa")),
         data_competencia: str(formData.get("data_competencia")) || hoje,
         data_vencimento: str(formData.get("data_vencimento")),
-        data_pagamento: dataPagamento,
-        status: statusFinal,
         forma_pagamento: str(formData.get("forma_pagamento")),
         observacoes: str(formData.get("observacoes")),
       })
@@ -253,14 +169,31 @@ export async function atualizarLancamento(
     if (error) throw new Error(error.message);
 
     if (atual.os_id) revalidatePath(`/ordens/${atual.os_id}`);
+    revalidatePath(`/financeiro/lancamentos/${id}`);
     revalidarFinanceiro();
   });
+}
+
+async function contarPagamentos(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  lancamentoId: string
+): Promise<number> {
+  const { count } = await supabase
+    .from("os_pagamentos")
+    .select("id", { count: "exact", head: true })
+    .eq("lancamento_id", lancamentoId);
+  return count ?? 0;
 }
 
 export async function cancelarLancamento(id: string): Promise<ActionResult> {
   return safeAction(async () => {
     await requirePermissao("financeiro");
     const supabase = await createClient();
+    if ((await contarPagamentos(supabase, id)) > 0) {
+      throw new Error(
+        "Este lançamento tem pagamentos registrados. Exclua ou estorne os pagamentos antes de cancelar (o dinheiro já entrou/saiu do caixa)."
+      );
+    }
     const { error } = await supabase
       .from("lancamentos_financeiros")
       .update({ status: "cancelado" })
@@ -280,6 +213,12 @@ export async function excluirLancamento(id: string): Promise<ActionResult> {
       .select("os_id")
       .eq("id", id)
       .single();
+
+    if ((await contarPagamentos(supabase, id)) > 0) {
+      throw new Error(
+        "Este lançamento tem pagamentos registrados. Exclua os pagamentos primeiro ou use Cancelar."
+      );
+    }
 
     const { error } = await supabase.from("lancamentos_financeiros").delete().eq("id", id);
     if (error) throw new Error(error.message);
@@ -343,7 +282,7 @@ export async function gerarDespesasDoMes(formData: FormData): Promise<ActionResu
   return safeAction(async () => {
     await requirePermissao("financeiro");
     const supabase = await createClient();
-    const mes = str(formData.get("mes")) || new Date().toISOString().slice(0, 7);
+    const mes = str(formData.get("mes")) || hojeYmdLocal().slice(0, 7);
     const [ano, m] = mes.split("-").map(Number);
     const inicio = `${mes}-01`;
     const ultimoDia = new Date(ano, m, 0).getDate();

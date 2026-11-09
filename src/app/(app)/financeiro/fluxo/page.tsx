@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermissao } from "@/lib/auth-guard";
 import { PageHeader, StatCard } from "@/components/ui";
 import { MonthlyBars } from "@/components/charts";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, hojeYmdLocal } from "@/lib/format";
 import { saldoEmAberto, inicioSemanaISO, labelSemana } from "@/lib/financeiro";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export default async function FluxoPage({
 
   const supabase = await createClient();
   const hoje = new Date();
-  const hojeISO = hoje.toISOString().slice(0, 10);
+  const hojeISO = hojeYmdLocal();
   const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
   const semanaAtual = inicioSemanaISO(hoje);
 

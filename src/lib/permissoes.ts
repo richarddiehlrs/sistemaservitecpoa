@@ -58,6 +58,7 @@ export function podeAcessarRota(papel: Papel, pathname: string): boolean {
   if (pathname.startsWith("/imprimir/os") || pathname.startsWith("/imprimir/recibo") || pathname.startsWith("/imprimir/etiqueta-os")) {
     return temPermissao(papel, "ordens");
   }
+  if (pathname.startsWith("/imprimir/conciliacao")) return temPermissao(papel, "financeiro");
   if (pathname.startsWith("/manutencao")) return temPermissao(papel, "ordens_excluir");
   if (pathname.startsWith("/configuracoes/alertas")) return true;
   if (pathname.startsWith("/configuracoes")) return temPermissao(papel, "configuracoes");

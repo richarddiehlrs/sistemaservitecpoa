@@ -43,7 +43,9 @@ import { transicoesPermitidas } from "@/lib/transicao-status";
 import type { StatusOS } from "@/types/database";
 import { alterarStatusForm, abrirRetornoGarantia, excluirOrdem, lancarFinanceiro, registrarClienteAusente, registrarPagamentoOs } from "../actions";
 import { OsEtiquetaPrompt } from "@/components/os-etiqueta-prompt";
-import { OsFinanceiroResumo, OsPagamentosHistorico } from "@/components/os-financeiro-resumo";
+import { OsFinanceiroResumo } from "@/components/os-financeiro-resumo";
+import { PagamentosLista } from "@/components/pagamentos-lista";
+import { comPermissao } from "@/lib/pagamentos-permissao";
 import { RegistrarPagamentoOs } from "@/components/registrar-pagamento-os";
 import { resumoFinanceiroOsCompleto } from "@/lib/os-pagamentos";
 
@@ -187,6 +189,10 @@ export default async function OrdemDetalhePage({
     motivo_atendimento: os.motivo_atendimento,
   });
   const pagamentoOsAction = registrarPagamentoOs.bind(null, id);
+  const { data: contasFin } = podeFinanceiro
+    ? await supabase.from("contas_financeiras").select("id, nome").eq("ativo", true).order("nome")
+    : { data: [] as { id: string; nome: string }[] };
+  const pagamentosOs = comPermissao(profile, finResumo.pagamentos, contasFin || []);
 
   return (
     <div>
@@ -573,7 +579,11 @@ export default async function OrdemDetalhePage({
               statusReceita={finResumo.statusReceita}
             />
 
-            <OsPagamentosHistorico pagamentos={finResumo.pagamentos} />
+            <PagamentosLista
+              pagamentos={pagamentosOs}
+              contas={contasFin || []}
+              mostrarConta={podeFinanceiro}
+            />
 
             {!retornoGarantia && finResumo.saldoRestante > 0 && Boolean(os.aprovado) && (
               <RegistrarPagamentoOs
