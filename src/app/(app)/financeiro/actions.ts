@@ -337,5 +337,6 @@ export async function salvarMeta(formData: FormData): Promise<ActionResult> {
     if (error) throw new Error(error.message);
     revalidatePath("/dashboard");
     revalidatePath("/relatorios");
+    revalidatePath("/resultados");
   });
 }

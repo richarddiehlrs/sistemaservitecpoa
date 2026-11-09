@@ -23,6 +23,7 @@ const APP_PREFIXES = [
   "/campo",
   "/financeiro",
   "/relatorios",
+  "/resultados",
   "/dre",
   "/catalogo",
   "/usuarios",

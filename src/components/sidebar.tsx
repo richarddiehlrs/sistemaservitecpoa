@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
+import { Target,
   LayoutDashboard,
   Users,
   Wrench,
@@ -56,6 +56,7 @@ const GRUPOS: { titulo: string; itens: NavItem[] }[] = [
       { href: "/financeiro", label: "Financeiro", icon: DollarSign, perm: "financeiro" },
       { href: "/financeiro/fluxo", label: "Fluxo de caixa", icon: LineChart, perm: "financeiro_fluxo" },
       { href: "/financeiro/recorrentes", label: "Despesas fixas", icon: CalendarCog, perm: "financeiro_recorrentes" },
+      { href: "/resultados", label: "Resultados e metas", icon: Target, perm: "relatorios" },
       { href: "/relatorios", label: "Relatórios", icon: PieChart, perm: "relatorios" },
       { href: "/dre", label: "DRE", icon: BarChart3, perm: "dre" },
     ],

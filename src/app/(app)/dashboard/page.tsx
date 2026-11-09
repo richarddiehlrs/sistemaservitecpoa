@@ -7,7 +7,8 @@ import { MetaCard } from "@/components/meta-card";
 import { DashboardTecnicos, type MetricaTecnico } from "@/components/dashboard-tecnicos";
 import { salvarMeta } from "@/app/(app)/financeiro/actions";
 import { saldoEmAberto } from "@/lib/financeiro";
-import { calcMetricasCaixa } from "@/lib/metricas-financeiras";
+import { calcularDre, limitesMes } from "@/lib/resultado";
+import { carregarBaseResultado } from "@/lib/resultado-dados";
 import {
   formatCurrency,
   formatDate,
@@ -239,20 +240,14 @@ export default async function DashboardPage() {
   const aReceberVencido = (contasReceber || [])
     .filter((r) => r.data_vencimento && r.data_vencimento < hojeStr)
     .reduce((s, r) => s + saldoEmAberto(r), 0);
-  const metricasMes = calcMetricasCaixa(
-    ((lancMes || []) as unknown as PagLanc[])
-      .filter((p) => p.lancamentos_financeiros)
-      .map((p) => ({
-        tipo: p.lancamentos_financeiros!.tipo,
-        valor: Number(p.valor),
-        valor_pago: Number(p.valor),
-        status: "pago",
-        categorias_financeiras: p.lancamentos_financeiros!.categorias_financeiras ?? null,
-      }))
-  );
 
-  const anoAtual = new Date().getFullYear();
-  const mesAtual = new Date().getMonth() + 1;
+
+  const anoAtual = Number(hojeStr.slice(0, 4));
+  const mesAtual = Number(hojeStr.slice(5, 7));
+  // Faturamento e lucro do mês pela mesma regra da DRE / Resultados
+  const limMes = limitesMes(hojeStr.slice(0, 7));
+  const baseMes = await carregarBaseResultado(supabase, limMes.inicio, limMes.fim);
+  const dreMes = calcularDre(baseMes.lancamentos, baseMes.os, baseMes.taxas, limMes.inicio, limMes.fim);
   const { data: metaRow } = await supabase
     .from("metas_faturamento")
     .select("valor")
@@ -324,34 +319,42 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Lucro bruto (mês)"
-          value={formatCurrency(metricasMes.lucroBruto)}
-          tone={metricasMes.lucroBruto >= 0 ? "blue" : "red"}
-          icon={<PiggyBank className="h-5 w-5" />}
-          hint={`Receita − custo direto • ${metricasMes.margemBruta}%`}
-        />
-        <StatCard
-          title="Despesas pagas (mês)"
-          value={formatCurrency(metricasMes.despesas)}
-          tone="red"
-          icon={<TrendingDown className="h-5 w-5" />}
-          hint="Operacionais + administrativas"
-        />
-        <StatCard
-          title="Lucro líquido (mês)"
-          value={formatCurrency(metricasMes.lucroLiquido)}
-          tone={metricasMes.lucroLiquido >= 0 ? "green" : "red"}
-          icon={<Percent className="h-5 w-5" />}
-          hint={`Margem ${metricasMes.margemLiquida}%`}
-        />
-        <StatCard
-          title="Custo direto (mês)"
-          value={formatCurrency(metricasMes.custoDireto)}
-          tone="amber"
-          icon={<DollarSign className="h-5 w-5" />}
-          hint="Peças e serviços pagos"
-        />
+        <Link href="/resultados" className="block">
+          <StatCard
+            title="Faturamento (mês)"
+            value={formatCurrency(dreMes.receitaBruta)}
+            tone="blue"
+            icon={<DollarSign className="h-5 w-5" />}
+            hint={meta > 0 ? `${Math.round((dreMes.receitaBruta / meta) * 100)}% da meta • ${dreMes.osConcluidas} OS concluídas` : `${dreMes.osConcluidas} OS concluídas`}
+          />
+        </Link>
+        <Link href="/resultados" className="block">
+          <StatCard
+            title="Lucro bruto (mês)"
+            value={formatCurrency(dreMes.lucroBruto)}
+            tone={dreMes.lucroBruto >= 0 ? "blue" : "red"}
+            icon={<PiggyBank className="h-5 w-5" />}
+            hint={`Faturamento − peças e terceiros • ${dreMes.margemBruta}%`}
+          />
+        </Link>
+        <Link href="/resultados" className="block">
+          <StatCard
+            title="Despesas (mês)"
+            value={formatCurrency(dreMes.despesas + dreMes.impostos)}
+            tone="red"
+            icon={<TrendingDown className="h-5 w-5" />}
+            hint="Operacionais, administrativas, financeiras e impostos"
+          />
+        </Link>
+        <Link href="/resultados" className="block">
+          <StatCard
+            title="Lucro líquido (mês)"
+            value={formatCurrency(dreMes.lucroLiquido)}
+            tone={dreMes.lucroLiquido >= 0 ? "green" : "red"}
+            icon={<Percent className="h-5 w-5" />}
+            hint={`Margem ${dreMes.margemLiquida}% • ver resultados`}
+          />
+        </Link>
       </div>
 
       {(osAtrasadas ||
@@ -362,7 +365,7 @@ export default async function DashboardPage() {
         contasPagar ||
         clienteAusente ||
         garantiaExpirando.length > 0 ||
-        (meta > 0 && receitaMes < meta * (META_ALERTA_PERCENTUAL / 100))) ? (
+        (meta > 0 && dreMes.receitaBruta < meta * (META_ALERTA_PERCENTUAL / 100))) ? (
         <div className="mt-4 flex flex-wrap gap-2">
           {(osAtrasadas ?? 0) > 0 && (
             <Link href="/ordens?status=em_roteiro" className="badge bg-red-100 text-red-700 ring-1 ring-red-200 hover:bg-red-200">
@@ -394,9 +397,9 @@ export default async function DashboardPage() {
               {contasPagar} contas a pagar
             </Link>
           )}
-          {meta > 0 && receitaMes < meta * (META_ALERTA_PERCENTUAL / 100) && (
+          {meta > 0 && dreMes.receitaBruta < meta * (META_ALERTA_PERCENTUAL / 100) && (
             <span className="badge bg-amber-50 text-amber-800 ring-1 ring-amber-200">
-              Meta: {formatCurrency(receitaMes)} de {formatCurrency(meta)}
+              Meta: {formatCurrency(dreMes.receitaBruta)} faturado de {formatCurrency(meta)}
             </span>
           )}
           {(visitasHoje ?? 0) > 0 && (
@@ -449,7 +452,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-6">
-        <MetaCard ano={anoAtual} mes={mesAtual} meta={meta} realizado={receitaMes} action={salvarMeta} />
+        <MetaCard ano={anoAtual} mes={mesAtual} meta={meta} realizado={dreMes.receitaBruta} action={salvarMeta} />
       </div>
 
       <DashboardTecnicos tecnicos={metricasTecnicos} />

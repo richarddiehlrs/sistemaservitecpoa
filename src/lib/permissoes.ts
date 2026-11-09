@@ -66,6 +66,7 @@ export function podeAcessarRota(papel: Papel, pathname: string): boolean {
   if (pathname.startsWith("/catalogo")) return temPermissao(papel, "catalogo");
   if (pathname.startsWith("/dre")) return temPermissao(papel, "dre");
   if (pathname.startsWith("/relatorios")) return temPermissao(papel, "relatorios");
+  if (pathname.startsWith("/resultados")) return temPermissao(papel, "relatorios");
   if (pathname.startsWith("/financeiro/recorrentes")) return temPermissao(papel, "financeiro_recorrentes");
   if (pathname.startsWith("/financeiro/fluxo")) return temPermissao(papel, "financeiro_fluxo");
   if (pathname.startsWith("/financeiro")) return temPermissao(papel, "financeiro");
