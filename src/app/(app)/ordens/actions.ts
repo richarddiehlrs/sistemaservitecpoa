@@ -550,7 +550,8 @@ async function alterarStatusImpl(
       .join(". ");
   }
 
-  if (status === "aprovada") {
+  // Já aprovada (ex.: reabrindo uma OS concluída): só muda o status, sem reaprovar
+  if (status === "aprovada" && !osAtual.aprovado) {
     validarTransicaoStatus(osAtual.status as StatusOS, "aprovada", profile.papel);
     const result = await executarAprovacaoOs(supabase, {
       osId: id,

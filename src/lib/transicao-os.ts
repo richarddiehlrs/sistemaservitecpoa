@@ -36,7 +36,7 @@ export type TransicaoOsOpts = {
 export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) {
   const { data: osAntes } = await supabase
     .from("ordens_servico")
-    .select("numero, status, tecnico_id, clientes(nome)")
+    .select("numero, status, tecnico_id, aprovado, local_equipamento, data_conclusao, clientes(nome)")
     .eq("id", opts.osId)
     .single();
 
@@ -55,7 +55,13 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
     throw new Error("Transição de status requer papel do operador ou flag sistema.");
   }
 
-  if (opts.status === "concluida" && !opts.skipFinanceiro) {
+  const FECHADOS: StatusOS[] = ["concluida", "entregue"];
+  const de = osAntes.status as StatusOS;
+  const fechando = FECHADOS.includes(opts.status) && !FECHADOS.includes(de);
+  const reabrindo = FECHADOS.includes(de) && !FECHADOS.includes(opts.status) && opts.status !== "garantia";
+
+  // Concluir (ou entregar direto) lança/atualiza a receita — idempotente (1 receita ativa por OS)
+  if (fechando && !opts.skipFinanceiro) {
     try {
       await sincronizarFinanceiroConclusaoOs(
         supabase,
@@ -75,7 +81,19 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
   const update: Record<string, unknown> = { status: opts.status, ...opts.extras };
 
   if (opts.status === "concluida") update.data_conclusao = new Date().toISOString();
-  if (opts.status === "entregue") update.data_entrega = new Date().toISOString();
+  if (opts.status === "entregue") {
+    update.data_entrega = new Date().toISOString();
+    if (fechando || !(osAntes as { data_conclusao?: string | null }).data_conclusao) {
+      update.data_conclusao = new Date().toISOString();
+    }
+    const local = (osAntes as { local_equipamento?: string }).local_equipamento;
+    if (local === "oficina" || local === "transito") update.local_equipamento = "entregue";
+  }
+  // Reabrir: sai do faturamento até ser concluída de novo (pagamentos ficam)
+  if (reabrindo) {
+    update.data_conclusao = null;
+    update.data_entrega = null;
+  }
 
   const { error } = await supabase.from("ordens_servico").update(update).eq("id", opts.osId);
   if (error) throw new Error(error.message);
@@ -95,6 +113,13 @@ export async function transicionarStatusOs(supabase: Db, opts: TransicaoOsOpts) 
 
   if (opts.status === "cancelada") {
     await cancelarLancamentosOs(supabase, opts.osId);
+  }
+
+  // Reativar OS cancelada com orçamento aprovado: receita volta a ficar a receber.
+  // criarReceitaPendenteOs reaproveita a receita ativa (com pagamentos) — não duplica.
+  if (de === "cancelada" && opts.status !== "cancelada" && osAntes.aprovado) {
+    const { criarReceitaPendenteOs } = await import("@/lib/os-financeiro");
+    await criarReceitaPendenteOs(supabase, opts.osId);
   }
 
   if (

@@ -7,6 +7,8 @@ import { calcValorSinal } from "@/lib/os-pagamentos";
 import { FORMAS_PAGAMENTO } from "@/lib/formas-pagamento";
 import type { ActionResult } from "@/lib/action-result";
 import { useAction } from "./use-action";
+import { efeitosMudancaStatus, transicoesSugeridas } from "@/lib/transicao-status";
+import type { StatusOS } from "@/types/database";
 
 export function OsStatusControl({
   statusAtual,
@@ -24,6 +26,9 @@ export function OsStatusControl({
   aprovado?: boolean;
 }) {
   const opcoes = transicoesPermitidas.length > 0 ? transicoesPermitidas : [statusAtual];
+  const fluxo = transicoesSugeridas(statusAtual as StatusOS);
+  const sugeridas = opcoes.filter((k) => k !== statusAtual && fluxo.includes(k as StatusOS));
+  const outras = opcoes.filter((k) => k !== statusAtual && !fluxo.includes(k as StatusOS));
   const [status, setStatus] = useState(statusAtual);
   const [obs, setObs] = useState("");
   const [clientePagou, setClientePagou] = useState(false);
@@ -32,6 +37,7 @@ export function OsStatusControl({
   const { run, pending } = useAction();
 
   const indoParaPeca = status === "aguardando_peca" && status !== statusAtual;
+  const efeitos = status !== statusAtual ? efeitosMudancaStatus(statusAtual as StatusOS, status as StatusOS, aprovado) : [];
   const podePagamentoPeca = indoParaPeca && aprovado && saldoRestante > 0;
   const valorSinal = calcValorSinal(saldoRestante, percentualSinalPadrao);
   const valor30 = calcValorSinal(saldoRestante, 30);
@@ -82,14 +88,33 @@ export function OsStatusControl({
     <div className="space-y-2">
       <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
         <option value={statusAtual}>{STATUS_OS_LABEL[statusAtual] ?? statusAtual} (atual)</option>
-        {opcoes
-          .filter((k) => k !== statusAtual)
-          .map((k) => (
-            <option key={k} value={k}>
-              {STATUS_OS_LABEL[k] ?? k}
-            </option>
-          ))}
+        {sugeridas.length > 0 && (
+          <optgroup label="Próximo passo">
+            {sugeridas.map((k) => (
+              <option key={k} value={k}>
+                {STATUS_OS_LABEL[k] ?? k}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {outras.length > 0 && (
+          <optgroup label="Corrigir para">
+            {outras.map((k) => (
+              <option key={k} value={k}>
+                {STATUS_OS_LABEL[k] ?? k}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
+
+      {efeitos.length > 0 && (
+        <ul className="space-y-1 rounded-lg border border-brand-100 bg-brand-50/60 px-3 py-2 text-xs text-brand-900">
+          {efeitos.map((e) => (
+            <li key={e}>• {e}</li>
+          ))}
+        </ul>
+      )}
       <input
         className="input"
         placeholder="Observação (opcional)"

@@ -537,18 +537,13 @@ export async function cancelarLancamentosOs(supabase: Db, osId: string): Promise
     .eq("os_id", osId)
     .neq("status", "cancelado");
 
+  // Lançamento com dinheiro já recebido/pago NUNCA é cancelado: o pagamento é real.
+  // Se a OS for reaberta, a mesma receita volta a ser usada (sem duplicar).
   const ids = (lancamentos || [])
     .filter((l) => {
       if (l.origem === "campo") return false;
-      if (l.status === "pago") {
-        if (l.tipo === "receita") {
-          const pago = Number(l.valor_pago) || 0;
-          const valor = Number(l.valor) || 0;
-          return !(pago > 0 && Math.abs(pago - valor) < 0.01);
-        }
-        return false;
-      }
-      return true;
+      if ((Number(l.valor_pago) || 0) > 0) return false;
+      return l.status !== "pago";
     })
     .map((l) => l.id);
 

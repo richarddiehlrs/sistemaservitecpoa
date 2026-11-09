@@ -63,9 +63,51 @@ export function statusPermiteCheckin(status: StatusOS): boolean {
   return STATUS_PERMITE_CHECKIN.includes(status);
 }
 
+/** Todos os status — administrador e atendente podem corrigir para qualquer um. */
+export const TODOS_STATUS: StatusOS[] = [
+  "aberta",
+  "em_analise",
+  "aguardando_aprovacao",
+  "aprovada",
+  "em_roteiro",
+  "em_execucao",
+  "aguardando_peca",
+  "cliente_ausente",
+  "concluida",
+  "entregue",
+  "garantia",
+  "cancelada",
+];
+
 export function transicoesPermitidas(de: StatusOS, papel: Papel): StatusOS[] {
-  const mapa = papel === "tecnico" ? TRANSICOES_TECNICO : TRANSICOES_OPERACAO;
-  return mapa[de] ?? [];
+  if (papel === "tecnico") return TRANSICOES_TECNICO[de] ?? [];
+  // Operação (admin/atendente): fluxo sugerido primeiro, depois qualquer outro (correção)
+  const sugeridas = TRANSICOES_OPERACAO[de] ?? [];
+  return [...sugeridas, ...TODOS_STATUS.filter((s) => s !== de && !sugeridas.includes(s))];
+}
+
+/** Próximos status do fluxo normal (para destacar na tela). */
+export function transicoesSugeridas(de: StatusOS): StatusOS[] {
+  return TRANSICOES_OPERACAO[de] ?? [];
+}
+
+/** O que acontece ao mudar de status — exibido antes de confirmar. */
+export function efeitosMudancaStatus(de: StatusOS, para: StatusOS, aprovado: boolean): string[] {
+  const fechados: StatusOS[] = ["concluida", "entregue"];
+  const r: string[] = [];
+  if (para === "aprovada" && !aprovado) r.push("Marca o orçamento como aprovado e gera a receita a receber no financeiro.");
+  if (fechados.includes(para) && !fechados.includes(de)) {
+    r.push("Lança (ou atualiza) a receita no financeiro e o serviço passa a contar no faturamento do mês.");
+  }
+  if (fechados.includes(de) && !fechados.includes(para) && para !== "cancelada" && para !== "garantia") {
+    r.push("A OS volta a ficar em aberto e sai do faturamento até ser concluída de novo. Pagamentos já recebidos são mantidos.");
+  }
+  if (para === "cancelada") r.push("Cancela receitas sem pagamento e as visitas pendentes. Pagamentos já recebidos são mantidos.");
+  if (de === "cancelada" && para !== "cancelada") {
+    r.push(aprovado ? "Reabre a OS e a receita volta a ficar a receber (sem duplicar)." : "Reabre a OS.");
+  }
+  if (para === "entregue") r.push("Marca o aparelho como devolvido ao cliente.");
+  return r;
 }
 
 export function validarTransicaoStatus(

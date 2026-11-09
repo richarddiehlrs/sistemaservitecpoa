@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { CampoNavMobile } from "./campo-nav-mobile";
+import { AtualizacaoTempoReal } from "./atualizacao-tempo-real";
 import { ToastProvider } from "./toast";
 import { RegisterSW } from "./register-sw";
 import { RouteGuard } from "./route-guard";
@@ -81,6 +82,7 @@ export function AppShell({
             </div>
           </main>
           {ehTecnico && <CampoNavMobile />}
+          <AtualizacaoTempoReal />
         </div>
       </div>
     </ToastProvider>
