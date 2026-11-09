@@ -6,10 +6,9 @@ import {
   MapPin,
   Package,
   Wrench,
-  UserX,
   XCircle,
 } from "lucide-react";
-import { formatDate, formatDateTime, formatHora, STATUS_OS_LABEL, STATUS_OS_COLOR } from "@/lib/format";
+import { formatDate, formatDateTime, formatHora } from "@/lib/format";
 import { TURNO_LABEL } from "@/lib/turnos";
 import { cn } from "@/lib/utils";
 
@@ -92,50 +91,6 @@ function etapaConcluida(
     default:
       return false;
   }
-}
-
-function observacaoParaCliente(obs?: string | null): string | null {
-  if (!obs?.trim()) return null;
-  const o = obs.toLowerCase();
-  if (o.includes("check-in") || o.includes("checkin")) return "Técnico iniciou o atendimento no local.";
-  if (o.includes("check-out") || o.includes("checkout")) return "Visita finalizada pelo técnico.";
-  if (o.includes("portal") || o.includes("aprovado pelo cliente")) return "Você aprovou o orçamento.";
-  if (o.includes("via erp") || o.includes("atualizado via")) return null;
-  if (o.includes("ordem de serviço aberta") || o.includes("ordem de servico aberta")) {
-    return "Sua ordem foi registrada em nosso sistema.";
-  }
-  return obs;
-}
-
-function iconeHistorico(status: string) {
-  switch (status) {
-    case "aguardando_aprovacao":
-      return FileText;
-    case "aprovada":
-      return CheckCircle2;
-    case "em_roteiro":
-      return Calendar;
-    case "em_execucao":
-      return Wrench;
-    case "aguardando_peca":
-      return Package;
-    case "cliente_ausente":
-      return UserX;
-    case "concluida":
-    case "entregue":
-      return CheckCircle2;
-    case "cancelada":
-      return XCircle;
-    default:
-      return ClipboardList;
-  }
-}
-
-function rotuloHistorico(status: string, obs?: string | null): string {
-  if (status === "aberta" && obs?.toLowerCase().includes("ordem de servi")) {
-    return "Ordem registrada";
-  }
-  return STATUS_OS_LABEL[status] || status;
 }
 
 export function PortalAcompanhamento({
@@ -285,46 +240,6 @@ export function PortalAcompanhamento({
         </ol>
       )}
 
-      {eventos.length > 0 && (
-        <>
-          <div className="mb-3 border-t border-slate-100 pt-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Histórico detalhado
-            </h3>
-          </div>
-          <ol className="space-y-3">
-            {[...eventos].reverse().map((h, i) => {
-              const Icon = iconeHistorico(h.status);
-              const obs = observacaoParaCliente(h.observacao);
-              const cor = STATUS_OS_COLOR[h.status] || "bg-slate-100 text-slate-600";
-              return (
-                <li
-                  key={`${h.created_at}-${i}`}
-                  className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2.5"
-                >
-                  <div
-                    className={cn(
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                      cor
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-baseline justify-between gap-1">
-                      <p className="text-sm font-medium text-slate-800">
-                        {rotuloHistorico(h.status, h.observacao)}
-                      </p>
-                      <time className="text-xs text-slate-400">{formatDateTime(h.created_at)}</time>
-                    </div>
-                    {obs && <p className="mt-0.5 text-xs text-slate-600">{obs}</p>}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </>
-      )}
     </div>
   );
 }
