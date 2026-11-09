@@ -45,6 +45,11 @@ export default async function LancamentoDetalhePage({ params }: { params: Promis
 
   if (!l) notFound();
 
+  // Comprovante (bucket privado): link temporário de 1 hora
+  const comprovanteUrl = l.comprovante_path
+    ? (await supabase.storage.from("comprovantes").createSignedUrl(l.comprovante_path, 3600)).data?.signedUrl ?? null
+    : null;
+
   const rel = l as unknown as {
     categorias_financeiras?: { nome: string } | null;
     clientes?: { nome: string } | null;
@@ -108,7 +113,26 @@ export default async function LancamentoDetalhePage({ params }: { params: Promis
         {Number(l.juros) + Number(l.multa) > 0 && (
           <p><span className="text-slate-500">Juros + multa:</span> {formatCurrency(Number(l.juros) + Number(l.multa))}</p>
         )}
+        {l.km_veiculo != null && (
+          <p><span className="text-slate-500">Km do veículo:</span> {l.km_veiculo.toLocaleString("pt-BR")}</p>
+        )}
+        {l.litros != null && (
+          <p>
+            <span className="text-slate-500">Litros:</span> {Number(l.litros).toLocaleString("pt-BR")} •{" "}
+            {formatCurrency(Number(l.valor) / Number(l.litros))}/L
+          </p>
+        )}
+        {l.origem === "campo" && l.tecnico && (
+          <p><span className="text-slate-500">Lançado em campo por:</span> {l.tecnico}</p>
+        )}
         {l.observacoes && <p className="sm:col-span-2 text-slate-600">{l.observacoes}</p>}
+        {comprovanteUrl && (
+          <a href={comprovanteUrl} target="_blank" rel="noopener noreferrer" className="sm:col-span-2 block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={comprovanteUrl} alt="Comprovante" className="max-h-80 rounded-lg ring-1 ring-slate-200" />
+            <span className="mt-1 block text-xs text-brand-700">Abrir comprovante</span>
+          </a>
+        )}
       </div>
 
       <div className="card p-4">

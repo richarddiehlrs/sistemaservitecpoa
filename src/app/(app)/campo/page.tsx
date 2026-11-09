@@ -3,6 +3,7 @@ import { requireProfile } from "@/lib/auth-guard";
 import { temPermissao } from "@/lib/permissoes";
 import { CampoCentral } from "./campo-central";
 import { CampoTecnico } from "./campo-tecnico";
+import { MinhasDespesasCampo } from "./minhas-despesas";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function CampoPage() {
   if (temPermissao(profile.papel, "campo_central")) {
     return (
       <PullToRefresh>
+        {temPermissao(profile.papel, "despesas_campo") && <MinhasDespesasCampo profileId={profile.id} />}
         <CampoCentral />
       </PullToRefresh>
     );

@@ -7,7 +7,9 @@ import { PushAtivar } from "@/components/push-ativar";
 import { PageHeader, StatCard, StatusBadge } from "@/components/ui";
 import { STATUS_OS_ABERTAS, ordenarOsPendentes } from "@/lib/os-status";
 import { STATUS_AGENDA_PENDENTE, STATUS_OS_ATRASO, hojeYmd } from "@/lib/alertas";
-import { DespesaCampoForm } from "@/components/despesa-campo-form";
+import { DespesaCampoApp } from "@/components/despesa-campo-app";
+import { InstalarIphone } from "@/components/instalar-iphone";
+import { ExcluirDespesaCampo } from "@/components/excluir-despesa-campo";
 import { CampoAgendaDia, type VisitaCampoDia } from "@/components/campo-agenda-dia";
 import { CompartilharGps } from "@/components/compartilhar-gps";
 import { tecnicoDoProfile } from "@/lib/auth-guard";
@@ -15,7 +17,7 @@ import { calcComissaoTecnico, calcLucroOsSimples } from "@/lib/produtividade-tec
 import type { Profile } from "@/types/database";
 import { formatCurrency, formatDate, formatNumeroOS } from "@/lib/format";
 import { resumoFinanceiroOs } from "@/lib/os-valores";
-import { lancarDespesaCampo, registrarPosicaoTecnico } from "./actions";
+import { registrarPosicaoTecnico } from "./actions";
 import { checkinAgendamento, checkoutAgendamento } from "../agenda/actions";
 
 export async function CampoTecnico({ profile }: { profile: Profile }) {
@@ -30,6 +32,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
     { data: osAbertas },
     { data: osConcluidasMes },
     config,
+    { data: contasDespesa },
   ] = await Promise.all([
     supabase
       .from("agendamentos")
@@ -40,11 +43,12 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       .order("hora_inicio"),
     supabase
       .from("lancamentos_financeiros")
-      .select("id, descricao, valor, status, data_competencia, observacoes")
+      .select("id, descricao, valor, status, data_competencia, observacoes, created_at, comprovante_path, forma_pagamento")
       .eq("origem", "campo")
       .eq("criado_por", profile.id)
+      .neq("status", "cancelado")
       .order("created_at", { ascending: false })
-      .limit(10),
+      .limit(15),
     supabase
       .from("ordens_servico")
       .select("id, numero, status, prioridade, data_previsao, data_abertura, defeito_relatado, turno, assinatura_tecnico, clientes(nome, bairro, cidade)")
@@ -59,6 +63,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       .in("status", ["concluida", "entregue"])
       .gte("data_conclusao", inicioMes),
     getConfig(),
+    supabase.from("contas_financeiras").select("id, nome, tipo, formas_padrao").eq("ativo", true).order("nome"),
   ]);
 
   const osPendentes = ordenarOsPendentes(osAbertas || []);
@@ -155,6 +160,9 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
 
   return (
     <div>
+      <div className="mb-4">
+        <InstalarIphone />
+      </div>
       <PageHeader
         title={`Olá, ${profile.nome || tecnico}`}
         subtitle="Seu painel de campo — visitas, ordens e alertas do dia"
@@ -291,7 +299,7 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
       <div className="card p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold text-slate-900">Minhas despesas de campo</h2>
-          <DespesaCampoForm action={lancarDespesaCampo} osOpcoes={osOpcoes} />
+          <DespesaCampoApp osOpcoes={osOpcoes} contas={contasDespesa || []} />
         </div>
         {!despesas || despesas.length === 0 ? (
           <p className="py-4 text-center text-sm text-slate-400">Nenhuma despesa registrada ainda.</p>
@@ -303,11 +311,15 @@ export async function CampoTecnico({ profile }: { profile: Profile }) {
                   <p className="font-medium text-slate-800">{d.descricao}</p>
                   <p className="text-xs text-slate-400">{formatDate(d.data_competencia)}</p>
                 </div>
-                <div className="text-right">
-                  <p className="font-semibold text-red-600">{formatCurrency(d.valor)}</p>
-                  <span className={`text-xs ${d.status === "pago" ? "text-green-600" : "text-amber-600"}`}>
-                    {d.status === "pago" ? "Reembolsado" : "Aguardando"}
-                  </span>
+                <div className="flex items-center gap-2 text-right">
+                  <div>
+                    <p className="font-semibold text-red-600">{formatCurrency(d.valor)}</p>
+                    <span className={`text-xs ${d.status === "pago" ? "text-green-600" : "text-amber-600"}`}>
+                      {d.status === "pago" ? `Pago${d.forma_pagamento ? ` • ${d.forma_pagamento}` : ""}` : "Em aberto"}
+                      {d.comprovante_path ? " • com comprovante" : ""}
+                    </span>
+                  </div>
+                  {d.created_at && d.created_at.slice(0, 10) >= hoje.slice(0, 10) && <ExcluirDespesaCampo id={d.id} />}
                 </div>
               </li>
             ))}

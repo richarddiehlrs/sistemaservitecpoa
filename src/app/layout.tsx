@@ -10,7 +10,6 @@ export const metadata: Metadata = {
     "Sistema de gestão para assistência técnica de eletrodomésticos - ServitecPoa",
   icons: {
     icon: "/icon.svg",
-    apple: "/icon.svg",
   },
   appleWebApp: {
     capable: true,
@@ -21,6 +20,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#1d4ed8",
+  // iPhone com notch: o app usa a tela toda e respeita as áreas seguras (env(safe-area-inset-*))
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

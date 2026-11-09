@@ -265,6 +265,10 @@ export type LancamentoFinanceiro = {
   status: "pendente" | "parcial" | "pago" | "cancelado";
   forma_pagamento: string | null;
   observacoes: string | null;
+  comprovante_path: string | null;
+  km_veiculo: number | null;
+  litros: number | null;
+  id_cliente: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -501,6 +505,26 @@ export type Database = {
       conciliar_transacao: {
         Args: { p_transacao_id: string; p_pagamento_ids: string[]; p_diferenca_como_taxa?: boolean };
         Returns: undefined;
+      };
+      lancar_despesa_campo: {
+        Args: {
+          p_id_cliente: string;
+          p_categoria: string;
+          p_valor: number;
+          p_data?: string | null;
+          p_conta_id?: string | null;
+          p_forma?: string | null;
+          p_os_id?: string | null;
+          p_descricao?: string | null;
+          p_km?: number | null;
+          p_litros?: number | null;
+          p_comprovante_path?: string | null;
+        };
+        Returns: string;
+      };
+      excluir_despesa_campo: {
+        Args: { p_id: string };
+        Returns: string | null;
       };
       desconciliar_transacao: {
         Args: { p_transacao_id: string };

@@ -137,6 +137,9 @@ export default async function FinanceiroPage({
             <Link href="/financeiro/recorrentes" className="btn-secondary">
               <CalendarCog className="h-4 w-4" /> Despesas fixas
             </Link>
+            <Link href="/financeiro/despesas-campo" className="btn-secondary">
+              <Receipt className="h-4 w-4" /> Despesas de campo
+            </Link>
             <Link href="/financeiro/conciliacao" className="btn-secondary">
               <Landmark className="h-4 w-4" /> Conciliação bancária
             </Link>

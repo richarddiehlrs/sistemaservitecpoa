@@ -1,4 +1,4 @@
-const CACHE = "servitec-v3";
+const CACHE = "servitec-v4";
 const PRECACHE = ["/campo", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {

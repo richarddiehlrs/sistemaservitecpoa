@@ -2,7 +2,17 @@ import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { homePorPapel, podeAcessarRota, type Papel } from "@/lib/permissoes";
 
-const PUBLIC_PATHS = ["/login", "/auth", "/os", "/imprimir/portal"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth",
+  "/os",
+  "/imprimir/portal",
+  // Arquivos do app instalável (iPhone busca sem sessão): sem dados
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/apple-icon",
+  "/icone/",
+];
 const APP_PREFIXES = [
   "/dashboard",
   "/agenda",
