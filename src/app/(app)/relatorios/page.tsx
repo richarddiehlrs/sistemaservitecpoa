@@ -29,12 +29,8 @@ export default async function RelatoriosPage({
   const supabase = await createClient();
 
   const [{ data: pagos }, { data: aReceberData }, { data: ordens }, { data: lancAno }, { data: retornosGarantia }, config] = await Promise.all([
-    supabase
-      .from("lancamentos_financeiros")
-      .select("tipo, valor_pago, data_pagamento, cliente_id, clientes(nome), categorias_financeiras(nome)")
-      .in("status", ["pago", "parcial"])
-      .gte("data_pagamento", inicio)
-      .lte("data_pagamento", fim),
+    // Caixa pelo livro de pagamentos: cada pagamento na própria data
+    buscarPagamentosPeriodo(supabase, inicio, fim),
     supabase
       .from("lancamentos_financeiros")
       .select("valor, valor_pago, juros, multa")
@@ -63,7 +59,7 @@ export default async function RelatoriosPage({
     getConfig(),
   ]);
 
-  const lista = pagos || [];
+  const lista = pagos;
   const receitas = lista.filter((l) => l.tipo === "receita");
   const despesas = lista.filter((l) => l.tipo === "despesa");
 
@@ -376,4 +372,59 @@ export default async function RelatoriosPage({
       </div>
     </div>
   );
+}
+
+type PagamentoRelatorio = {
+  tipo: "receita" | "despesa";
+  valor: number;
+  valor_pago: number;
+  status: string;
+  data_pagamento: string;
+  cliente_id: string | null;
+  clientes: { nome: string } | null;
+  categorias_financeiras: { nome: string; grupo_dre: string | null } | null;
+};
+
+/** Pagamentos do período (paginado) no formato que o relatório já usava. */
+async function buscarPagamentosPeriodo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  inicio: string,
+  fim: string
+): Promise<{ data: PagamentoRelatorio[] }> {
+  type Row = {
+    valor: number;
+    data_pagamento: string;
+    lancamentos_financeiros: {
+      tipo: "receita" | "despesa";
+      cliente_id: string | null;
+      clientes: { nome: string } | null;
+      categorias_financeiras: { nome: string; grupo_dre: string | null } | null;
+    } | null;
+  };
+  const out: PagamentoRelatorio[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase
+      .from("os_pagamentos")
+      .select("valor, data_pagamento, lancamentos_financeiros!inner(tipo, cliente_id, clientes(nome), categorias_financeiras(nome, grupo_dre))")
+      .gte("data_pagamento", inicio)
+      .lte("data_pagamento", fim)
+      .order("id")
+      .range(de, de + 999);
+    if (error) throw new Error(error.message);
+    for (const r of (data || []) as unknown as Row[]) {
+      if (!r.lancamentos_financeiros) continue;
+      out.push({
+        tipo: r.lancamentos_financeiros.tipo,
+        valor: Number(r.valor),
+        valor_pago: Number(r.valor),
+        status: "pago",
+        data_pagamento: r.data_pagamento,
+        cliente_id: r.lancamentos_financeiros.cliente_id,
+        clientes: r.lancamentos_financeiros.clientes,
+        categorias_financeiras: r.lancamentos_financeiros.categorias_financeiras,
+      });
+    }
+    if (!data || data.length < 1000) break;
+  }
+  return { data: out };
 }

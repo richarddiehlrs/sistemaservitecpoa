@@ -16,6 +16,7 @@ import {
   STATUS_OS_LABEL,
   TIPO_AGENDAMENTO_LABEL,
   ymdLocal,
+  hojeYmdLocal,
 } from "@/lib/format";
 import {
   STATUS_AGENDA_PENDENTE,
@@ -92,7 +93,7 @@ export default async function DashboardPage() {
   const inicio6m = new Date();
   inicio6m.setMonth(inicio6m.getMonth() - 5, 1);
   inicio6m.setHours(0, 0, 0, 0);
-  const hojeStr = ymdLocal();
+  const hojeStr = hojeYmdLocal();
   const limiteFin = limiteFinanceiroYmd();
   const limiteOficina = new Date();
   limiteOficina.setDate(limiteOficina.getDate() - DIAS_OFICINA_PARADA_PADRAO);
@@ -134,21 +135,21 @@ export default async function DashboardPage() {
       .order("data_abertura", { ascending: false })
       .limit(6),
     supabase
-      .from("lancamentos_financeiros")
-      .select("valor_pago")
-      .eq("tipo", "receita")
-      .in("status", ["pago", "parcial"])
-      .gte("data_pagamento", ymdLocal(inicioMes)),
+      // Caixa: cada pagamento conta na própria data (livro de pagamentos)
+      .from("os_pagamentos")
+      .select("valor, lancamentos_financeiros!inner(tipo)")
+      .eq("lancamentos_financeiros.tipo", "receita")
+      .gte("data_pagamento", inicioMesStr),
     supabase
       .from("lancamentos_financeiros")
-      .select("valor, valor_pago, juros, multa")
+      .select("valor, valor_pago, juros, multa, data_vencimento")
       .eq("tipo", "receita")
       .in("status", ["pendente", "parcial"]),
     supabase
-      .from("lancamentos_financeiros")
-      .select("tipo, valor_pago, data_pagamento")
-      .in("status", ["pago", "parcial"])
-      .gte("data_pagamento", ymdLocal(inicio6m)),
+      .from("os_pagamentos")
+      .select("valor, data_pagamento, lancamentos_financeiros!inner(tipo)")
+      .gte("data_pagamento", ymdLocal(inicio6m))
+      .limit(5000),
     supabase.from("ordens_servico").select("status"),
     supabase
       .from("agendamentos")
@@ -197,11 +198,9 @@ export default async function DashboardPage() {
       .select("id", { count: "exact", head: true })
       .eq("status", "cliente_ausente"),
     supabase
-      .from("lancamentos_financeiros")
-      .select("tipo, valor, valor_pago, status, categorias_financeiras(grupo_dre)")
-      .neq("status", "cancelado")
-      .gte("data_pagamento", ymdLocal(inicioMes))
-      .in("status", ["pago", "parcial"]),
+      .from("os_pagamentos")
+      .select("valor, lancamentos_financeiros!inner(tipo, categorias_financeiras(grupo_dre))")
+      .gte("data_pagamento", inicioMesStr),
     supabase.from("profiles").select("id, nome, email").eq("papel", "tecnico").eq("ativo", true).order("nome"),
     supabase.from("ordens_servico").select("tecnico_id, tecnico").in("status", [...STATUS_OS_ABERTAS]),
     supabase
@@ -230,9 +229,27 @@ export default async function DashboardPage() {
       .limit(80),
   ]);
 
-  const receitaMes = (recebimentos || []).reduce((s, r) => s + Number(r.valor_pago), 0);
+  type PagLanc = {
+    valor: number;
+    data_pagamento?: string;
+    lancamentos_financeiros: { tipo: "receita" | "despesa"; categorias_financeiras?: { grupo_dre?: string | null } | null } | null;
+  };
+  const receitaMes = ((recebimentos || []) as unknown as PagLanc[]).reduce((s, r) => s + Number(r.valor), 0);
   const aReceber = (contasReceber || []).reduce((s, r) => s + saldoEmAberto(r), 0);
-  const metricasMes = calcMetricasCaixa(lancMes || []);
+  const aReceberVencido = (contasReceber || [])
+    .filter((r) => r.data_vencimento && r.data_vencimento < hojeStr)
+    .reduce((s, r) => s + saldoEmAberto(r), 0);
+  const metricasMes = calcMetricasCaixa(
+    ((lancMes || []) as unknown as PagLanc[])
+      .filter((p) => p.lancamentos_financeiros)
+      .map((p) => ({
+        tipo: p.lancamentos_financeiros!.tipo,
+        valor: Number(p.valor),
+        valor_pago: Number(p.valor),
+        status: "pago",
+        categorias_financeiras: p.lancamentos_financeiros!.categorias_financeiras ?? null,
+      }))
+  );
 
   const anoAtual = new Date().getFullYear();
   const mesAtual = new Date().getMonth() + 1;
@@ -246,11 +263,11 @@ export default async function DashboardPage() {
 
   // Receita x despesa dos últimos 6 meses
   const chartData = meses.map((m) => {
-    const doMes = (lanc6m || []).filter((l) => (l.data_pagamento || "").startsWith(m.inicio));
+    const doMes = ((lanc6m || []) as unknown as PagLanc[]).filter((l) => (l.data_pagamento || "").startsWith(m.inicio));
     return {
       label: m.label,
-      receita: doMes.filter((l) => l.tipo === "receita").reduce((s, l) => s + Number(l.valor_pago), 0),
-      despesa: doMes.filter((l) => l.tipo === "despesa").reduce((s, l) => s + Number(l.valor_pago), 0),
+      receita: doMes.filter((l) => l.lancamentos_financeiros?.tipo === "receita").reduce((s, l) => s + Number(l.valor), 0),
+      despesa: doMes.filter((l) => l.lancamentos_financeiros?.tipo === "despesa").reduce((s, l) => s + Number(l.valor), 0),
     };
   });
 
@@ -290,7 +307,15 @@ export default async function DashboardPage() {
         <StatCard title="OS em aberto" value={String(osAbertas ?? 0)} icon={<Wrench className="h-5 w-5" />} tone="blue" />
         <StatCard title="Clientes" value={String(totalClientes ?? 0)} icon={<Users className="h-5 w-5" />} />
         <StatCard title="Recebido no mês" value={formatCurrency(receitaMes)} icon={<DollarSign className="h-5 w-5" />} tone="green" />
-        <StatCard title="A receber" value={formatCurrency(aReceber)} icon={<AlertCircle className="h-5 w-5" />} tone="amber" />
+        <Link href={aReceberVencido > 0 ? "/financeiro/pendencias" : "/financeiro"} className="block">
+          <StatCard
+            title="A receber"
+            value={formatCurrency(aReceber)}
+            hint={aReceberVencido > 0 ? `${formatCurrency(aReceberVencido)} vencido — clique para resolver` : "Tudo em dia"}
+            icon={<AlertCircle className="h-5 w-5" />}
+            tone="amber"
+          />
+        </Link>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
